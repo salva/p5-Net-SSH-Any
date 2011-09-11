@@ -1,0 +1,6 @@
+Revision history for Perl extension Net::SSH::Any.
+
+0.01  Sun Sep 11 15:56:00 2011
+	- original version; created by h2xs 1.23 with options
+		-AXn Net::SSH::Any
+
