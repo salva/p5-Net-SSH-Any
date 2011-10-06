@@ -8,13 +8,18 @@ use Carp;
 
 use Net::SSH::Any::Util;
 use Net::SSH::Any::Constants qw(:error);
+use Scalar::Util qw(dualvar);
+use Encode ();
 
 my $REQUIRED_BACKEND_VERSION = '1';
 our @BACKENDS = qw(Net::OpenSSH Net::SSH2 Net::SSH::Perl Net::SSH);
 
+# regexp from Regexp::IPv6
+my $IPv6_re = qr((?-xism::(?::[0-9a-fA-F]{1,4}){0,5}(?:(?::[0-9a-fA-F]{1,4}){1,2}|:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})))|[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}|:)|(?::(?:[0-9a-fA-F]{1,4})?|(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))))|:(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})?|))|(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|:[0-9a-fA-F]{1,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){0,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,2}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,3}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))));
+
 sub new {
     my $class = shift;
-    my %opts = (@_ & 1 ? host => @_ : @_);
+    my %opts = (@_ & 1 ? (host => @_) : @_);
 
     my $target = delete $opts{host};
     defined $target or croak "mandatory parameter host missing";
@@ -55,9 +60,9 @@ sub new {
     my $target_os = _first_defined delete $opts{target_os}, 'unix';
     my $encoding = delete $opts{encoding};
     my $stream_encoding =
-        _first_defined delete $opts{stream_encoding}, $encoding;
+        _first_defined delete $opts{stream_encoding}, $encoding, 'utf8';
     my $argument_encoding =
-        _first_defined delete $opts{argument_encoding}, $encoding;
+        _first_defined delete $opts{argument_encoding}, $encoding, 'utf8';
 
     my $backend_opts = delete $opts{backend_opts};
 
@@ -70,7 +75,7 @@ sub new {
                  timeout => $timeout,
                  target_os => $target_os,
                  stream_encoding => $stream_encoding,
-                 arguments_encoding => $arguments_encoding,
+                 argument_encoding => $argument_encoding,
                  backend_opts => $backend_opts,
                  error_prefix => [],
                };
@@ -82,7 +87,6 @@ sub new {
 
     $self->_load_backend(@$backends)
         and $self->_connect;
-    }
 
     $self;
 }
@@ -92,23 +96,33 @@ sub error { shift->{error} }
 sub _set_error {
     my $self = shift;
     my $code = shift || 0;
-    my $err = $self->{_error} = ( $code
-                                  ? Scalar::Util::dualvar($code, join(': ', @{$self->{_error_prefix}},
-                                                                      (@_ ? @_ : "Unknown error $code")))
-                                  : 0 );
+    my $err = $self->{error} = ( $code
+                                 ? Scalar::Util::dualvar($code, join(': ', @{$self->{error_prefix}},
+                                                                     (@_ ? @_ : "Unknown error $code")))
+                                 : 0 );
     $debug and $debug & 1 and _debug "set_error($code - $err)";
     return $err
 }
 
 sub _or_set_error {
     my $self = shift;
-    $self->{_error} or $self->_set_error(@_);
+    $self->{error} or $self->_set_error(@_);
 }
 
 sub die_on_error {
     my $ssh = shift;
-    $ssh->{_error} and croak(@_ ? "@_: $ssh->{_error}" : $ssh->{_error});
+    $ssh->{error} and croak(@_ ? "@_: $ssh->{error}" : $ssh->{error});
 }
+
+sub _clear_error {
+    my $self = shift;
+    my $error = $self->{error};
+    $error and $error == SSHA_NO_BACKEND_ERROR and return;
+    $self->{error} = 0;
+    1;
+}
+
+
 
 sub _load_backend {
     my $self = shift;
@@ -116,8 +130,8 @@ sub _load_backend {
         my $module = $backend;
         $module =~ s/::/_/g;
         $module = "Net::SSH::Any::Backend::$module";
-        local $@, $SIG{__DIE__};
-        my $ok = eval <<'EOE';
+        local ($@, $SIG{__DIE__});
+        my $ok = eval <<EOE;
 no strict;
 no warnings;
 require $module;
@@ -128,8 +142,11 @@ EOE
             $self->{backend_module} = $module;
             return 1;
         }
+        elsif ($debug and $debug & 1) {
+            _debug "failed to load backend $backend, module $module, error follows...\n$@"
+        }
     }
-    $self->_set_error("no backend available");
+    $self->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available");
     undef;
 }
 
@@ -137,54 +154,62 @@ sub _delete_stream_encoding {
     my ($self, $opts) = @_;
     _first_defined(delete $opts->{stream_encoding},
                    $opts->{encoding},
-                   $self->{_default_stream_encoding});
+                   $self->{stream_encoding},
+                   'bytes');
 }
 
 sub _delete_argument_encoding {
     my ($self, $opts) = @_;
     _first_defined(delete $opts->{argument_encoding},
                    delete $opts->{encoding},
-                   $self->{_default_argument_encoding});
+                   $self->{argument_encoding},
+                   'bytes');
 }
 
 sub _find_encoding {
     my ($self, $encoding, $data) = @_;
-    if (defined $encoding and $encoding ne 'bytes') {
-        require Encode;
-        my $enc = Encode::find_encoding($encoding);
-        unless (defined $enc) {
-            $self->_set_error(SSHA_ENCODING_ERROR, "bad encoding '$encoding'");
-            return
-        }
-        return $enc
-    }
-    return undef
+    my $enc = Encode::find_encoding($encoding)
+        or $self->_or_set_error(SSHA_ENCODING_ERROR, "bad encoding '$encoding'");
+    return $enc
 }
 
-sub _eval_to_error {
+sub _check_error_after_eval {
     if ($@) {
         my ($self, $code) = @_;
-        my $err = $@;
-        $err =~ s/(.*) at .* line \d+.$/$1/;
-        $self->_set_error($code, $err);
+        unless ($self->{error}) {
+            my $err = $@;
+            $err =~ s/(.*) at .* line \d+.$/$1/;
+            $self->_set_error($code, $err);
+        }
+        return 0;
     }
+    1
 }
 
 sub _encode_data {
     my $self = shift;
     my $encoding = shift;
-    my $enc = $self->_find_encoding($encoding);
-    if ($enc and @_) {
-        local $self->{_error_prefix} = [@{$self->{_error_prefix}}, "data encoding failed"];
-        local $@;
-        eval {
-            defined and $_ = $enc->encode($_, Encode::FB_CROAK()) for @_
-        };
-        $self->_eval_to_error(ASSH_ENCODING_ERROR);
+    if (@_) {
+        my $enc = $self->_find_encoding($encoding) or return;
+        local $self->{error_prefix} = [@{$self->{error_prefix}}, "data encoding failed"];
+        local ($@, $SIG{__DIE__});
+        eval { defined and $_ = $enc->encode($_, Encode::FB_CROAK()) for @_ };
+        $self->_check_error_after_eval(SSHA_ENCODING_ERROR) or return;
     }
-    !$self->error;
+    1
 }
 
+sub _decode_data {
+    my $self = shift;
+    my $encoding = shift;
+    my $enc = $self->_find_encoding($encoding) or return;
+    if (@_) {
+        local ($@, $SIG{__DIE__});
+        eval { defined and $_ = $enc->decode($_, Encode::FB_CROAK()) for @_ };
+        $self->_check_error_after_eval(SSHA_ENCODING_ERROR) or return;
+    }
+    1;
+}
 my $noquote_class = '\\w/\\-=@';
 my $glob_class    = '*?\\[\\],{}:!.^~';
 
@@ -240,77 +265,91 @@ sub _quote_args {
     my $opts = shift;
     ref $opts eq 'HASH' or die "internal error";
     my $quote = delete $opts->{quote_args};
-    my $quote_extended = delete $opts->{quote_args_extended};
     my $glob_quoting = delete $opts->{glob_quoting};
     $quote = (@_ > 1) unless defined $quote;
 
-    if ($quote) {
-	my $quoter_glob = $self->_arg_quoter_glob;
-	my $quoter = ($glob_quoting
-		      ? $quoter_glob
-		      : $self->_arg_quoter);
-
-	# foo   => $quoter
-	# \foo  => $quoter_glob
-	# \\foo => no quoting at all and disable extended quoting as it is not safe
-	my @quoted;
-	for (@_) {
-	    if (ref $_) {
-		if (ref $_ eq 'SCALAR') {
-		    push @quoted, $quoter_glob->($self->_expand_vars($$_));
-		}
-		elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
-		    push @quoted, $self->_expand_vars($$$_);
-		    undef $quote_extended;
-		}
-		else {
-		    croak "invalid reference in remote command argument list"
-		}
-	    }
-	    else {
-		push @quoted, $quoter->($self->_expand_vars($_));
-	    }
-	}
-
-	if ($quote_extended) {
-	    push @quoted, '</dev/null' if $opts->{stdin_discard};
-	    if ($opts->{stdout_discard}) {
-		push @quoted, '>/dev/null';
-		push @quoted, '2>&1' if ($opts->{stderr_to_stdout} || $opts->{stderr_discard})
-	    }
-	    else {
-		push @quoted, '2>/dev/null' if $opts->{stderr_discard};
-	    }
-	}
-	wantarray ? @quoted : join(" ", @quoted);
+    unless ($quote) {
+        croak "reference found in argument list when argument quoting is disabled" if (grep ref, @_);
+        return wantarray ? @_ : join(" ", @_);
     }
-    else {
-	croak "reference found in argument list when argument quoting is disabled"
-	    if (grep ref, @_);
 
-	my @args = $self->_expand_vars(@_);
-	wantarray ? @args : join(" ", @args);
+    my $quoter_glob = $self->_arg_quoter_glob;
+    my $quoter = ($glob_quoting
+                  ? $quoter_glob
+                  : $self->_arg_quoter);
+
+    # foo   => $quoter
+    # \foo  => $quoter_glob
+    # \\foo => no quoting at all and disable extended quoting as it is not safe
+    my @quoted;
+    for (@_) {
+        if (ref $_) {
+            if (ref $_ eq 'SCALAR') {
+                push @quoted, $quoter_glob->($$_);
+            }
+            elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
+                push @quoted, $$$_;
+            }
+            else {
+                croak "invalid reference in remote command argument list"
+            }
+        }
+        else {
+            push @quoted, $quoter->($_);
+        }
     }
+    wantarray ? @quoted : join(" ", @quoted);
 }
 
-_sub_options capture => qw(timeout stdin_data);
+sub _delete_stream_encoding_and_encode_input_data {
+    my ($self, $opts) = @_;
+    my $stream_encoding = $self->_delete_stream_encoding($opts) or return;
+    my @input = grep defined, _array_or_scalar_to_list delete $opts->{stdin_data};
+    $self->_encode_data($stream_encoding => @input) or return;
+    $opts->{stdin_data} = \@input;
+    $stream_encoding
+}
 
+_sub_options capture => qw(timeout stdin_data stderr_to_stdout);
 sub capture {
     my $self = shift;
+    $self->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    my $stream_encoding = $self->_delete_stream_encoding(\%opts);
-    my @input = grep defined, _array_or_scalar_to_list delete $opts{stdin_data};
-    $self->_encode_data($stream_encoding => @input) or return ();
+    my $stream_encoding = $self->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
     my $cmd = $self->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
-    $opts{stdin_data} = \@input;
-    my $output = $self->_capture(\%opts, $cmd);
-    $self->_decode_data($stream_encoding => $out) or return ();
+    my $out = $self->_capture(\%opts, $cmd);
+    $self->_decode_data($stream_encoding => $out) or return;
     if (wantarray) {
         my $pattern = quotemeta $/;
-        return split /(?<=$pattern)/, $output;
+        return split /(?<=$pattern)/, $out;
     }
-    $output
+    $out
+}
+
+_sub_options capture2 => qw(timeout stdin_data);
+sub capture2 {
+    my $self = shift;
+    $self->_clear_error or return undef;
+    my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
+    my $stream_encoding = $self->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
+    my $cmd = $self->_quote_args(\%opts, @_);
+    _croak_bad_options %opts;
+    my ($out, $err) = $self->_capture2(\%opts, $cmd);
+    $self->_decode_data($stream_encoding => $out) or return;
+    $self->_decode_data($stream_encoding => $err) or return;
+    wantarray ? ($out, $err) : $out
+}
+
+_sub_options system => qw(timeout stdin_data);
+sub system {
+    my $self = shift;
+    $self->_clear_error or return undef;
+    my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
+    my $stream_encoding = $self->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
+    my $cmd = $self->_quote_args(\%opts, @_);
+    _croak_bad_options %opts;
+    $self->_system(\%opts, $cmd);
 }
 
 # transparently delegate method calls to backend packages:
@@ -320,7 +359,7 @@ sub AUTOLOAD {
     my $sub = sub { ( ($_[0]->{backend_module} or croak "Backend module not set" )
                       -> can($name) or croak "Undefined subroutine &$AUTOLOAD called" )
                         -> (@_) };
-    no strict refs;
+    no strict 'refs';
     *{$AUTOLOAD} = $sub;
     goto &$sub;
 }

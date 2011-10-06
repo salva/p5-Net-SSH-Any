@@ -8,7 +8,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 my %error = ( SSHA_CONNECTION_ERROR    =>  1,
-              SSHA_CHANEL_ERROR        =>  2,
+              SSHA_CHANNEL_ERROR       =>  2,
 
               SSHA_TIMEOUT_ERROR       =>  4,
               SSHA_REMOTE_CMD_ERROR    =>  5,

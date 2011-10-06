@@ -1,13 +1,16 @@
 package Net::SSH::Any::Util;
 
+BEGIN { *debug = \$Net::SSH::Any::debug }
+
 use strict;
 use warnings;
-
-BEGIN { *debug = \$Net::SSH::Any::debug }
+use Carp;
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw($debug _debug _debug_dump _first_defined _sub_options _croak_bad_options);
+our @EXPORT = qw($debug _debug _debug_dump
+                 _sub_options _croak_bad_options
+                 _first_defined _array_or_scalar_to_list);
 
 our $debug ||= 0;
 
@@ -38,9 +41,11 @@ sub _croak_bad_options (\%) {
         my $good = $good{$sub};
         my @keys = ( $good ? grep !$good->{$_}, keys %$opts : keys %$opts);
         if (@keys) {
-            croak "Invalid or bad combination of options ('" . CORE::join("', '", @keys) . "')";
+            croak "Invalid or bad combination of options ('" . join("', '", @keys) . "')";
         }
     }
 }
+
+sub _array_or_scalar_to_list { map { defined($_) ? (ref $_ eq 'ARRAY' ? @$_ : $_ ) : () } @_ }
 
 1;
