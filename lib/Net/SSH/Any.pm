@@ -310,7 +310,7 @@ sub _delete_stream_encoding_and_encode_input_data {
     $stream_encoding
 }
 
-_sub_options capture => qw(timeout stdin_data stderr_to_stdout);
+_sub_options capture => qw(timeout stdin_data stderr_to_stdout stderr_discard);
 sub capture {
     my $any = shift;
     $any->_clear_error or return undef;
