@@ -102,7 +102,10 @@ sub die_on_error {
 sub _clear_error {
     my $any = shift;
     my $error = $any->{error};
-    $error and $error == SSHA_NO_BACKEND_ERROR and return;
+    return if ( $error and
+                ( $error == SSHA_NO_BACKEND_ERROR or
+                  $error == SSHA_BACKEND_ERROR or
+                  $error == SSHA_CONNECTION_ERROR ) );
     $any->{error} = 0;
     1;
 }
@@ -112,11 +115,11 @@ sub _set_error {
     my $code = shift || 0;
     my @msg = grep { defined && length } @_;
     @msg = "Unknown error $code" unless @msg;
-    my $err = $any->{error} = ( $code
-                                ? Scalar::Util::dualvar($code, join(': ', @{$any->{error_prefix}}, @msg));
-                                : 0 );
-    $debug and $debug & 1 and _debug "set_error($code - $err)";
-    return $err
+    my $error = $any->{error} = ( $code
+                                  ? Scalar::Util::dualvar($code, join(': ', @{$any->{error_prefix}}, @msg))
+                                  : 0 );
+    $debug and $debug & 1 and _debug "set_error($code - $error)";
+    return $error
 }
 
 sub _or_set_error {
@@ -154,16 +157,14 @@ sub _delete_stream_encoding {
     my ($any, $opts) = @_;
     _first_defined(delete $opts->{stream_encoding},
                    $opts->{encoding},
-                   $any->{stream_encoding},
-                   'bytes');
+                   $any->{stream_encoding})
 }
 
 sub _delete_argument_encoding {
     my ($any, $opts) = @_;
     _first_defined(delete $opts->{argument_encoding},
                    delete $opts->{encoding},
-                   $any->{argument_encoding},
-                   'bytes');
+                   $any->{argument_encoding})
 }
 
 sub _find_encoding {
@@ -260,57 +261,77 @@ sub _arg_quoter_glob {
     }
 }
 
+sub _encode_args {
+    if (@_ > 2) {
+        my $any = shift;
+        my $encoding = shift;
+        local $any->{error_prefix} = [@{$any->{error_prefix}}, "argument encoding failed"];
+        if (my $enc = $any->_find_encoding($encoding)) {
+            $any->_encode_data($enc, @_);
+        }
+        return !$any->{_error};
+    }
+    1;
+}
+
 sub _quote_args {
     my $any = shift;
     my $opts = shift;
     ref $opts eq 'HASH' or die "internal error";
     my $quote = delete $opts->{quote_args};
     my $glob_quoting = delete $opts->{glob_quoting};
+    my $argument_encoding =  $any->_delete_argument_encoding($opts);
     $quote = (@_ > 1) unless defined $quote;
 
-    unless ($quote) {
-        croak "reference found in argument list when argument quoting is disabled" if (grep ref, @_);
-        return wantarray ? @_ : join(" ", @_);
-    }
-
-    my $quoter_glob = $any->_arg_quoter_glob;
-    my $quoter = ($glob_quoting
-                  ? $quoter_glob
-                  : $any->_arg_quoter);
-
-    # foo   => $quoter
-    # \foo  => $quoter_glob
-    # \\foo => no quoting at all and disable extended quoting as it is not safe
     my @quoted;
-    for (@_) {
-        if (ref $_) {
-            if (ref $_ eq 'SCALAR') {
-                push @quoted, $quoter_glob->($$_);
-            }
-            elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
-                push @quoted, $$$_;
+    if ($quote) {
+        my $quoter_glob = $any->_arg_quoter_glob;
+        my $quoter = ($glob_quoting
+                      ? $quoter_glob
+                      : $any->_arg_quoter);
+
+        # foo   => $quoter
+        # \foo  => $quoter_glob
+        # \\foo => no quoting at all and disable extended quoting as it is not safe
+        for (@_) {
+            if (ref $_) {
+                if (ref $_ eq 'SCALAR') {
+                    push @quoted, $quoter_glob->($$_);
+                }
+                elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
+                    push @quoted, $$$_;
+                }
+                else {
+                    croak "invalid reference in remote command argument list"
+                }
             }
             else {
-                croak "invalid reference in remote command argument list"
+                push @quoted, $quoter->($_);
             }
         }
-        else {
-            push @quoted, $quoter->($_);
-        }
     }
+    else {
+        croak "reference found in argument list when argument quoting is disabled" if (grep ref, @_);
+        @quoted = @_;
+    }
+    $any->_encode_args($argument_encoding, @quoted);
+    $debug and $debug & 1024 and _debug("command+args: @quoted");
     wantarray ? @quoted : join(" ", @quoted);
 }
 
 sub _delete_stream_encoding_and_encode_input_data {
     my ($any, $opts) = @_;
     my $stream_encoding = $any->_delete_stream_encoding($opts) or return;
+    $debug and $debug & 1024 and _debug("stream_encoding: "
+                                        . ($stream_encoding ? $stream_encoding : '<undef>') );
     my @input = grep defined, _array_or_scalar_to_list delete $opts->{stdin_data};
     $any->_encode_data($stream_encoding => @input) or return;
     $opts->{stdin_data} = \@input;
     $stream_encoding
 }
 
-_sub_options capture => qw(timeout stdin_data stderr_to_stdout stderr_discard);
+_sub_options capture => qw(timeout stdin_data stderr_to_stdout stderr_discard
+                           stderr_fh stderr_file);
 sub capture {
     my $any = shift;
     $any->_clear_error or return undef;
@@ -319,7 +340,9 @@ sub capture {
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
     my $out = $any->_capture(\%opts, $cmd);
-    $any->_decode_data($stream_encoding => $out) or return;
+    if ($stream_encoding) {
+        $any->_decode_data($stream_encoding => $out) or return;
+    }
     if (wantarray) {
         my $pattern = quotemeta $/;
         return split /(?<=$pattern)/, $out;
@@ -336,12 +359,16 @@ sub capture2 {
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
     my ($out, $err) = $any->_capture2(\%opts, $cmd);
-    $any->_decode_data($stream_encoding => $out) or return;
-    $any->_decode_data($stream_encoding => $err) or return;
+    if ($stream_encoding) {
+        $any->_decode_data($stream_encoding => $out) or return;
+        $any->_decode_data($stream_encoding => $err) or return;
+    }
     wantarray ? ($out, $err) : $out
 }
 
-_sub_options system => qw(timeout stdin_data);
+_sub_options system => qw(timeout stdin_data
+                          stdout_fh stdout_file stdout_discard
+                          stderr_to_stdout stderr_fh stderr_file stderr_discard);
 sub system {
     my $any = shift;
     $any->_clear_error or return undef;
@@ -357,7 +384,9 @@ sub AUTOLOAD {
     our $AUTOLOAD;
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
     no strict 'refs';
-    my $sub = sub { goto &{"$_[0]->{backend_module}::$name"} };
+    my $sub = sub {
+        goto &{"$_[0]->{backend_module}::$name"}
+    };
     *{$AUTOLOAD} = $sub;
     goto &$sub;
 }
@@ -376,17 +405,70 @@ Net::SSH::Any - Use any SSH module
 
   my $ssh = Net::SSH::Any->new($host, user => $user, password => $passwd);
 
+  my @out = $ssh->capture(cat => "/etc/passwd");
   my ($out, $err) = $ssh->capture2("ls -l /");
   $ssh->system("foo");
 
 =head1 DESCRIPTION
 
+  *******************************************************************
+  ***                                                             ***
+  *** NOTE: This is a very early release that may contain lots of ***
+  *** bugs. The API is not stable and may change between releases ***
+  ***                                                             ***
+  *******************************************************************
+
+Currently, there are several SSH client modules available from CPAN,
+but no one can be used on all the situations.
+
+L<Net::SSH::Any> is an adapter module offering an unified API with a
+plugin architecture that allows to use the other modules as
+backends.
+
+It will work in the same way across most operating systems and
+installations as far as any of the supported backend modules is also
+installed.
+
+The currently supported backend modules are L<Net::OpenSSH> and
+L<Net::SSH2> and I plan to write a backend module on top of the ssh
+binary and maybe another one for L<Net::SSH::Perl>.
+
+The API is mostly a subset of the one from L<Net::OpenSSH>, though
+there are some minor deviations in some methods.
 
 =head1 SEE ALSO
 
-L<Net::OpenSSH>, L<Net::SSH2>, L<Net::SSH::Perl>
+L<Net::OpenSSH>, L<Net::SSH2>, L<Net::SSH::Perl>.
 
 L<Net::SFTP::Foreign>
+
+=head1 BUGS AND SUPPORT
+
+To report bugs send an email to the address that appear below or use
+the CPAN bug tracking system at L<http://rt.cpan.org>.
+
+B<Post questions related to how to use the module in Perlmonks>
+L<http://perlmoks.org/>, you will probably get faster responses than
+if you address me directly and I visit Perlmonks quite often, so I
+will see your question anyway.
+
+The source code of this module is hosted at GitHub:
+L<http://github.com/salva/p5-Net-SSH-Any>.
+
+=head2 Commercial support
+
+Commercial support, professional services and custom software
+development around this module are available through my current
+company. Drop me an email with a rough description of your
+requirements and we will get back to you ASAP.
+
+=head2 My wishlist
+
+If you like this module and you're feeling generous, take a look at my
+Amazon Wish List: L<http://amzn.com/w/1WU1P6IR5QZ42>.
+
+Also consider contributing to the OpenSSH project this module builds
+upon: L<http://www.openssh.org/donations.html>.
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -395,6 +477,5 @@ Copyright (C) 2011-2012 by Salvador Fandiño, E<lt>sfandino@yahoo.comE<gt>
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.12.4 or,
 at your option, any later version of Perl 5 you may have available.
-
 
 =cut

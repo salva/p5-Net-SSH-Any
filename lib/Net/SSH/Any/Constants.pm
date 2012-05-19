@@ -7,13 +7,15 @@ use Carp;
 require Exporter;
 our @ISA = qw(Exporter);
 
-my %error = ( SSHA_CONNECTION_ERROR    =>  1,
+my %error = ( SSHA_OK                  =>  0,
+              SSHA_CONNECTION_ERROR    =>  1,
               SSHA_CHANNEL_ERROR       =>  2,
 
               SSHA_TIMEOUT_ERROR       =>  4,
               SSHA_REMOTE_CMD_ERROR    =>  5,
 
               SSHA_ENCODING_ERROR      =>  7,
+              SSHA_LOCAL_IO_ERROR      =>  8,
 
               SSHA_NO_BACKEND_ERROR    => 20,
               SSHA_BACKEND_ERROR       => 21,
