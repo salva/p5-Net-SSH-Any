@@ -1,6 +1,10 @@
 Changes
+lib/Net/SSH/Any.pm
+lib/Net/SSH/Any/Backend/Net_OpenSSH.pm
+lib/Net/SSH/Any/Backend/Net_SSH2.pm
+lib/Net/SSH/Any/Constants.pm
+lib/Net/SSH/Any/Util.pm
 Makefile.PL
 MANIFEST
 README
 t/Net-SSH-Any.t
-lib/Net/SSH/Any.pm

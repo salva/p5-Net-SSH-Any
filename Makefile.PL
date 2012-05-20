@@ -1,7 +1,7 @@
 
 use strict;
 use warnings;
-use 5.010;
+use 5.008;
 
 use ExtUtils::MakeMaker;
 WriteMakefile( NAME          => 'Net::SSH::Any',

@@ -21,6 +21,8 @@ my %error = ( SSHA_OK                  =>  0,
               SSHA_BACKEND_ERROR       => 21,
               SSHA_UNIMPLEMENTED_ERROR => 22,
               SSHA_PROTOCOL_ERROR      => 23,
+
+              SSHA_EAGAIN              => 30,
             );
 
 for my $key (keys %error) {

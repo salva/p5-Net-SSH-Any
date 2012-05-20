@@ -29,7 +29,8 @@ sub __copy_error {
         or die "internal error: __copy_error called, but there is no ssh2 object";
     my $error = $ssh2->error
         or die "internal error: __copy_error called, but there is no error";
-    $any->_set_error(shift || SSHA_CHANNEL_ERROR, ($ssh2->error)[2]);
+    my $code = ($error == $eagain ? SSHA_EAGAIN : (shift || SSHA_CHANNEL_ERROR));
+    $any->_set_error($code, ($ssh2->error)[2]);
     ()
 }
 
@@ -59,6 +60,11 @@ sub _connect {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Authentication failed");
         return;
     }
+
+    my $bm = '';
+    vec ($bm, fileno($ssh2->sock), 1) = 1;
+    $any->{__select_bm} = $bm;
+    1;
 }
 
 sub __open_file {
@@ -109,7 +115,6 @@ sub _system {
     my ($out_fh, $err_fh) = __parse_fh_opts($any, $opts, $channel) or return;
     $channel->exec($cmd);
     __io3($any, $ssh2, $channel, $opts->{stdin_data}, $out_fh || \*STDOUT, $err_fh || \*STDERR);
-    not $?;
 }
 
 sub _capture {
@@ -156,20 +161,29 @@ sub __check_channel_error {
     __copy_error($any, SSHA_CHANNEL_ERROR);
 }
 
+sub _wait_for_more_data {
+    my ($any, $timeout) = @_;
+    my $ssh2 = $any->{be_ssh2};
+    if (my $dir = $ssh2->block_directions) {
+        my $wr = ($dir & $block_inbound  ? $any->{__select_bm} : '');
+        my $ww = ($dir & $block_outbound ? $any->{__select_bm} : '');
+        select($wr, $ww, undef, $timeout);
+    }
+}
+
 sub __io3 {
     my ($any, $ssh2, $channel, $stdin_data, @fh) = @_;
-    my $fn = fileno($ssh2->sock);
-    my $bm = '';
-    vec ($bm, $fn, 1) = 1;
     $channel->blocking(0);
     my $in = '';
     my @cap = ('', '');
     my $eof_sent;
     while (1) {
+        my $delay = 1;
         #$debug and $debug and 1024 and _debug("looping...");
         $in .= shift @$stdin_data while @$stdin_data and length $in < 36000;
         if (length $in) {
             if (my $bytes = $channel->write($in)) {
+                $delay = 0;
                 substr($in, 0, $bytes, '');
             }
             else {
@@ -182,6 +196,7 @@ sub __io3 {
         }
         for my $ext (0, 1) {
             if (my $bytes = $channel->read(my($buf), 36000, $ext)) {
+                $delay = 0;
                 if ($fh[$ext]) {
                     __write_all($any, $fh[$ext], $buf) or last;
                 }
@@ -195,10 +210,7 @@ sub __io3 {
         }
         last if $channel->eof;
 
-        my $dir = $ssh2->block_directions;
-        my $wr = ($dir & $block_inbound  ? $bm : '');
-        my $ww = ($dir & $block_outbound ? $bm : '');
-        select($wr, $ww, undef, 2);
+        $any->_wait_for_more_data(0.2) if $delay;
     }
 
     $channel->blocking(1);
@@ -212,6 +224,16 @@ sub __io3 {
 
     $? = (($code << 8) | $signal);
     return @cap;
+}
+
+sub _pipe {
+    my ($any, $opts, $cmd) = @_;
+    my $ssh2 = $any->{be_ssh2} or return;
+    my $channel = $ssh2->channel;
+    __parse_fh_opts($any, $opts, $channel) or return;
+
+    require Net::SSH::Any::Backend::Net_SSH2::Pipe;
+    Net::SSH::Any::Backend::Net_SSH2::Pipe->_new($any, $channel);
 }
 
 1;
