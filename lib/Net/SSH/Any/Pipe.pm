@@ -112,25 +112,38 @@ sub print {
             $any->_clear_error;
             $pipe->wait_for_data(0.2);
         }
+        elsif ($any->eof) {
+            last;
+        }
         else {
             # and so, what?
         }
     }
-    return $total;
+    return ($buf == '' and not @_);
 }
 
 sub readline {
     my $pipe = shift;
     my $any = $pipe->{any};
+    my $line;
     local $pipe->{blocking};
     for my $bin ($pipe->{bin}) {
         while (1) {
             my $ix = index $bin, $/;
-            $ix >= 0 and return substr $bin, 0, $ix + length $/, '';
-
-           $pipe->_sysread($bin, 34000);
+            if ($ix >= 0) {
+                $line = substr $bin, 0, $ix + length $/, '';
+                last;
+            }
+            if ($pipe->eof) {
+                my $line = $bin;
+                $bin = '';
+                last;
+            }
+            $pipe->_sysread($bin, 34000);
+        }
     }
-
+    $any->_clear_error if $any->error == SSHA_AGAIN;
+    return (length $line ? $line : undef);
 }
 
 sub send_eof {
@@ -140,7 +153,7 @@ sub send_eof {
 
 sub eof {
     my $pipe = shift;
-    $pipe->{eof} ||= $pipe->_eof;
+    $pipe->{eof} ||= ($pipe->_eof || ($pipe->error && $pipe->error != SSHA_EAGAIN));
 }
 
 sub close {
