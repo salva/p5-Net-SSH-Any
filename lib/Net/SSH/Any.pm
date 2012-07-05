@@ -414,6 +414,15 @@ sub AUTOLOAD {
     goto &$sub;
 }
 
+sub DESTROY {
+    my $any = shift;
+    my $be = $any->{backend_module};
+    if (defined $be) {
+        my $sub = $be->can('DESTROY');
+        $sub->($any) if $sub;
+    }
+}
+
 1;
 
 __END__
