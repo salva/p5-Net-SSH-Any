@@ -15,13 +15,20 @@ use Errno ();
 
 sub _backend_api_version { 1 }
 
-my ($block_inbound, $block_outbound, $eagain);
+our ($block_inbound, $block_outbound, $eagain);
 do {
     local ($@, $SIG{__DIE__});
     $block_inbound  = (eval { Net::SSH2::LIBSSH2_SOCKET_BLOCK_INBOUND()  } ||   1);
     $block_outbound = (eval { Net::SSH2::LIBSSH2_SOCKET_BLOCK_OUTBOUND() } ||   2);
     $eagain         = (eval { Net::SSH2::LIBSSH2_ERROR_EAGAIN()          } || -37);
 };
+
+sub __set_error_from_ssh_error_code {
+    my ($any, $ssh_error_code, $error) = @_;
+    $error = ($ssh_error_code == $eagain ? SSHA_EAGAIN : ($error || SSHA_CHANNEL_ERROR));
+    $any->_set_error($error, "libssh2 error $ssh_error_code");
+    ()
+}
 
 sub __copy_error {
     my $any = shift;
@@ -154,10 +161,17 @@ sub __write_all {
     return 1;
 }
 
-sub __check_channel_error {
+sub __check_channel_error_nb {
     my $any = shift;
     my $error = $any->{be_ssh2}->error;
     return 1 unless $error and $error != $eagain;
+    __copy_error($any, SSHA_CHANNEL_ERROR);
+}
+
+sub __check_channel_error {
+    my $any = shift;
+    my $error = $any->{be_ssh2}->error;
+    return 1 unless $error;
     __copy_error($any, SSHA_CHANNEL_ERROR);
 }
 
@@ -182,12 +196,19 @@ sub __io3 {
         #$debug and $debug and 1024 and _debug("looping...");
         $in .= shift @$stdin_data while @$stdin_data and length $in < 36000;
         if (length $in) {
-            if (my $bytes = $channel->write($in)) {
-                $delay = 0;
-                substr($in, 0, $bytes, '');
+            my $bytes = $channel->write($in);
+            if (not $bytes) {
+                __check_channel_error_nb($any) or last;
+            }
+            elsif ($bytes < 0) {
+                if ($bytes != $eagain) {
+                    $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
+                    last;
+                }
             }
             else {
-                __check_channel_error($any) or last;
+                $delay = 0;
+                substr($in, 0, $bytes, '');
             }
         }
         elsif (!$eof_sent) {
@@ -195,7 +216,17 @@ sub __io3 {
             $eof_sent = 1;
         }
         for my $ext (0, 1) {
-            if (my $bytes = $channel->read(my($buf), 36000, $ext)) {
+            my $bytes = $channel->read(my($buf), 36000, $ext);
+            if (not $bytes) {
+                __check_channel_error_nb($any) or last;
+            }
+            elsif ($bytes < 0) {
+                if ($bytes != $eagain) {
+                    $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
+                    last;
+                }
+            }
+            else {
                 $delay = 0;
                 if ($fh[$ext]) {
                     __write_all($any, $fh[$ext], $buf) or last;
@@ -203,9 +234,6 @@ sub __io3 {
                 else {
                     $cap[$ext] .= $buf;
                 }
-            }
-            else {
-                __check_channel_error($any) or last;
             }
         }
         last if $channel->eof;
@@ -234,6 +262,37 @@ sub _pipe {
 
     require Net::SSH::Any::Backend::Net_SSH2::Pipe;
     Net::SSH::Any::Backend::Net_SSH2::Pipe->_new($any, $channel);
+}
+
+sub _syswrite {
+    my ($any, $channel) = @_;
+    my $bytes = $channel->write($_[2]);
+    if (not $bytes) {
+        __check_channel_error($any) or return undef;
+    }
+    elsif ($bytes < 0) {
+        __set_error_from_ssh_error_code($any, $bytes);
+        return undef;
+    }
+    $bytes;
+}
+
+# appends at the end of $_[2] always!
+sub _sysread {
+    my ($any, $channel, undef, $len, $ext) = @_;
+    my $bytes = $channel->read(my($buf), $len, $ext);
+    if (not $bytes) {
+        __check_channel_error($any) or return undef;
+    }
+    elsif ($bytes < 0) {
+        __set_error_from_ssh_error_code($any, $bytes);
+        return undef;
+    }
+    else {
+        no warnings;
+        $_[2] .= $buf;
+    }
+    $bytes;
 }
 
 1;

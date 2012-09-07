@@ -397,7 +397,7 @@ sub pipe {
     my $any = shift;
     $any->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    my $cmd = $any->_quote_args(%opts, @_);
+    my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
     $any->_pipe(\%opts, $cmd);
 }
