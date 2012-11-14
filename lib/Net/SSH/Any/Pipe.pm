@@ -6,10 +6,12 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
+use Net::SSH::Any::Constants qw(SSHA_EAGAIN);
+
 sub _new {
-    my ($class, $any, $blocking, %pipe) = @_;
+    my ($class, $any, %pipe) = @_;
     $pipe{any} = $any;
-    $pipe{blocking} = 1;
+    $pipe{blocking} = 1 unless defined $pipe{blocking};
     $pipe{bin} = '';
     my $pipe = \%pipe;
     bless $pipe, $class;
@@ -24,19 +26,19 @@ sub blocking {
 }
 
 sub sysread {
-    my ($pipe, undef, $len, $off, $err) = @_;
-    $any = $pipe->{any};
+    my ($pipe, undef, $len, $off, $ext) = @_;
+    my $any = $pipe->{any};
     $any->_clear_error or return;
 
     if (defined $len) {
-        return 0 if $len < 0;
+        return 0 if $len <= 0;
     }
     else {
         $len = 34000;
     }
 
     $_[1] = '' unless defined $_[1];
-    if (defined $off) {
+    if ($off) {
         if ($off < 0) {
             $off += length $_[1];
             croak "Offset outside string" if $off < 0;
@@ -53,36 +55,37 @@ sub sysread {
     else {
         $off = 0;
     }
-    $pipe->_sysread($len, $err, $_[1]);
+    $pipe->_sysread($_[1], $len, $ext);
 }
 
 sub syswrite {
-    my ($pipe, undef, $len, $off, $err) = @_;
-    $any = $pipe->{any};
+    my ($pipe, undef, $len, $off) = @_;
+    my $any = $pipe->{any};
     $any->_clear_error or return;
 
-    if (defined $off) {
-        if ($off < 0) {
-            $off += length $_[1];
-            croak "Offset outside string" if $off < 0;
+    if ($off or defined $len) {
+        if (defined $off) {
+            if ($off < 0) {
+                $off += length $_[1];
+                croak "Offset outside string" if $off < 0;
+            }
+            elsif ($off >= length $_[1]) {
+                return 0;
+            }
         }
-        elsif ($off >= length $_[1]) {
-            return 0;
+        else {
+            $off = 0;
         }
-    }
-    else {
-        $off = 0;
-    }
 
-    my $available = length $_[1] - $off;
-    if (defined $len) {
-        $len = $available if $len > $available;
-        $len or return 0;
+        if (defined $len) {
+            $len or return 0;
+        }
+        else {
+            $len = length $_[1] - $off;
+        }
+        return $pipe->_syswrite(substr($_[1], $off, $len));
     }
-    else {
-        $len = $available;
-    }
-    $pipe->_syswrite($len, $off, $_[1]);
+    $pipe->_syswrite($_[1]);
 }
 
 sub print {
@@ -95,10 +98,10 @@ sub print {
     while (length $buf or not $ended) {
         while (length $buf < 34000 and not $ended) {
             if (@_) {
-                $buf .= "$," . shift @_;
+                $buf .= $, . shift @_;
             }
             else {
-                $buf .= $\;
+                $buf .= $\ if defined $\;
                 $ended = 1;
                 last;
             }
@@ -142,7 +145,7 @@ sub readline {
             $pipe->_sysread($bin, 34000);
         }
     }
-    $any->_clear_error if $any->error == SSHA_AGAIN;
+    $any->_clear_error if $any->error == SSHA_EAGAIN;
     return (length $line ? $line : undef);
 }
 
