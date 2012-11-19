@@ -295,4 +295,18 @@ sub _sysread {
     $bytes;
 }
 
+sub _sftp {
+    my ($any, $opts) = @_;
+    my $ssh2 = $any->{be_ssh2} or return;
+    $any->_load_module("Net::SFTP::Foreign::Backend::Net_SSH2") or return;
+    my $sftp = Net::SFTP::Foreign->new(ssh2 => $ssh2,
+                                       backend => 'Net_SSH2',
+                                       autodisconnect => 2,
+                                       %$opts);
+    if ($sftp->error) {
+        $any->_set_error(SSHA_CHANNEL_ERROR, $sftp->error);
+    }
+    $sftp;
+}
+
 1;

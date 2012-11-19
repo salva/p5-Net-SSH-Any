@@ -79,6 +79,12 @@ sub __ssh {
     undef;
 }
 
-
+sub _sftp {
+    my ($any, $opts) = @_;
+    my $ssh = __ssh($any) or return undef;
+    my $sftp = $ssh->sftp(%$opts);
+    __check_error($ssh);
+    return $sftp;
+}
 
 1;

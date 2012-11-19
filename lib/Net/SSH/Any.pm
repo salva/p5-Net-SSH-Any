@@ -402,6 +402,25 @@ sub pipe {
     $any->_pipe(\%opts, $cmd);
 }
 
+_sub_options sftp => qw(fs_encoding timeout block_size queue_size autoflush write_delay
+                        read_ahead late_set_perm autodie);
+sub sftp {
+    my ($any, %opts) = @_;
+    $opts{fs_encoding} = $any->_delete_argument_encoding(\%opts)
+        unless defined $opts{fs_encoding};
+    _croak_bad_options %opts;
+    $any->_load_module('Net::SFTP::Foreign') or return;
+    $any->_sftp(\%opts)
+}
+
+my %loaded;
+sub _load_module {
+    my ($any, $module) = @_;
+    $loaded{$module} ||= eval "require $module; 1" and return 1;
+    $any->_set_error(SSHA_UNIMPLEMENTED_ERROR, "Unable to load perl module $module");
+    return;
+}
+
 # transparently delegate method calls to backend packages:
 sub AUTOLOAD {
     our $AUTOLOAD;
