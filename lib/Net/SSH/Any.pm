@@ -1,6 +1,6 @@
 package Net::SSH::Any;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use strict;
 use warnings;
@@ -69,7 +69,7 @@ sub new {
     my $any = { host => $host,
                  user => $user,
                  port => $port,
-                 passwd => $passwd,
+                 password => $passwd,
                  key_path => $key_path,
                  passphrase => $passphrase,
                  timeout => $timeout,
@@ -431,6 +431,15 @@ sub AUTOLOAD {
     };
     *{$AUTOLOAD} = $sub;
     goto &$sub;
+}
+
+sub DESTROY {
+    my $any = shift;
+    my $be = $any->{backend_module};
+    if (defined $be) {
+        my $sub = $be->can('DESTROY');
+        $sub->($any) if $sub;
+    }
 }
 
 1;
