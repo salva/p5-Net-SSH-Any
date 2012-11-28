@@ -58,6 +58,13 @@ sub sysread {
     $pipe->_sysread($_[1], $len, $ext);
 }
 
+sub sysgetc {
+    my $pipe = shift;
+    my $buf;
+    $pipe->sysread($buf, 1);
+    return (length $buf ? $buf : undef);
+}
+
 sub syswrite {
     my ($pipe, undef, $len, $off) = @_;
     my $any = $pipe->{any};
