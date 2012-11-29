@@ -43,7 +43,7 @@ sub sysread {
             $off += length $_[1];
             croak "Offset outside string" if $off < 0;
         }
-        elsif (my $after = length $_[1] - $off) {
+        elsif (my $after = length($_[1]) - $off) {
             if ($after > 0) {
                 $_[1] .= ("\x00" x $after);
             }
@@ -170,4 +170,9 @@ sub close {
     my $pipe = shift;
     $pipe->{closed} ||= $pipe->_close;
 }
+
+sub error {
+    shift->{any}->error;
+}
+
 1;

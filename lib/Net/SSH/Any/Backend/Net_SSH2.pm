@@ -27,7 +27,7 @@ sub __set_error_from_ssh_error_code {
     my ($any, $ssh_error_code, $error) = @_;
     $error = ($ssh_error_code == $eagain ? SSHA_EAGAIN : ($error || SSHA_CHANNEL_ERROR));
     $any->_set_error($error, "libssh2 error $ssh_error_code");
-    ()
+    return;
 }
 
 sub __copy_error {
@@ -38,7 +38,7 @@ sub __copy_error {
         or die "internal error: __copy_error called, but there is no error";
     my $code = ($error == $eagain ? SSHA_EAGAIN : (shift || SSHA_CHANNEL_ERROR));
     $any->_set_error($code, ($ssh2->error)[2]);
-    ()
+    return;
 }
 
 sub _connect {
@@ -259,7 +259,8 @@ sub _pipe {
     my $ssh2 = $any->{be_ssh2} or return;
     my $channel = $ssh2->channel;
     __parse_fh_opts($any, $opts, $channel) or return;
-
+    # TODO: do something with the parsed options?
+    $channel->exec($cmd);
     require Net::SSH::Any::Backend::Net_SSH2::Pipe;
     Net::SSH::Any::Backend::Net_SSH2::Pipe->_new($any, $channel);
 }
@@ -280,7 +281,8 @@ sub _syswrite {
 # appends at the end of $_[2] always!
 sub _sysread {
     my ($any, $channel, undef, $len, $ext) = @_;
-    my $bytes = $channel->read(my($buf), $len, $ext);
+    $debug and $debug & 4096 and _debug("trying to read $len bytes from channel");
+    my $bytes = $channel->read(my($buf), $len, $ext || 0);
     if (not $bytes) {
         __check_channel_error($any) or return undef;
     }
