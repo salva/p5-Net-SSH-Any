@@ -43,7 +43,7 @@ sub sysread {
             $off += length $_[1];
             croak "Offset outside string" if $off < 0;
         }
-        elsif (my $after = length $_[1] - $off) {
+        elsif (my $after = length($_[1]) - $off) {
             if ($after > 0) {
                 $_[1] .= ("\x00" x $after);
             }
@@ -56,6 +56,13 @@ sub sysread {
         $off = 0;
     }
     $pipe->_sysread($_[1], $len, $ext);
+}
+
+sub sysgetc {
+    my $pipe = shift;
+    my $buf;
+    $pipe->sysread($buf, 1);
+    return (length $buf ? $buf : undef);
 }
 
 sub syswrite {
@@ -163,4 +170,9 @@ sub close {
     my $pipe = shift;
     $pipe->{closed} ||= $pipe->_close;
 }
+
+sub error {
+    shift->{any}->error;
+}
+
 1;

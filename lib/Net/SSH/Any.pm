@@ -426,11 +426,17 @@ sub AUTOLOAD {
     our $AUTOLOAD;
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
     no strict 'refs';
-    my $sub = sub {
-        goto &{"$_[0]->{backend_module}::$name"}
-    };
-    *{$AUTOLOAD} = $sub;
-    goto &$sub;
+    if ($name =~ /^scp_(?:get|put)$/) {
+        $_[0]->_load_module('Net::SSH::Any::SCP') or return;
+        goto &{$AUTOLOAD};
+    }
+    else {
+        my $sub = sub {
+            goto &{"$_[0]->{backend_module}::$name"}
+        };
+        *{$AUTOLOAD} = $sub;
+        goto &$sub;
+    }
 }
 
 sub DESTROY {
