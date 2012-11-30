@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.03  Nov 19, 2012
+        - add support for SFTP via Net::SFTP::Foreign
+
 0.02  Nov 14, 2012
         - password authentication was broken
         - several bugs corrected and general improvements

@@ -1,6 +1,6 @@
 package Net::SSH::Any;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use strict;
 use warnings;
@@ -459,6 +459,9 @@ Net::SSH::Any - Use any SSH module
   my @out = $ssh->capture(cat => "/etc/passwd");
   my ($out, $err) = $ssh->capture2("ls -l /");
   $ssh->system("foo");
+
+  my $sftp = $ssh->sftp; # returns Net::SFTP::Foreign object
+  $sftp->put($local_path, $remote_path);
 
 =head1 DESCRIPTION
 
