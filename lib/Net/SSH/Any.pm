@@ -66,18 +66,24 @@ sub new {
 
     my $backend_opts = delete $opts{backend_opts};
 
+    my %remote_cmd;
+    for (keys %opts) {
+        /^remote_(.*)_cmd$/ and $remote_cmd{$1} = $opts{$_};
+    }
+
     my $any = { host => $host,
-                 user => $user,
-                 port => $port,
-                 password => $passwd,
-                 key_path => $key_path,
-                 passphrase => $passphrase,
-                 timeout => $timeout,
-                 target_os => $target_os,
-                 stream_encoding => $stream_encoding,
-                 argument_encoding => $argument_encoding,
-                 backend_opts => $backend_opts,
-                 error_prefix => [],
+                user => $user,
+                port => $port,
+                password => $passwd,
+                key_path => $key_path,
+                passphrase => $passphrase,
+                timeout => $timeout,
+                target_os => $target_os,
+                stream_encoding => $stream_encoding,
+                argument_encoding => $argument_encoding,
+                backend_opts => $backend_opts,
+                error_prefix => [],
+                remote_cmd => \%remote_cmd,
                };
     bless $any, $class;
 
