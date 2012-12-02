@@ -1,18 +1,35 @@
 package Net::SSH::Any::SCP;
 
+use strict;
+use warnings;
+
+use Net::SSH::Any;
 package Net::SSH::Any;
 
 our $debug;
-
-use strict;
-use warnings;
 
 sub _scp_get_with_handler {
     my $any = shift;
     my $opts = shift;
     my $handler = shift;
 
-    my $pipe = $any->pipe($opts, scp => '-f', '--', @_);
+    my $glob = delete $opts->{glob};
+    my $recursive = delete $opts->{recursive};
+    my $double_dash = _first_defined(delete $opts->{double_dash}, 1);
+
+    my $remote_scp_command =  _first_defined delete($opts->{remote_scp_cmd}), $any->{remote_cmd}{scp}, 'scp';
+
+    my @cmd   = $any->_quote_args({quote_args => 1},
+                                  $remote_scp_command,
+                                  '-f',
+                                  ($recursive ? '-r' : ()),
+                                  ($double_dash ? '--' : ()));
+    my @files = $any->_quote_args({quote_args => 1,
+                                   glob_quoting => $glob},
+                                  @_);
+
+    my $pipe = $any->pipe({ %$opts, quote_args => 0 },
+                          @cmd, @files);
     $any->error and return;
 
     my $on_error;
@@ -37,36 +54,41 @@ sub _scp_get_with_handler {
             $debug and $debug & 4096 and _debug "remote error: " . $error;
         }
         # C:
-        elsif (my ($perm, $size, $name) = $buf =~ /^C([0-7]+) (\d+) (.*)$/) {
-            $debug and $debug & 4096 and _debug "transferring file of size $size";
-            $pipe->syswrite("\x00");
-            $buf = '';
-            while ($size) {
-                my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
-                unless ($read) {
-                    $debug and $debug & 4096 and _debug "read failed: " . $any->error;
+        elsif (my ($type, $perm, $size, $name) = $buf =~ /^([CD])([0-7]+) (\d+) (.*)$/) {
+            if ($type eq 'C') {
+                $handler->on_file($perm, $size, $name) or return;
+                $debug and $debug & 4096 and _debug "transferring file of size $size";
+                $pipe->syswrite("\x00");
+                $buf = '';
+                while ($size) {
+                    my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
+                    unless ($read) {
+                        $debug and $debug & 4096 and _debug "read failed: " . $any->error;
+                        return;
+                    }
+                    $handler->on_data($buf) or return;
+                    $size -= $read;
+                }
+                $buf = '';
+                unless ($pipe->sysread($buf, 1) and $buf eq "\x00") {
+                    $debug and $debug & 4096 and _debug "sysread failed to read ok code: $buf";
                     return;
                 }
-                $handler->on_data($buf) or return;
-                $size -= $read;
+                $handler->on_end_of_file or return;
             }
-            $buf = '';
-            unless ($pipe->sysread($buf, 1) and $buf eq "\x00") {
-                $debug and $debug & 4096 and _debug "sysread failed to read ok code: $buf";
-                return;
+            else { # $type eq 'D'
+                $handler->on_dir($perm, $size, $name) or return;
             }
-            $handler->on_eof or return;
         }
-        elsif ($buf =~ /^D/) {
-            $handler->on_D or return;
-            $handler->on_eof;
+        elsif ($buf =~ /^E(.*)/) {
+            $handler->on_end_of_dir($1) or return;
         }
-        elsif ($buf =~ /^E/) {
-            $handler->on_E or return;
-            $handler->on_eof;
+        elsif ($buf =~ /^\x01(.*)/) {
+            $handler->on_error($1) or return;
         }
         else {
-            $debug and $debug & 4096 and _debug "unknown command received: " . $buf;
+            $debug and $debug & 4096 and
+                _debug "unknown command received, code: " .ord($buf). " rest: >>>" .substr($buf, 1). "<<<";
             return;
         }
     }
@@ -74,10 +96,10 @@ sub _scp_get_with_handler {
 
 sub scp_get {
     my $any = shift;
-    my $opts = shift;
-    my $target = pop @_;
-    my $handler = Net::SSH::Any::SCP::GetHandler::Disk->_new($any, $target);
-    $any->_scp_get_with_handler($opts, $handler, @_)
+    my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
+    my $target = (@_ > 1 ? pop @_ : '.');
+    my $handler = Net::SSH::Any::SCP::GetHandler::Disk->_new($any, $target, \%opts);
+    $any->_scp_get_with_handler(\%opts, $handler, @_)
 }
 
 sub scp_put {
@@ -98,6 +120,19 @@ sub on_error {
     print STDERR "scp error: $error\n";
 }
 
+for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir on_error)) {
+    no strict;
+    *{$method} = sub {
+        if ($debug and $debug and 4096) {
+            my $args = (@_ == 4               ? "perm: $_[1], size: $_[2], name: $_[3]" :
+                        $method eq 'on_data'  ? length($_[1]) . " bytes"                :
+                        $method eq 'on_error' ? "error: $_[1]"                          :
+                        '' );
+            Net::SSH::Any::_debug "called $h->$method($args)";
+        }
+    };
+}
+
 package Net::SSH::Any::SCP::GetHandler::Disk;
 our @ISA = qw(Net::SSH::Any::SCP::GetHandler);
 
@@ -108,24 +143,42 @@ sub _new {
     $h;
 }
 
-sub on_C {
+sub _on_file {
     my ($h, $perm, $size, $name) = @_;
+    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_file(perm: $perm, size: $size, name: $name)";
     $h->{current_perm} = $perm;
     $h->{current_size} = $size;
     $h->{current_name} = $name;
     1;
 }
 
-sub on_data {
+sub _on_data {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug length($_[0]) . " bytes received:\n>>>$_[0]<<<\n\n";
     1;
 }
 
-sub on_eof {
+sub _on_end_of_file {
     my $h = shift;
-    $debug and $debug and 4096 and Net::SSH::Any::_debug "EOF received";
+    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_file";
     1;
 }
+
+sub _on_dir {
+    my ($h, $perm, $size, $name) = @_;
+    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_dir(perm: $perm, size: $size, name: $name)";
+}
+
+sub _on_end_of_dir {
+    my $h = shift;
+    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_dir";
+}
+
+sub _on_error {
+    $debug and $debug and 4096 and Net::SSH::Any::_debug "transient remote error: $_[1]";
+    1;
+}
+
+
 
 1;
