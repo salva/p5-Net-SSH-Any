@@ -281,7 +281,7 @@ sub _syswrite {
 # appends at the end of $_[2] always!
 sub _sysread {
     my ($any, $channel, undef, $len, $ext) = @_;
-    $debug and $debug & 4096 and _debug("trying to read $len bytes from channel");
+    $debug and $debug & 8192 and _debug("trying to read $len bytes from channel");
     my $bytes = $channel->read(my($buf), $len, $ext || 0);
     if (not $bytes) {
         __check_channel_error($any) or return undef;

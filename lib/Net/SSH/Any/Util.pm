@@ -14,7 +14,10 @@ our @EXPORT = qw($debug _debug _debug_dump
 
 our $debug ||= 0;
 
-sub _debug { print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n" }
+sub _debug {
+    local ($@, $!, $_);
+    print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n"
+}
 
 sub _debug_dump {
     require Data::Dumper;
