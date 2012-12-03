@@ -8,6 +8,10 @@ package Net::SSH::Any;
 
 our $debug;
 
+sub _scp_unescape {
+    s/\\\\|\\\^([A-Z])/$1 ? chr(ord($1) - 64) : '\\'/ge for @_;
+}
+
 sub _scp_get_with_handler {
     my $any = shift;
     my $opts = shift;
@@ -55,6 +59,7 @@ sub _scp_get_with_handler {
         }
         # C:
         elsif (my ($type, $perm, $size, $name) = $buf =~ /^([CD])([0-7]+) (\d+) (.*)$/) {
+            _scp_unescape($name);
             if ($type eq 'C') {
                 $handler->on_file($perm, $size, $name) or return;
                 $debug and $debug & 4096 and _debug "transferring file of size $size";
@@ -97,8 +102,7 @@ sub _scp_get_with_handler {
 sub scp_get {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    my $target = (@_ > 1 ? pop @_ : '.');
-    my $handler = Net::SSH::Any::SCP::GetHandler::Disk->_new($any, $target, \%opts);
+    my $handler = Net::SSH::Any::SCP::GetHandler::Disk->_new($any, \%opts, \@_);
     $any->_scp_get_with_handler(\%opts, $handler, @_)
 }
 
@@ -109,15 +113,10 @@ sub scp_put {
 package Net::SSH::Any::SCP::GetHandler;
 
 sub _new {
-    my ($class, $any) = @_;
+    my ($class, $any, $opts, $files) = @_;
     my $h = { any => $any,
               error => undef };
     bless $h, $class;
-}
-
-sub on_error {
-    my ($h, $error) = @_;
-    print STDERR "scp error: $error\n";
 }
 
 for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir on_error)) {
@@ -128,53 +127,83 @@ for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir on_error)
                         $method eq 'on_data'  ? length($_[1]) . " bytes"                :
                         $method eq 'on_error' ? "error: $_[1]"                          :
                         '' );
-            Net::SSH::Any::_debug "called $h->$method($args)";
+            Net::SSH::Any::_debug "called $_[0]->$method($args)";
         }
     };
 }
+
+
 
 package Net::SSH::Any::SCP::GetHandler::Disk;
 our @ISA = qw(Net::SSH::Any::SCP::GetHandler);
 
 sub _new {
-    my ($class, $any, $target) = @_;
+    my ($class, $any, $opts, $files) = @_;
     my $h = $class->SUPER::_new($any);
-    $h->{target} = $target;
+    my $target = (@$files > 1 ? pop @$files : '.');
+    if (-d $target) {
+        $h->{target_dir} = $target;
+    }
+    else {
+        $h->{target} = $target;
+    }
+    $h->{$_} = $opts->{$_} for qw(recursive glob);
+    $h->{parent_dir} = [];
     $h;
 }
 
-sub _on_file {
+sub on_file {
     my ($h, $perm, $size, $name) = @_;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_file(perm: $perm, size: $size, name: $name)";
     $h->{current_perm} = $perm;
     $h->{current_size} = $size;
     $h->{current_name} = $name;
+    my $fn = (defined $h->{target_dir}
+              ? File::Spec->join($h->{target_dir}, $name)
+              : $h->{target});
+    $debug and $debug & 4096 and Net::SSH::Any::_debug "opening file $fn";
+    open my $fh, ">", $fn or return 0;
+    $h->{current_fh} = $fh;
+    $h->{current_fn} = $fn;
+
     1;
 }
 
-sub _on_data {
+sub on_data {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug length($_[0]) . " bytes received:\n>>>$_[0]<<<\n\n";
+    print {$h->{current_fh}} $_[0];
     1;
 }
 
-sub _on_end_of_file {
+sub on_end_of_file {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_file";
+    close $h->{current_fh} or return 0;
+    delete @{$h}{qw(current_fh current_fn)};
     1;
 }
 
-sub _on_dir {
+sub on_dir {
     my ($h, $perm, $size, $name) = @_;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_dir(perm: $perm, size: $size, name: $name)";
+    my $dn = (defined $h->{target_dir}
+              ? File::Spec->join($h->{target_dir}, $name)
+              : $h->{target});
+    push @{$h->{parent_dir}}, $h->{target_dir};
+    $h->{target_dir} = $dn;
+    mkdir $dn;
+    1;
 }
 
-sub _on_end_of_dir {
+sub on_end_of_dir {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_dir";
+    $h->{target_dir} = pop @{$h->{parent_dir}};
+    1;
 }
 
-sub _on_error {
+sub on_error {
     $debug and $debug and 4096 and Net::SSH::Any::_debug "transient remote error: $_[1]";
     1;
 }
