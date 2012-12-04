@@ -17,6 +17,8 @@ my %error = ( SSHA_OK                  =>  0,
               SSHA_ENCODING_ERROR      =>  7,
               SSHA_LOCAL_IO_ERROR      =>  8,
 
+              SSHA_SCP_ERROR           =>  9,
+
               SSHA_NO_BACKEND_ERROR    => 20,
               SSHA_BACKEND_ERROR       => 21,
               SSHA_UNIMPLEMENTED_ERROR => 22,
