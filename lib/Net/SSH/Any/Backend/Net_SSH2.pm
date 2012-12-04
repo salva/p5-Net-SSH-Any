@@ -56,7 +56,9 @@ sub _connect {
         return __copy_error($any, SSHA_CONNECTION_ERROR);
 
     my %aa;
-    $aa{username} = $any->{user} if defined $any->{user};
+    $aa{username} = _first_defined($any->{user},
+                                   eval { (getpwuid $<)[0] },
+                                   eval { getlogin() });
     $aa{password} = $any->{password} if defined $any->{password};
     $aa{password} = $any->{passphrase} if defined $any->{passphrase};
     @aa{'privatekey', 'publickey'} = ($any->{key_path}, "$any->{key_path}.pub") if defined $any->{key_path};
