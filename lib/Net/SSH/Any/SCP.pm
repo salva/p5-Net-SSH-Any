@@ -142,13 +142,20 @@ sub _scp_error {
     return
 }
 
+sub _push_action {
+    my ($h, %action) = @_;
+    my $action = \%action;
+    local ($@, $SIG{__WARN__}, $SIG{__DIE__});
+    eval { push @{$h->{action_log}}, $action };
+    $action
+}
+
 sub on_remote_error {
     my ($h, $path, $error) = @_;
     $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_remote_error(@_)");
-    local ($@, $SIG{__WARN__}, $SIG{__DIE__});
-    eval { push @{$h->{action_log}}, { action_type => 'remote_error',
-                                       path => $path,
-                                       error => $error} };
+    $h->_push_action( action_type => 'remote_error',
+                      path => $path,
+                      error => $error} );
 }
 
 package Net::SSH::Any::SCP::GetHandler::Disk;
