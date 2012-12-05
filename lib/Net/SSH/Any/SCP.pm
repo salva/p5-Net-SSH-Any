@@ -51,12 +51,14 @@ sub _scp_get_with_handler {
 
         $debug and $debug & 4096 and _debug "cmd line: $buf";
 
+        my ($type, $perm, $size, $name, $error);
+
         # \x00:
-        if (my ($error) = $buf =~ /^\x00(.*)/) {
+        if (($error) = $buf =~ /^\x00(.*)/) {
             $debug and $debug & 4096 and _debug "remote error: " . $error;
         }
         # C:
-        elsif (my ($type, $perm, $size, $name) = $buf =~ /^([CD])([0-7]+) (\d+) (.*)$/) {
+        elsif (($type, $perm, $size, $name) = $buf =~ /^([CD])([0-7]+) (\d+) (.*)$/) {
             _scp_unescape($name);
             $perm = oct $perm;
             if ($type eq 'C') {
@@ -84,14 +86,14 @@ sub _scp_get_with_handler {
                 $handler->on_dir($perm, $size, $name) or return;
             }
         }
-        elsif ($buf =~ /^E(.*)/) {
-            $handler->on_end_of_dir($1) or return;
+        elsif ($buf =~ /^E$/) {
+            $handler->on_end_of_dir() or return;
         }
-        elsif (my ($name, $error) = $buf =~ /^\x01scp:\s(.*):\s*(.*)$/) {
+        elsif (($name, $error) = $buf =~ /^\x01scp:\s(.*):\s*(.*)$/) {
             _scp_unescape($name);
             $handler->on_remote_error($name, $error) or return;
         }
-        elsif (my ($error) = $buf =~ /^\x01(?:scp:\s)?(.*)$/) {
+        elsif (($error) = $buf =~ /^\x01(?:scp:\s)?(.*)$/) {
             $handler->on_remote_error(undef, $error) or return;
         }
         else {
@@ -142,6 +144,19 @@ sub _scp_error {
     return
 }
 
+sub _scp_local_error {
+    my $h = shift;
+    $h->_scp_error(@_, $!);
+
+    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
+    eval {
+        my $action = $h->{action_log}[-1];
+        $action->{error} = $_[0];
+        $action->{errno} = $!;
+    };
+    return;
+}
+
 sub _push_action {
     my ($h, %action) = @_;
     my $action = \%action;
@@ -153,9 +168,9 @@ sub _push_action {
 sub on_remote_error {
     my ($h, $path, $error) = @_;
     $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_remote_error(@_)");
-    $h->_push_action( action_type => 'remote_error',
+    $h->_push_action( type => 'remote_error',
                       path => $path,
-                      error => $error} );
+                      error => $error );
 }
 
 package Net::SSH::Any::SCP::GetHandler::Disk;
@@ -174,6 +189,7 @@ sub _new {
     $h->{$_} = $opts->{$_} for qw(recursive glob);
     $h->{parent_dir} = [];
     $h->{dir_perms} = [];
+    $h->{dir_parts} = [];
 
     $h;
 }
@@ -188,9 +204,16 @@ sub on_file {
               ? File::Spec->join($h->{target_dir}, $name)
               : $h->{target});
     $debug and $debug & 4096 and Net::SSH::Any::_debug "opening file $fn";
+
+    $h->_push_action(type   => 'file',
+                     remote => join('/', @{$h->{dir_parts}}, $name),
+                     local  => $fn,
+                     perm   => $perm,
+                     size   => $size );
+
     open my $fh, ">", $fn;
     unless ($fh) {
-        $h->_scp_error("Unable to create file '$fn'", $!);
+        $h->_scp_local_error("Unable to create file '$fn'");
         return
     }
     $h->{current_fh} = $fh;
@@ -210,7 +233,7 @@ sub on_end_of_file {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_file";
     unless (close $h->{current_fh}) {
-        $h->_scp_error("Unable to write to file '$h->{current_fn}'", $!);
+        $h->_scp_local_error("Unable to write to file '$h->{current_fn}'");
         return;
     }
     delete @{$h}{qw(current_fh current_fn)};
@@ -224,8 +247,14 @@ sub on_dir {
               ? File::Spec->join($h->{target_dir}, $name)
               : $h->{target});
     push @{$h->{parent_dir}}, $h->{target_dir};
+    push @{$h->{dir_parts}}, $name;
     push @{$h->{dir_perm}}, $perm;
     $h->{target_dir} = $dn;
+
+    $h->_push_action(type   => 'dir',
+                     remote => join('/', @{$h->{dir_parts}}),
+                     local  => $dn,
+                     perm   => $perm);
 
     unless (-d $dn or mkdir $dn, 0700 | ($perm & 0777)) {
         $h->_scp_error("Unable to create directory '$dn'", $!);
@@ -235,14 +264,14 @@ sub on_dir {
         $h->_scp_error("Access forbidden to directory '$dn'", $!);
         return;
     }
-
     1;
 }
 
 sub on_end_of_dir {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_dir";
-    my $perm = pop @{$h->{dir_perms}};
+    pop @{$h->{dir_parts}};
+    my $perm = pop @{$h->{dir_perm}};
     chmod $perm, $h->{target_dir} if defined $perm;
     $h->{target_dir} = pop @{$h->{parent_dir}};
     1;
