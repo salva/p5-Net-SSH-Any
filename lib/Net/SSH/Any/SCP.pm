@@ -44,8 +44,8 @@ sub _scp_get_with_handler {
         do {
             my $bytes = $pipe->sysread($buf, 1, length $buf);
             unless ($bytes) {
-                $debug and $debug & 4096 and _debug "$bytes read from pipe, error: " . $any->error;
-                return;
+                length $buf and $any->_or_set_error(SSHA_SCP_ERROR, 'broken pipe');
+                last;
             }
         } until $buf =~ /\x0A$/;
 
@@ -53,55 +53,63 @@ sub _scp_get_with_handler {
 
         my ($type, $perm, $size, $name, $error);
 
-        # \x00:
-        if (($error) = $buf =~ /^\x00(.*)/) {
-            $debug and $debug & 4096 and _debug "remote error: " . $error;
-        }
         # C:
-        elsif (($type, $perm, $size, $name) = $buf =~ /^([CD])([0-7]+) (\d+) (.*)$/) {
+        if (($type, $perm, $size, $name) = $buf =~ /^([CD])([0-7]+) (\d+) (.*)$/) {
             _scp_unescape($name);
             $perm = oct $perm;
             if ($type eq 'C') {
-                $handler->on_file($perm, $size, $name) or return;
+                $handler->on_file($perm, $size, $name) or last;
                 $debug and $debug & 4096 and _debug "transferring file of size $size";
                 $pipe->syswrite("\x00");
                 $buf = '';
                 while ($size) {
                     my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
                     unless ($read) {
+                        $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
                         $debug and $debug & 4096 and _debug "read failed: " . $any->error;
-                        return;
+                        last;
                     }
-                    $handler->on_data($buf) or return;
+                    $handler->on_data($buf) or last;
                     $size -= $read;
                 }
                 $buf = '';
                 unless ($pipe->sysread($buf, 1) and $buf eq "\x00") {
+                    $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
                     $debug and $debug & 4096 and _debug "sysread failed to read ok code: $buf";
-                    return;
+                    last;
                 }
-                $handler->on_end_of_file or return;
+                $handler->on_end_of_file or last;
             }
             else { # $type eq 'D'
-                $handler->on_dir($perm, $size, $name) or return;
+                $handler->on_dir($perm, $size, $name) or last;
             }
         }
         elsif ($buf =~ /^E$/) {
-            $handler->on_end_of_dir() or return;
+            $handler->on_end_of_dir() or last;
         }
         elsif (($name, $error) = $buf =~ /^\x01scp:\s(.*):\s*(.*)$/) {
             _scp_unescape($name);
-            $handler->on_remote_error($name, $error) or return;
+            $handler->on_remote_error($name, $error) or last;
         }
         elsif (($error) = $buf =~ /^\x01(?:scp:\s)?(.*)$/) {
-            $handler->on_remote_error(undef, $error) or return;
+            $handler->on_remote_error(undef, $error) or last;
         }
         else {
+            $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
             $debug and $debug & 4096 and
                 _debug "unknown command received, code: " .ord($buf). " rest: >>>" .substr($buf, 1). "<<<";
-            return;
+            last;
         }
     }
+
+    $pipe->close;
+    if ($any->{error}) {
+        if ($any->{error} == SSHA_REMOTE_CMD_ERROR) {
+            $any->_set_error(SSHA_SCP_ERROR, $any->{error});
+        }
+        return;
+    }
+    return 1;
 }
 
 sub scp_get {
@@ -138,15 +146,9 @@ for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir)) {
     };
 }
 
-sub _scp_error {
-    my $h = shift;
-    $h->{any}->_set_error(SSHA_SCP_ERROR => @_);
-    return
-}
-
 sub _scp_local_error {
     my $h = shift;
-    $h->_scp_error(@_, $!);
+    $h->{any}->_set_error(@_, $!);
 
     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
     eval {
@@ -171,6 +173,7 @@ sub on_remote_error {
     $h->_push_action( type => 'remote_error',
                       path => $path,
                       error => $error );
+    1
 }
 
 package Net::SSH::Any::SCP::GetHandler::Disk;
@@ -257,11 +260,11 @@ sub on_dir {
                      perm   => $perm);
 
     unless (-d $dn or mkdir $dn, 0700 | ($perm & 0777)) {
-        $h->_scp_error("Unable to create directory '$dn'", $!);
+        $h->_scp_local_error("Unable to create directory '$dn'");
         return;
     }
     unless (-x $dn) {
-        $h->_scp_error("Access forbidden to directory '$dn'", $!);
+        $h->_scp_local_error("Access forbidden to directory '$dn'");
         return;
     }
     1;
