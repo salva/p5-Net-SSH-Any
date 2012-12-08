@@ -14,10 +14,10 @@ sub _scp_unescape {
     s/\\\\|\\\^([A-Z])/$1 ? chr(ord($1) - 64) : '\\'/ge for @_;
 }
 
-sub _scp_get_with_handler {
+sub scp_get_with_handler {
     my $any = shift;
     my $opts = shift;
-    my $handler = shift;
+    my $h = shift;
 
     my $glob = delete $opts->{glob};
     my $recursive = delete $opts->{recursive};
@@ -60,7 +60,7 @@ sub _scp_get_with_handler {
             _scp_unescape($name);
             $perm = oct $perm;
             if ($type eq 'C') {
-                $handler->on_file($perm, $size, $name) or last;
+                $h->on_file($perm, $size, $name) or last;
                 $debug and $debug & 4096 and _debug "transferring file of size $size";
                 $pipe->syswrite("\x00");
                 $buf = '';
@@ -71,7 +71,7 @@ sub _scp_get_with_handler {
                         $debug and $debug & 4096 and _debug "read failed: " . $any->error;
                         last;
                     }
-                    $handler->on_data($buf) or last;
+                    $h->on_data($buf) or last;
                     $size -= $read;
                 }
                 $buf = '';
@@ -80,21 +80,21 @@ sub _scp_get_with_handler {
                     $debug and $debug & 4096 and _debug "sysread failed to read ok code: $buf";
                     last;
                 }
-                $handler->on_end_of_file or last;
+                $h->on_end_of_file or last;
             }
             else { # $type eq 'D'
-                $handler->on_dir($perm, $size, $name) or last;
+                $h->on_dir($perm, $size, $name) or last;
             }
         }
         elsif ($buf =~ /^E$/) {
-            $handler->on_end_of_dir() or last;
+            $h->on_end_of_dir() or last;
         }
         elsif (($name, $error) = $buf =~ /^\x01scp:\s(.*):\s*(.*)$/) {
             _scp_unescape($name);
-            $handler->on_remote_error($name, $error) or last;
+            $h->on_remote_error($name, $error) or last;
         }
         elsif (($error) = $buf =~ /^\x01(?:scp:\s)?(.*)$/) {
-            $handler->on_remote_error(undef, $error) or last;
+            $h->on_remote_error(undef, $error) or last;
         }
         else {
             $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
@@ -105,6 +105,9 @@ sub _scp_get_with_handler {
     }
 
     $pipe->close;
+
+    $h->on_end_of_get;
+
     if ($any->{error}) {
         if ($any->{error} == SSHA_REMOTE_CMD_ERROR) {
             $any->_set_error(SSHA_SCP_ERROR, $any->{error});
@@ -117,8 +120,8 @@ sub _scp_get_with_handler {
 sub scp_get {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    my $handler = Net::SSH::Any::SCP::GetHandler::Disk->_new($any, \%opts, \@_);
-    $any->_scp_get_with_handler(\%opts, $handler, @_)
+    my $h = Net::SSH::Any::SCP::GetHandler::DiskSaver->_new($any, \%opts, \@_);
+    $any->scp_get_with_handler(\%opts, $h, @_)
 }
 
 sub scp_put {
@@ -173,13 +176,21 @@ sub on_remote_error {
     my ($h, $path, $error) = @_;
     $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_remote_error(@_)");
     $h->_push_action( type => 'remote_error',
-                      path => $path,
+                      remote => $path,
                       error => $error );
     1
 }
 
-package Net::SSH::Any::SCP::GetHandler::Disk;
+sub on_end_of_get {
+    my $h = shift;
+    $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_end_of_get(@_)");
+    1
+}
+
+package Net::SSH::Any::SCP::GetHandler::DiskSaver;
 our @ISA = qw(Net::SSH::Any::SCP::GetHandler);
+
+BEGIN { *_first_defined = \&Net::SSH::Any::_first_defined }
 
 sub _new {
     my ($class, $any, $opts, $files) = @_;
@@ -192,7 +203,13 @@ sub _new {
         $h->{target} = $target;
     }
     $h->{$_} = $opts->{$_} for qw(recursive glob);
-    $h->{$_} = delete $opts->{$_} for qw(copy_perm overwrite numbered);
+
+    $h->{numbered} = delete $opts->{numbered};
+    unless ($h->{numbered}) {
+        $h->{overwrite} = _first_defined delete($opts->{overwrite}), 1;
+    }
+    $h->{copy_perm} = _first_defined delete($opts->{copy_perm}), 1;
+
     $h->{parent_dir} = [];
     $h->{dir_perms} = [];
     $h->{dir_parts} = [];
@@ -210,34 +227,35 @@ sub on_file {
     my ($h, $perm, $size, $name) = @_;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_file(perm: $perm, size: $size, name: $name)";
 
-    $h->{current_perm} = $perm;
-    $h->{current_size} = $size;
-    $h->{current_name} = $name;
     my $fn = (defined $h->{target_dir}
               ? File::Spec->join($h->{target_dir}, $name)
               : $h->{target});
     $debug and $debug & 4096 and Net::SSH::Any::_debug "opening file $fn";
 
-    $h->_push_action(type   => 'file',
-                     remote => join('/', @{$h->{dir_parts}}, $name),
-                     local  => $fn,
-                     perm   => $perm,
-                     size   => $size );
+    my $action = $h->_push_action(type   => 'file',
+                                  remote => join('/', @{$h->{dir_parts}}, $name),
+                                  local  => $fn,
+                                  perm   => $perm,
+                                  size   => $size );
+
+    unlink $fn if $h->{overwrite};
 
     my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
     $flags |= Fcntl::O_EXCL if $h->{numbered} or not $h->{overwrite};
     $perm = 0777 unless $h->{copy_perm};
-    unlink $fn if $h->{overwrite};
-
-    while (1) {
-        # TODO: numbering here!
-    }
 
     my $fh;
-    unless (sysopen $fh, $fn, $flags, $perm) {
-        $h->_scp_local_error("Unable to create file '$fn'");
-        return
+    while (1) {
+        sysopen $fh, $fn, $flags, $perm and last;
+        unless ($h->{numbered} and -e $fn) {
+            $h->_scp_local_error("Unable to create file '$fn'");
+            return;
+        }
+        _inc_numbered($fn);
+        $action->{local} = $fn;
     }
+
+    binmode $fh;
 
     $h->{current_fh} = $fh;
     $h->{current_fn} = $fn;
@@ -279,6 +297,8 @@ sub on_dir {
                      local  => $dn,
                      perm   => $perm);
 
+    $perm = 0777 unless $h->{copy_perm};
+
     unless (-d $dn or mkdir $dn, 0700 | ($perm & 0777)) {
         $h->_scp_local_error("Unable to create directory '$dn'");
         return;
@@ -295,11 +315,10 @@ sub on_end_of_dir {
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_dir";
     pop @{$h->{dir_parts}};
     my $perm = pop @{$h->{dir_perm}};
+    $perm = 0777 unless $h->{copy_perm};
     chmod $perm, $h->{target_dir} if defined $perm;
     $h->{target_dir} = pop @{$h->{parent_dir}};
     1;
 }
-
-
 
 1;
