@@ -1,10 +1,12 @@
 package Net::SSH::Any::SCP;
 
+use Net::SSH::Any;
+package Net::SSH::Any;
+
 use strict;
 use warnings;
 
-use Net::SSH::Any;
-package Net::SSH::Any;
+use Fcntl ();
 
 our $debug;
 
@@ -190,6 +192,7 @@ sub _new {
         $h->{target} = $target;
     }
     $h->{$_} = $opts->{$_} for qw(recursive glob);
+    $h->{$_} = delete $opts->{$_} for qw(copy_perm overwrite numbered);
     $h->{parent_dir} = [];
     $h->{dir_perms} = [];
     $h->{dir_parts} = [];
@@ -197,9 +200,16 @@ sub _new {
     $h;
 }
 
+sub _inc_numbered {
+    $_[0] =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e or
+    $_[0] =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+    $debug and $debug & 128 and _debug("numbering to: $_[0]");
+}
+
 sub on_file {
     my ($h, $perm, $size, $name) = @_;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_file(perm: $perm, size: $size, name: $name)";
+
     $h->{current_perm} = $perm;
     $h->{current_size} = $size;
     $h->{current_name} = $name;
@@ -214,11 +224,21 @@ sub on_file {
                      perm   => $perm,
                      size   => $size );
 
-    open my $fh, ">", $fn;
-    unless ($fh) {
+    my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
+    $flags |= Fcntl::O_EXCL if $h->{numbered} or not $h->{overwrite};
+    $perm = 0777 unless $h->{copy_perm};
+    unlink $fn if $h->{overwrite};
+
+    while (1) {
+        # TODO: numbering here!
+    }
+
+    my $fh;
+    unless (sysopen $fh, $fn, $flags, $perm) {
         $h->_scp_local_error("Unable to create file '$fn'");
         return
     }
+
     $h->{current_fh} = $fh;
     $h->{current_fn} = $fn;
 
