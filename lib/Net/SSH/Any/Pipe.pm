@@ -132,6 +132,8 @@ sub print {
     return ($buf == '' and not @_);
 }
 
+sub printf { shift->print(sprintf(@_)) }
+
 sub readline {
     my $pipe = shift;
     my $any = $pipe->{any};
