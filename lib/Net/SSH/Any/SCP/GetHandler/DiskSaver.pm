@@ -42,11 +42,11 @@ sub on_file {
               : $h->{target});
     $debug and $debug & 4096 and Net::SSH::Any::_debug "opening file $fn";
 
-    my $action = $h->_push_action(type   => 'file',
-                                  remote => join('/', @{$h->{dir_parts}}, $name),
-                                  local  => $fn,
-                                  perm   => $perm,
-                                  size   => $size );
+    my $action = $h->push_action(type   => 'file',
+                                 remote => join('/', @{$h->{dir_parts}}, $name),
+                                 local  => $fn,
+                                 perm   => $perm,
+                                 size   => $size );
 
     unlink $fn if $h->{overwrite};
 
@@ -58,7 +58,7 @@ sub on_file {
     while (1) {
         sysopen $fh, $fn, $flags, $perm and last;
         unless ($h->{numbered} and -e $fn) {
-            $h->_scp_local_error("Unable to create file '$fn'");
+            $h->set_local_error("Unable to create file '$fn'");
             return;
         }
         _inc_numbered($fn);
@@ -84,7 +84,7 @@ sub on_end_of_file {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_file";
     unless (close $h->{current_fh}) {
-        $h->_scp_local_error("Unable to write to file '$h->{current_fn}'");
+        $h->set_local_error("Unable to write to file '$h->{current_fn}'");
         return;
     }
     delete @{$h}{qw(current_fh current_fn)};
@@ -102,19 +102,19 @@ sub on_dir {
     push @{$h->{dir_perm}}, $perm;
     $h->{target_dir} = $dn;
 
-    $h->_push_action(type   => 'dir',
-                     remote => join('/', @{$h->{dir_parts}}),
-                     local  => $dn,
-                     perm   => $perm);
+    $h->push_action(type   => 'dir',
+                    remote => join('/', @{$h->{dir_parts}}),
+                    local  => $dn,
+                    perm   => $perm);
 
     $perm = 0777 unless $h->{copy_perm};
 
     unless (-d $dn or mkdir $dn, 0700 | ($perm & 0777)) {
-        $h->_scp_local_error("Unable to create directory '$dn'");
+        $h->set_local_error("Unable to create directory '$dn'");
         return;
     }
     unless (-x $dn) {
-        $h->_scp_local_error("Access forbidden to directory '$dn'");
+        $h->set_local_error("Access forbidden to directory '$dn'");
         return;
     }
     1;

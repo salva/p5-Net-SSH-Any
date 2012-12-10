@@ -5,16 +5,10 @@ use warnings;
 
 use Net::SSH::Any::Util qw($debug _debug _first_defined);
 
-sub _new {
-    my ($class, $any, $opts, $files) = @_;
-    my $h = { any => $any,
-              action_log => delete $opts->{action_log},
-            };
+require Net::SSH::Any::SCP::Handler;
+our @ISA = qw(Net::SSH::Any::SCP::Handler);
 
-    bless $h, $class;
-}
-
-for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir)) {
+for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir on_end_of_get)) {
     no strict;
     *{$method} = sub {
         if ($debug and $debug and 4096) {
@@ -26,39 +20,12 @@ for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir)) {
     };
 }
 
-sub _scp_local_error {
-    my $h = shift;
-    $h->{any}->_set_error(@_, $!);
-
-    local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-    eval {
-        my $action = $h->{action_log}[-1];
-        $action->{error} = $_[0];
-        $action->{errno} = $!;
-    };
-    return;
-}
-
-sub _push_action {
-    my ($h, %action) = @_;
-    my $action = \%action;
-    local ($@, $SIG{__WARN__}, $SIG{__DIE__});
-    eval { push @{$h->{action_log}}, $action };
-    $action
-}
-
 sub on_remote_error {
     my ($h, $path, $error) = @_;
-    $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_remote_error(@_)");
+    $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_remote_error(path: $path, error: $error)");
     $h->_push_action( type => 'remote_error',
                       remote => $path,
                       error => $error );
-    1
-}
-
-sub on_end_of_get {
-    my $h = shift;
-    $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_end_of_get(@_)");
     1
 }
 
