@@ -54,6 +54,7 @@ sub sysread {
     }
     else {
         $off = 0;
+        $_[1] = '';
     }
     $pipe->_sysread($_[1], $len, $ext);
 }
@@ -129,7 +130,7 @@ sub print {
             # and so, what?
         }
     }
-    return ($buf == '' and not @_);
+    return ($buf eq '' and not @_);
 }
 
 sub printf { shift->print(sprintf(@_)) }

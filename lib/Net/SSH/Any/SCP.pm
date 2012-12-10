@@ -20,6 +20,25 @@ sub _scp_escape {
     }
 }
 
+sub _scp_readline {
+    my $any = shift;
+    my $pipe = shift;
+    for ($_[0]) {
+        $_ = '';
+        $pipe->sysread($_, 1) or goto error;
+        if ($_ ne "\x00") {
+            while (1) {
+                $pipe->sysread($_, 1, length $_) or goto error;
+                last if /\x0A$/;
+            }
+        }
+        return length $_;
+    }
+ error:
+    $any->_or_set_error(SSHA_SCP_ERROR, 'broken pipe');
+    return;
+}
+
 sub scp_get_with_handler {
     my $any = shift;
     my $opts = shift;
@@ -47,15 +66,7 @@ sub scp_get_with_handler {
     my $buf;
     while (1) {
         $pipe->syswrite("\x00");
-
-        $buf = '';
-        do {
-            my $bytes = $pipe->sysread($buf, 1, length $buf);
-            unless ($bytes) {
-                length $buf and $any->_or_set_error(SSHA_SCP_ERROR, 'broken pipe');
-                last;
-            }
-        } until $buf =~ /\x0A$/;
+        $any->_scp_readline($pipe, $buf) or last;
 
         $debug and $debug & 4096 and _debug "cmd line: $buf";
 
@@ -79,10 +90,10 @@ sub scp_get_with_handler {
                     $h->on_data($buf) or last;
                     $size -= $read;
                 }
-                $buf = '';
-                unless ($pipe->sysread($buf, 1) and $buf eq "\x00") {
-                    $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
-                    $debug and $debug & 4096 and _debug "sysread failed to read ok code: $buf";
+                unless ($any->_scp_readline($buf) and $buf eq "\x00") {
+                    chomp $buf;
+                    $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
+                    $debug and $debug & 4096 and _debug "failed to read ok code: $buf";
                     last;
                 }
                 $h->on_end_of_file or last;
@@ -148,10 +159,10 @@ sub scp_put_with_handler {
     $any->error and return;
 
  OUT: while (1) {
-        my $buf = '';
-        $pipe->sysread($buf, 1);
+        my $buf;
+        $any->_scp_readline($pipe, $buf) or last;
         unless ($buf eq "\x00") {
-            $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
+            $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
             last;
         }
 
@@ -160,7 +171,6 @@ sub scp_put_with_handler {
         $type =~ s/^file$/C/;
         $type =~ s/^dir(?:ectory)?$/D/;
         $type =~ s/^end_of_dir(?:ectory)?$/E/;
-        $type =~ s/^error$/\x01/;
 
         my ($size, $perm, $error, $line);
         my $name = _first_defined $next->{name}, $target;
@@ -169,15 +179,12 @@ sub scp_put_with_handler {
 
         if ($type =~ /^[CD]$/) {
             $size = _first_defined $next->{size}, 0;
-            $perm = _first_defined $next->{perm}, 0777;
-            $line = sprintf("C0%o %d %s", $perm, $size, $ename);
+            $perm = (_first_defined $next->{perm}, 0777) & 0777;
+            $line = sprintf("C%04o %d %s", $perm, $size, $ename);
+            # print STDERR "line: >$line<";
         }
         elsif ($type eq "E") {
             $line = "E"
-        }
-        elsif ($type eq "\x01") {
-            $error = _first_defined $type->{error}, 'unknown error';
-            $line = "0x01scp: $ename: $error";
         }
         else {
             croak "unknown action type <$type>";
@@ -189,9 +196,9 @@ sub scp_put_with_handler {
         }
 
         if ($type eq 'C') {
-            $pipe->sysread($buf, 1);
+            $any->_scp_readline($pipe, $buf) or last;
             unless ($buf eq "\x00") {
-                $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
+                $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
                 last;
             }
 
@@ -205,6 +212,7 @@ sub scp_put_with_handler {
                 }
                 $size -= length $data;
             }
+            $h->on_end_of_file or last;
         }
     }
 
@@ -215,7 +223,7 @@ sub scp_put {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     require Net::SSH::Any::SCP::PutHandler::DiskLoader;
-    my $h = Net::SSH::Any::SCP::PutHandler::DiskLoader->_new($any, \%opts, \@_);
+    my $h = Net::SSH::Any::SCP::PutHandler::DiskLoader->new($any, \%opts, \@_);
     $any->scp_put_with_handler(\%opts, $h, @_);
 }
 
