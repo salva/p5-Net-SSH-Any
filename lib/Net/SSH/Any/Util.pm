@@ -10,7 +10,8 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw($debug _debug _debug_dump
                  _sub_options _croak_bad_options
-                 _first_defined _array_or_scalar_to_list);
+                 _first_defined _array_or_scalar_to_list
+                 _inc_numbered);
 
 our $debug ||= 0;
 
@@ -50,5 +51,11 @@ sub _croak_bad_options (\%) {
 }
 
 sub _array_or_scalar_to_list { map { defined($_) ? (ref $_ eq 'ARRAY' ? @$_ : $_ ) : () } @_ }
+
+sub _inc_numbered {
+    $_[0] =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e or
+    $_[0] =~ s{((?:\.[^\.]*)?)$}{(1)$1};
+    $debug and $debug & 128 and _debug("numbering to: $_[0]");
+}
 
 1;
