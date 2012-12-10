@@ -64,34 +64,41 @@ sub on_next {
         my $type;
         my ($perm, $size, $atime, $mtime) = (stat $lfn)[2, 7, 8, 9];
         unless (defined $perm) {
-            $h->push_local_error($lfn, "Unable to stat object");
+            $h->push_local_error($lfn, "unable to stat object");
             next;
         }
         if ($h->{recursive} and -d _) {
-            $type = 'D';
+            $type = 'dir';
             my $dh;
             unless (opendir($dh, $lfn)) {
-                $h->push_local_error($lfn, "Unable to open directory");
+                $h->push_local_error($lfn, "unable to open directory");
                 next;
             }
             push @$dhs, $dh;
             push @$dns, $lfn;
         }
-        else {
-            $type = 'C';
+        elsif (-f _) {
+            $type = 'file';
             my $fh;
             unless (open $fh, '<', $lfn) {
-                $h->push_local_error($lfn, "Unable to open file");
+                $h->push_local_error($lfn, "unable to open file");
                 next;
             }
             binmode $fh;
             $h->{current_fh} = $fh;
         }
-        return { type => $type,
-                 name => $rfn,
-                 perm => $perm,
-                 atime => $atime,
-                 mtime => $mtime };
+        else {
+            $h->push_local_error($lfn, "not a regular file");
+            next;
+        }
+
+        return $h->push_action( type => $type,
+                                size => $size,
+                                remote => $rfn,
+                                local => $lfn,
+                                perm => $perm,
+                                atime => $atime,
+                                mtime => $mtime );
     }
 }
 
@@ -103,8 +110,9 @@ sub on_send_data {
     my $bytes = sysread $fh, $buf, $size;
     unless ($bytes) {
         $h->set_local_error(defined $bytes
-                            ? 'Unexpected end of file reached'
-                            : 'Unable to read from file');
+                            ? 'unexpected end of file reached'
+                            : 'unable to read from file');
+        return
     }
     $buf;
 }

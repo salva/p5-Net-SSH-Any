@@ -8,7 +8,7 @@ use Carp;
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw($debug _debug _debug_dump
+our @EXPORT = qw($debug _debug _debug_dump _debug_hexdump
                  _sub_options _croak_bad_options
                  _first_defined _array_or_scalar_to_list
                  _inc_numbered);
@@ -26,6 +26,21 @@ sub _debug_dump {
     local $Data::Dumper::Indent = 0;
     my $head = shift;
     _debug("$head: ", Data::Dumper::Dumper(@_));
+}
+
+sub _debug_hexdump {
+    no warnings qw(uninitialized);
+    my $head = shift;
+    _debug("$head:");
+
+    my $data = shift;
+    while ($data =~ /(.{1,32})/smg) {
+        my $line=$1;
+        my @c= (( map { sprintf "%02x",$_ } unpack('C*', $line)),
+                (("  ") x 32))[0..31];
+        $line=~s/(.)/ my $c=$1; unpack("c",$c)>=32 ? $c : '.' /egms;
+        print STDERR "#> ", join(" ", @c, '|', $line), "\n";
+    }
 }
 
 sub _first_defined { defined && return $_ for @_; return }

@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
-use Net::SSH::Any::Util;
+use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined);
 use Net::SSH::Any::Constants qw(:error);
 
 use Net::SSH2;
@@ -48,7 +48,7 @@ sub _connect {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to create Net::SSH2 object");
         return;
     }
-    $debug and $debug & 2048 and $ssh2->trace(1);
+    $debug and $debug & 2048 and $ssh2->trace(-1);
 
     my @args = ($any->{host}, $any->{port} || 22);
     push @args, Timeout => $any->{timeout} if defined $any->{timeout};
@@ -293,6 +293,7 @@ sub _sysread {
         return undef;
     }
     else {
+        $debug and $debug & 8192 and _debug_hexdump("data read", $buf);
         no warnings;
         $_[2] .= $buf;
     }

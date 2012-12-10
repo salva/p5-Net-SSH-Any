@@ -6,6 +6,8 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any::Backend::Net_SSH2);
 
+use Net::SSH::Any::Util qw($debug _debug);
+
 require Net::SSH::Any::Pipe;
 our @ISA = qw(Net::SSH::Any::Pipe);
 
@@ -23,6 +25,7 @@ sub _syswrite {
     $channel->blocking($pipe->{blocking});
     my $bytes = $pipe->{any}->_syswrite($pipe->{__channel}, $_[0]);
     $channel->blocking(1);
+    $debug and $debug & 8192 and _debug("$pipe->_syswrite() => $bytes bytes written");
     return $bytes;
 }
 
@@ -30,9 +33,11 @@ sub _syswrite {
 sub _sysread {
     my ($pipe, undef, $len, $ext) = @_;
     my $channel = $pipe->{__channel};
+    $debug and $debug & 8192 and _debug("$pipe->_sysread($len)...");
     $channel->blocking($pipe->{blocking});
     my $bytes = $pipe->{any}->_sysread($pipe->{__channel}, $_[1], $len, $ext);
     $channel->blocking(1);
+    $debug and $debug & 8192 and _debug("$bytes bytes read");
     return $bytes;
 }
 

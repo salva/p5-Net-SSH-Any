@@ -6,6 +6,7 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
+use Net::SSH::Any::Util qw($debug _debug);
 use Net::SSH::Any::Constants qw(SSHA_EAGAIN);
 
 sub _new {
@@ -103,6 +104,9 @@ sub print {
     my $buf = shift;
     my $total = 0;
     my $ended;
+
+    $debug and $debug & 8192 and _debug ("$pipe->print(" . length($buf). " bytes)");
+
     while (length $buf or not $ended) {
         while (length $buf < 34000 and not $ended) {
             if (@_) {

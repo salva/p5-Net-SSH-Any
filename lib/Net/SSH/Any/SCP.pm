@@ -23,6 +23,7 @@ sub _scp_escape {
 sub _scp_readline {
     my $any = shift;
     my $pipe = shift;
+    $debug and $debug & 4096 and _debug("$any->_scp_readline($pipe)...");
     for ($_[0]) {
         $_ = '';
         $pipe->sysread($_, 1) or goto error;
@@ -32,6 +33,7 @@ sub _scp_readline {
                 last if /\x0A$/;
             }
         }
+        $debug and $debug & 4096 and _debug_hexdump("line read", $_);
         return length $_;
     }
  error:
@@ -152,6 +154,7 @@ sub scp_put_with_handler {
     my $remote_scp_command =  _first_defined delete($opts->{remote_scp_cmd}), $any->{remote_cmd}{scp}, 'scp';
 
     my $pipe = $any->pipe({ %$opts, quote_args => 1 },
+                          'strace', '-fo', '/tmp/scp.strace',
                           $remote_scp_command,
                           '-t',
                           ($double_dash ? '--' : ()),
@@ -167,13 +170,16 @@ sub scp_put_with_handler {
         }
 
         my $next = $h->on_next or last;
+
+        $debug and $debug & 4096 and _debug_dump("next file object description from handler", $next);
+
         my $type = _first_defined $next->{type}, 'C';
         $type =~ s/^file$/C/;
         $type =~ s/^dir(?:ectory)?$/D/;
         $type =~ s/^end_of_dir(?:ectory)?$/E/;
 
         my ($size, $perm, $error, $line);
-        my $name = _first_defined $next->{name}, $target;
+        my $name = _first_defined $next->{remote}, $target;
         my $ename = $name;
         _scp_escape($ename);
 
@@ -189,13 +195,16 @@ sub scp_put_with_handler {
         else {
             croak "unknown action type <$type>";
         }
+        $line .= "\x0A";
+        $debug and $debug & 4096 and _debug_hexdump("sending line", $line);
 
-        unless ($pipe->print($line . "\x0A")) {
+        unless ($pipe->print($line)) {
             $any->_or_set_error("broken pipe");
             last OUT;
         }
 
         if ($type eq 'C') {
+            $debug and $debug & 4096 and _debug("sending file of $size bytes");
             $any->_scp_readline($pipe, $buf) or last;
             unless ($buf eq "\x00") {
                 $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
@@ -204,15 +213,23 @@ sub scp_put_with_handler {
 
             while ($size > 0) {
                 my $data = $h->on_send_data($size);
-                last unless defined $data and length $data;
-                substr($data, $size) = '' if length $data > $size;
+                unless (defined $data and length $data) {
+                    $debug and $debug & 4096 and _debug("no promised data from put handler");
+                    last;
+                }
+                if (length($data) > $size) {
+                    $debug and $debug & 4096 and _debug("too much data, discarding excess");
+                    substr($data, $size) = ''
+                }
+
+                $debug and $debug & 4096 and _debug("sending " . length($data) . " bytes of data");
                 unless ($pipe->print($data)) {
                     $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
                     last OUT;
                 }
                 $size -= length $data;
             }
-            $h->on_end_of_file or last;
+            $pipe->print($h->on_end_of_file ? "\x00" : "\x01\x0A");
         }
     }
 

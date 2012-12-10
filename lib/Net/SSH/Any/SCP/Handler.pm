@@ -3,6 +3,7 @@ package Net::SSH::Any::SCP::Handler;
 use strict;
 use warnings;
 
+use Net::SSH::Any::Constants ();
 use Net::SSH::Any::Util qw($debug _debug _first_defined);
 
 sub _new {
@@ -16,7 +17,7 @@ sub _new {
 
 sub set_local_error {
     my $h = shift;
-    $h->{any}->_set_error(@_, $!);
+    $h->{any}->_set_error(Net::SSH::Any::Constants::SSHA_SCP_ERROR, @_, $!);
 
     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
     eval {
