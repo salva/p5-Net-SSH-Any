@@ -66,8 +66,9 @@ sub scp_get_with_handler {
     $any->error and return;
 
     my $buf;
+    local $SIG{PIPE} = 'IGNORE';
     while (1) {
-        $pipe->syswrite("\x00");
+	$pipe->syswrite("\x00") or last;
         $any->_scp_readline($pipe, $buf) or last;
 
         $debug and $debug & 4096 and _debug "cmd line: $buf";
@@ -92,7 +93,7 @@ sub scp_get_with_handler {
                     $h->on_data($buf) or last;
                     $size -= $read;
                 }
-                unless ($any->_scp_readline($buf) and $buf eq "\x00") {
+                unless ($any->_scp_readline($pipe, $buf) and $buf eq "\x00") {
                     chomp $buf;
                     $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
                     $debug and $debug & 4096 and _debug "failed to read ok code: $buf";

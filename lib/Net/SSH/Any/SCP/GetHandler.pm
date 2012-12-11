@@ -23,9 +23,9 @@ for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir on_end_of
 sub on_remote_error {
     my ($h, $path, $error) = @_;
     $debug and $debug & 4096 and Net::SSH::Any::_debug("$h->on_remote_error(path: $path, error: $error)");
-    $h->_push_action( type => 'remote_error',
-                      remote => $path,
-                      error => $error );
+    $h->push_action( type => 'remote_error',
+		     remote => $path,
+		     error => $error );
     1
 }
 

@@ -81,6 +81,15 @@ sub __ssh {
     undef;
 }
 
+sub _pipe {
+    my ($any, $opts, $cmd) = @_;
+    my $ssh = __ssh($any) or return undef;
+    my ($socket, $pid) = $ssh->open2socket($opts, $cmd);
+    __check_error($any) or return;
+    require Net::SSH::Any::Backend::Net_OpenSSH::Pipe;
+    Net::SSH::Any::Backend::Net_OpenSSH::Pipe->_upgrade_socket($socket, $pid, $any);
+}
+
 sub _sftp {
     my ($any, $opts) = @_;
     my $ssh = __ssh($any) or return undef;
