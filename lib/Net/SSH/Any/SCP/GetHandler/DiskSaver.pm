@@ -12,6 +12,15 @@ sub new {
     my ($class, $any, $opts, $files) = @_;
     my $h = $class->SUPER::_new($any, $opts, $files);
     my $target = (@$files > 1 ? pop @$files : '.');
+
+    if (delete $opts->{target_is_dir}) {
+	unless (-d $target or mkdir $target) {
+	    $any->set_error(Net::SSH::Any::Constants::SSHA_SCP_ERROR,
+			    "unable to create directory", $!);
+	    return;
+	}
+    }
+
     if (-d $target) {
         $h->{target_dir} = $target;
     }
@@ -58,7 +67,7 @@ sub on_file {
     while (1) {
         sysopen $fh, $fn, $flags, $perm and last;
         unless ($h->{numbered} and -e $fn) {
-            $h->set_local_error("Unable to create file '$fn'");
+            $h->set_local_error($fn);
             return;
         }
         _inc_numbered($fn);
@@ -84,7 +93,7 @@ sub on_end_of_file {
     my $h = shift;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_file";
     unless (close $h->{current_fh}) {
-        $h->set_local_error("Unable to write to file '$h->{current_fn}'");
+        $h->set_local_error($h->{current_fn});
         return;
     }
     delete @{$h}{qw(current_fh current_fn)};
@@ -94,6 +103,9 @@ sub on_end_of_file {
 sub on_dir {
     my ($h, $perm, $size, $name) = @_;
     $debug and $debug and 4096 and Net::SSH::Any::_debug "on_dir(perm: $perm, size: $size, name: $name)";
+
+    return;
+
     my $dn = (defined $h->{target_dir}
               ? File::Spec->join($h->{target_dir}, $name)
               : $h->{target});
@@ -110,11 +122,11 @@ sub on_dir {
     $perm = 0777 unless $h->{copy_perm};
 
     unless (-d $dn or mkdir $dn, 0700 | ($perm & 0777)) {
-        $h->set_local_error("Unable to create directory '$dn'");
+        $h->set_local_error($dn);
         return;
     }
     unless (-x $dn) {
-        $h->set_local_error("Access forbidden to directory '$dn'");
+        $h->set_local_error($dn);
         return;
     }
     1;

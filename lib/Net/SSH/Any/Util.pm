@@ -5,6 +5,7 @@ BEGIN { *debug = \$Net::SSH::Any::debug }
 use strict;
 use warnings;
 use Carp;
+use File::Spec;
 
 require Exporter;
 our @ISA = qw(Exporter);
@@ -72,5 +73,22 @@ sub _inc_numbered {
     $_[0] =~ s{((?:\.[^\.]*)?)$}{(1)$1};
     $debug and $debug & 128 and _debug("numbering to: $_[0]");
 }
+
+# sub _mkpath {
+#     my $path = shift;
+#     my @start = File::Spec->splitdir(File::Spec->rel2abs($path));
+#     my @end;
+#     while (@start) {
+# 	my $start = File::Spec->join(@start);
+# 	last if -d $start;
+# 	push @end, pop @start;
+#     }
+#     while (@end) {
+# 	push @start, pop @end;
+# 	my $start = File::Spec->join(@start);
+# 	return unless -d $start or mkdir $start;
+#     }
+#     1;
+# }
 
 1;

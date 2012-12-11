@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Net::SSH::Any::Constants ();
-use Net::SSH::Any::Util qw($debug _debug);
+use Net::SSH::Any::Util qw($debug _debug _debug_hexdump);
 
 require IO::Socket;
 our @ISA = qw(IO::Socket);
@@ -34,6 +34,16 @@ sub close {
 	delete ${*$socket}{_pid};
     }
     return $ok;
+}
+
+sub syswrite {
+    my $socket = shift;
+    my (undef, $len, $offset) = @_;
+    $len ||= "<undef>";
+    $offset ||= "<undef>";
+    $debug and $debug & 8192 and
+	_debug_hexdump("$socket->syswrite(..., $len, $offset)", $_[0]);
+    $socket->SUPER::syswrite(@_);
 }
 
 1;

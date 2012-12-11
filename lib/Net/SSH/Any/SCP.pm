@@ -52,6 +52,8 @@ sub scp_get_with_handler {
 
     my $remote_scp_command =  _first_defined delete($opts->{remote_scp_cmd}), $any->{remote_cmd}{scp}, 'scp';
 
+    _croak_bad_options %$opts;
+    
     my @cmd   = $any->_quote_args({quote_args => 1},
                                   $remote_scp_command,
                                   '-f', '-p',
@@ -65,12 +67,18 @@ sub scp_get_with_handler {
                           @cmd, @files);
     $any->error and return;
 
-    my $buf;
     local $SIG{PIPE} = 'IGNORE';
+    my $buf;
+    my $ok = 1;
     while (1) {
-	$pipe->syswrite("\x00") or last;
-        $any->_scp_readline($pipe, $buf) or last;
+	$pipe->syswrite( $ok 
+			 ? "\x00" 
+			 : ( $h->aborted ? "\x02" : "\x01") . $h->last_error . "\x0A" )
+	    or last;
 
+	$ok = 1;
+
+        $any->_scp_readline($pipe, $buf) or last;
         $debug and $debug & 4096 and _debug "cmd line: $buf";
 
         my ($type, $perm, $size, $name, $mtime, $atime, $error);
@@ -79,44 +87,55 @@ sub scp_get_with_handler {
             _scp_unescape($name);
             $perm = oct $perm;
             if ($type eq 'C') {
-                $h->on_file($perm, $size, $name) or last;
-                $debug and $debug & 4096 and _debug "transferring file of size $size";
-                $pipe->syswrite("\x00");
-                $buf = '';
-                while ($size) {
-                    my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
-                    unless ($read) {
-                        $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
-                        $debug and $debug & 4096 and _debug "read failed: " . $any->error;
-                        last;
-                    }
-                    $h->on_data($buf) or last;
-                    $size -= $read;
-                }
-                unless ($any->_scp_readline($pipe, $buf) and $buf eq "\x00") {
-                    chomp $buf;
-                    $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
-                    $debug and $debug & 4096 and _debug "failed to read ok code: $buf";
-                    last;
-                }
-                $h->on_end_of_file or last;
+		if ($ok = $h->on_file($perm, $size, $name)) {
+		    $debug and $debug & 4096 and _debug "transferring file of size $size";
+		    $pipe->syswrite("\x00");
+		    $buf = '';
+		    while ($size) {
+			my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
+			unless ($read) {
+			    $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
+			    $debug and $debug & 4096 and _debug "read failed: " . $any->error;
+			    last;
+			}
+			$h->on_data($buf) or last;
+			$size -= $read;
+		    }
+		    $any->_scp_readline($pipe, $buf) or last;
+		    if ($buf eq "\x00") {
+			$ok = $h->on_end_of_file;
+		    }
+		    elsif (my ($fatal, $error) = $buf =~ /^([\x01\x02])(.*)$/) {
+			$ok = $h->on_file_error(($fatal eq "\x02" ? 1 : 0), $error);
+		    }
+		    else {
+			$any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
+			$debug and $debug & 4096 and _debug "failed to read response: $buf";
+			last;
+		    }
+		}
             }
             else { # $type eq 'D'
-                $h->on_dir($perm, $size, $name) or last;
+		unless ($recursive) {
+		    $any->_or_set_error(SSHA_SCP_ERROR,
+					"SCP protocol error, unexpected directory entry");
+		    last;
+		}
+                $ok = $h->on_dir($perm, $size, $name);
             }
         }
         elsif (($mtime, $atime) = $buf =~ /^T(\d+)\s+\d+\s+(\d+)\s+\d+\s*$/) {
-            $h->on_matime($mtime, $atime) or last;
+            $ok = $h->on_matime($mtime, $atime);
         }
         elsif ($buf =~ /^E$/) {
-            $h->on_end_of_dir() or last;
+            $ok = $h->on_end_of_dir();
         }
-        elsif (($name, $error) = $buf =~ /^\x01scp:\s(.*):\s*(.*)$/) {
+        elsif (($name, $error) = $buf =~ /^[\x01\x02]scp:\s(.*):\s*(.*)$/) {
             _scp_unescape($name);
-            $h->on_remote_error($name, $error) or last;
+            $ok = $h->on_remote_error($name, $error);
         }
-        elsif (($error) = $buf =~ /^\x01(?:scp:\s)?(.*)$/) {
-            $h->on_remote_error(undef, $error) or last;
+        elsif (($error) = $buf =~ /^[\x01\x02](?:scp:\s)?(.*)$/) {
+            $ok = $h->on_remote_error(undef, $error);
         }
         else {
             $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
@@ -143,7 +162,8 @@ sub scp_get {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     require Net::SSH::Any::SCP::GetHandler::DiskSaver;
-    my $h = Net::SSH::Any::SCP::GetHandler::DiskSaver->new($any, \%opts, \@_);
+    my $h = Net::SSH::Any::SCP::GetHandler::DiskSaver->new($any, \%opts, \@_)
+	or return;
     $any->scp_get_with_handler(\%opts, $h, @_);
 }
 
@@ -153,19 +173,28 @@ sub scp_put_with_handler {
 
     my $double_dash = _first_defined delete($opts->{double_dash}), 1;
     my $remote_scp_command =  _first_defined delete($opts->{remote_scp_cmd}), $any->{remote_cmd}{scp}, 'scp';
+    my $target_is_dir = delete $opts->{target_is_dir};
+
+    _croak_bad_options %$opts;
 
     my $pipe = $any->pipe({ %$opts, quote_args => 1 },
                           'strace', '-fo', '/tmp/scp.strace',
                           $remote_scp_command,
                           '-t',
-                          ($double_dash ? '--' : ()),
+			  ($target_is_dir ? '-d' : ()),
+                          ($double_dash   ? '--' : ()),
                           $target);
     $any->error and return;
 
  OUT: while (1) {
         my $buf;
         $any->_scp_readline($pipe, $buf) or last;
-        unless ($buf eq "\x00") {
+	if (my ($fatal, $error) = $buf =~ /^([\x01\x02])(.*)$/) {
+	    $fatal = ($fatal eq "\x02" ? 1 : 0);
+	    $h->on_response_error($fatal, $error);
+	    last if $fatal;
+	}
+	elsif ($buf ne "\x00") {
             $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
             last;
         }
@@ -241,7 +270,8 @@ sub scp_put {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     require Net::SSH::Any::SCP::PutHandler::DiskLoader;
-    my $h = Net::SSH::Any::SCP::PutHandler::DiskLoader->new($any, \%opts, \@_);
+    my $h = Net::SSH::Any::SCP::PutHandler::DiskLoader->new($any, \%opts, \@_)
+	or return;
     $any->scp_put_with_handler(\%opts, $h, @_);
 }
 

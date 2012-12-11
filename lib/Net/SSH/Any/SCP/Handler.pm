@@ -16,14 +16,14 @@ sub _new {
 }
 
 sub set_local_error {
-    my $h = shift;
-    $h->{any}->_set_error(Net::SSH::Any::Constants::SSHA_SCP_ERROR, @_, $!);
-
+    my ($h, $path, $error) = @_;
+    $error = $! unless defined $error;
+    $h->{last_error} = $error;
+    $h->{any}->_set_error(Net::SSH::Any::Constants::SSHA_SCP_ERROR, $path, $error);
     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
     eval {
         my $action = $h->{action_log}[-1];
-        $action->{error} = $_[0];
-        $action->{errno} = $!;
+        $action->{error} = $error;
     };
     return;
 }
@@ -35,5 +35,14 @@ sub push_action {
     eval { push @{$h->{action_log}}, $action };
     $action
 }
+
+sub last_error {
+    my $h = shift;
+    _first_defined $h->{last_error}, "unknown error"
+}
+
+sub abort { shift->{aborted} = 1 }
+
+sub aborted { shift->{aborted} }
 
 1;

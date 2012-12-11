@@ -86,6 +86,7 @@ sub on_next {
             }
             binmode $fh;
             $h->{current_fh} = $fh;
+	    $h->{current_fn} = $lfn;
         }
         else {
             $h->push_local_error($lfn, "not a regular file");
@@ -109,9 +110,10 @@ sub on_send_data {
     my $buf = '';
     my $bytes = sysread $fh, $buf, $size;
     unless ($bytes) {
-        $h->set_local_error(defined $bytes
-                            ? 'unexpected end of file reached'
-                            : 'unable to read from file');
+        $h->set_local_error($h->{current_fn},
+			    ( defined $bytes
+			      ? 'unexpected end of file reached'
+			      : 'unable to read from file' ));
         return
     }
     $buf;
@@ -119,7 +121,7 @@ sub on_send_data {
 
 sub on_end_of_file {
     my $h = shift;
-    delete $h->{current_fh};
+    delete @{$h}{qw(current_fh current_fn)};
     1;
 }
 
