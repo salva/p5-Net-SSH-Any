@@ -37,4 +37,9 @@ sub on_matime {
     1;
 }
 
+sub on_end_of_get {
+    my $h = shift;
+    return not $h->{errors};
+}
+
 1;

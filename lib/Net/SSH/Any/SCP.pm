@@ -94,6 +94,7 @@ sub scp_get_with_handler {
 			my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
 			unless ($read) {
 			    $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
+			    $h->on_end_of_file(2, "broken pipe");
 			    $debug and $debug & 4096 and _debug "read failed: " . $any->error;
 			    last;
 			}
@@ -146,7 +147,8 @@ sub scp_get_with_handler {
 
     $pipe->close;
 
-    $h->on_end_of_get;
+    $h->on_end_of_get or
+	$any->_or_set_error(SSHA_SCP_ERROR, "SCP transfer not completely successful");
 
     if ($any->{error}) {
         if ($any->{error} == SSHA_REMOTE_CMD_ERROR) {
