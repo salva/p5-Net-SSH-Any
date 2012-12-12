@@ -110,10 +110,9 @@ sub on_send_data {
     my $buf = '';
     my $bytes = sysread $fh, $buf, $size;
     unless ($bytes) {
-        $h->set_local_error($h->{current_fn},
-			    ( defined $bytes
-			      ? 'unexpected end of file reached'
-			      : 'unable to read from file' ));
+        $h->set_local_error(defined $bytes
+			    ? 'unexpected end of file reached'
+			    : 'unable to read from file');
         return
     }
     $buf;
