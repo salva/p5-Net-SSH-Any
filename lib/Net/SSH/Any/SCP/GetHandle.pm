@@ -1,12 +1,12 @@
-package Net::SSH::Any::SCP::GetHandler;
+package Net::SSH::Any::SCP::GetHandle;
 
 use strict;
 use warnings;
 
 use Net::SSH::Any::Util qw($debug _debug _first_defined);
 
-require Net::SSH::Any::SCP::Handler;
-our @ISA = qw(Net::SSH::Any::SCP::Handler);
+require Net::SSH::Any::SCP::Handle;
+our @ISA = qw(Net::SSH::Any::SCP::Handle);
 
 for my $method (qw(on_file on_data on_end_of_file on_dir on_end_of_dir on_end_of_get)) {
     no strict;

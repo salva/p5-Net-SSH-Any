@@ -1,4 +1,4 @@
-package Net::SSH::Any::SCP::Handler;
+package Net::SSH::Any::SCP::Handle;
 
 use strict;
 use warnings;

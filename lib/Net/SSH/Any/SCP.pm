@@ -160,8 +160,8 @@ sub scp_get_with_handler {
 sub scp_get {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    require Net::SSH::Any::SCP::GetHandler::DiskSaver;
-    my $h = Net::SSH::Any::SCP::GetHandler::DiskSaver->new($any, \%opts, \@_)
+    require Net::SSH::Any::SCP::GetHandle::DiskSaver;
+    my $h = Net::SSH::Any::SCP::GetHandle::DiskSaver->new($any, \%opts, \@_)
 	or return;
     $any->scp_get_with_handler(\%opts, $h, \@_);
 }
@@ -268,8 +268,8 @@ sub scp_put_with_handler {
 sub scp_put {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    require Net::SSH::Any::SCP::PutHandler::DiskLoader;
-    my $h = Net::SSH::Any::SCP::PutHandler::DiskLoader->new($any, \%opts, \@_)
+    require Net::SSH::Any::SCP::PutHandle::DiskLoader;
+    my $h = Net::SSH::Any::SCP::PutHandle::DiskLoader->new($any, \%opts, \@_)
 	or return;
     $any->scp_put_with_handler(\%opts, $h, @_);
 }

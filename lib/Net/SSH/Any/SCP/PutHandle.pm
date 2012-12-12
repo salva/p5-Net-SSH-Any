@@ -1,12 +1,12 @@
-package Net::SSH::Any::SCP::PutHandler;
+package Net::SSH::Any::SCP::PutHandle;
 
 use strict;
 use warnings;
 
 use Net::SSH::Any::Util qw($debug _debug _first_defined);
 
-require Net::SSH::Any::SCP::Handler;
-our @ISA = qw(Net::SSH::Any::SCP::Handler);
+require Net::SSH::Any::SCP::Handle;
+our @ISA = qw(Net::SSH::Any::SCP::Handle);
 
 sub on_next {}
 

@@ -1,12 +1,12 @@
-package Net::SSH::Any::SCP::PutHandler::DiskLoader;
+package Net::SSH::Any::SCP::PutHandle::DiskLoader;
 
 use strict;
 use warnings;
 
 use File::Spec;
 
-require Net::SSH::Any::SCP::PutHandler;
-our @ISA = qw(Net::SSH::Any::SCP::PutHandler);
+require Net::SSH::Any::SCP::PutHandle;
+our @ISA = qw(Net::SSH::Any::SCP::PutHandle);
 
 sub new {
     my ($class, $any, $opts, $files) = @_;

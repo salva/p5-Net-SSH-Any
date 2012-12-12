@@ -1,12 +1,12 @@
-package Net::SSH::Any::SCP::GetHandler::DiskSaver;
+package Net::SSH::Any::SCP::GetHandle::DiskSaver;
 
 use strict;
 use warnings;
 
 use Net::SSH::Any::Util qw($debug _debug _debugf _debug_hexdump _first_defined _inc_numbered _gen_wanted);
 
-require Net::SSH::Any::SCP::GetHandler;
-our @ISA = qw(Net::SSH::Any::SCP::GetHandler);
+require Net::SSH::Any::SCP::GetHandle;
+our @ISA = qw(Net::SSH::Any::SCP::GetHandle);
 
 sub new {
     my ($class, $any, $opts, $files) = @_;
