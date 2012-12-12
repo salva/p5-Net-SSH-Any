@@ -9,6 +9,22 @@ our @CARP_NOT = qw(Net::SSH::Any);
 use Net::SSH::Any::Util qw($debug _debug);
 use Net::SSH::Any::Constants qw(SSHA_EAGAIN);
 
+use Tie::Handle;
+our @ISA = qw(Tie::Handle);
+
+sub _make {
+    my $class = shift;
+    my $handle = gensym;
+    tie *$handle, $class, @_;
+    bless $handle, Net::SSH::Any::Pipe::Tie, $handle;
+    $handle;
+}
+
+sub TIEHANDLE {
+    my $class = shift;
+    $class->_new(@_);
+}
+
 sub _new {
     my ($class, $any, %pipe) = @_;
     $pipe{any} = $any;
@@ -60,12 +76,7 @@ sub sysread {
     $pipe->_sysread($_[1], $len, $ext);
 }
 
-sub sysgetc {
-    my $pipe = shift;
-    my $buf;
-    $pipe->sysread($buf, 1);
-    return (length $buf ? $buf : undef);
-}
+*READ = \&sysread;
 
 sub syswrite {
     my ($pipe, undef, $len, $off) = @_;
@@ -137,6 +148,8 @@ sub print {
     return ($buf eq '' and not @_);
 }
 
+*PRINT = \&print;
+
 sub printf { shift->print(sprintf(@_)) }
 
 sub readline {
@@ -173,13 +186,27 @@ sub eof {
     $pipe->{eof} ||= ($pipe->_eof || ($pipe->error && $pipe->error != SSHA_EAGAIN));
 }
 
+*EOF = \&eof;
+
 sub close {
     my $pipe = shift;
     $pipe->{closed} ||= $pipe->_close;
 }
 
+*CLOSE = \&close;
+
 sub error {
     shift->{any}->error;
+}
+
+package Net::SSH::Any::Pipe::Tie;
+sub AUTOLOAD {
+    our $AUTOLOAD;
+    my ($name) = $AUTOLOAD =~ /([^:]*)$/;
+    my $sub = sub { tied(shift)->$name(@_) };
+    no strict 'refs';
+    *{$AUTOLOAD} = $sub;
+    goto &$sub;
 }
 
 1;
