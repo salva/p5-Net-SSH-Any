@@ -264,7 +264,7 @@ sub _pipe {
     # TODO: do something with the parsed options?
     $channel->exec($cmd);
     require Net::SSH::Any::Backend::Net_SSH2::Pipe;
-    Net::SSH::Any::Backend::Net_SSH2::Pipe->_new($any, $channel);
+    Net::SSH::Any::Backend::Net_SSH2::Pipe->_make($any, $channel);
 }
 
 sub _syswrite {
