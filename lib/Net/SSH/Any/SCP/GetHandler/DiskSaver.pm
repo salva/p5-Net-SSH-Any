@@ -3,7 +3,7 @@ package Net::SSH::Any::SCP::GetHandler::DiskSaver;
 use strict;
 use warnings;
 
-use Net::SSH::Any::Util qw($debug _debug _first_defined _inc_numbered);
+use Net::SSH::Any::Util qw($debug _debug _debugf _debug_hexdump _first_defined _inc_numbered _gen_wanted);
 
 require Net::SSH::Any::SCP::GetHandler;
 our @ISA = qw(Net::SSH::Any::SCP::GetHandler);
@@ -32,6 +32,7 @@ sub new {
     $h->{numbered} = delete $opts->{numbered};
     unless ($h->{numbered}) {
         $h->{overwrite} = _first_defined delete($opts->{overwrite}), 1;
+	$h->{update} = _first_defined delete($opts->{update}), 1;
     }
     $h->{copy_perm} = _first_defined delete($opts->{copy_perm}), 1;
 
@@ -44,7 +45,7 @@ sub new {
 
 sub on_file {
     my ($h, $perm, $size, $name) = @_;
-    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_file(perm: $perm, size: $size, name: $name)";
+    $debug and $debug & 4096 and _debugf '%s->on_file(%s, %s, %s)', $h, $perm, $size, $name;
 
     my $fn = (defined $h->{target_dir}
               ? File::Spec->join($h->{target_dir}, $name)
@@ -57,8 +58,19 @@ sub on_file {
                                  perm   => $perm,
                                  size   => $size );
 
-    unlink $fn if $h->{overwrite};
+    $h->check_wanted or return;
+    
+    if ($h->{update}) {
+	if (my @s = stat $fn) {
+	    if ($s[7] == $size and $s[9] == $h->{mtime}) {
+		$h->set_skipped;
+		return;
+	    }
+	}
+    }
 
+    unlink $fn if $h->{overwrite};
+    
     my $flags = Fcntl::O_CREAT|Fcntl::O_WRONLY;
     $flags |= Fcntl::O_EXCL if $h->{numbered} or not $h->{overwrite};
     $perm = 0777 unless $h->{copy_perm};
@@ -67,7 +79,7 @@ sub on_file {
     while (1) {
         sysopen $fh, $fn, $flags, $perm and last;
         unless ($h->{numbered} and -e $fn) {
-            $h->set_local_error($fn);
+            $h->set_local_error;
             return;
         }
         _inc_numbered($fn);
@@ -84,27 +96,39 @@ sub on_file {
 
 sub on_data {
     my $h = shift;
-    $debug and $debug and 4096 and Net::SSH::Any::_debug length($_[0]) . " bytes received:\n>>>$_[0]<<<\n\n";
+    $debug and $debug & 4096 and _debug_hexdump('data received', $_[0]);
     print {$h->{current_fh}} $_[0];
     1;
 }
 
 sub on_end_of_file {
-    my $h = shift;
-    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_file";
-    unless (close $h->{current_fh}) {
-        $h->set_local_error($h->{current_fn});
-        return;
+    my ($h, $failed, $error) = @_;
+    $debug and $debug & 4096 and _debugf("%s->on_end_of_file(%s, %s)", $h, $failed, $error);
+    $failed and $h->set_remote_error($error);
+
+    my $fh = delete $h->{current_fh};
+    my $fn = delete $h->{current_fn};
+    unless (close $fh) {
+        $h->set_local_error;
+	$failed = 1;
     }
-    delete @{$h}{qw(current_fh current_fn)};
+    if ($failed) {
+	unlink $fn;
+	return
+    }
     1;
+}
+
+sub _pop_dir {
+    my $h = shift;
+    pop @{$h->{dir_parts}};
+    pop @{$h->{dir_perm}};
+    $h->{target_dir} = pop @{$h->{parent_dir}};
 }
 
 sub on_dir {
     my ($h, $perm, $size, $name) = @_;
-    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_dir(perm: $perm, size: $size, name: $name)";
-
-    return;
+    $debug and $debug & 4096 and _debugf '%s->on_dir(%s, %s, %s)', $h, $perm, $size, $name;
 
     my $dn = (defined $h->{target_dir}
               ? File::Spec->join($h->{target_dir}, $name)
@@ -119,14 +143,16 @@ sub on_dir {
                     local  => $dn,
                     perm   => $perm);
 
+    unless ($h->check_wanted) {
+	$h->_pop_dir;
+	return;
+    }
+
     $perm = 0777 unless $h->{copy_perm};
 
-    unless (-d $dn or mkdir $dn, 0700 | ($perm & 0777)) {
-        $h->set_local_error($dn);
-        return;
-    }
-    unless (-x $dn) {
-        $h->set_local_error($dn);
+    unless (-d $dn or mkdir($dn, 0700 | $perm & 0777)) {
+        $h->set_local_error;
+	$h->_pop_dir;
         return;
     }
     1;
@@ -134,12 +160,12 @@ sub on_dir {
 
 sub on_end_of_dir {
     my $h = shift;
-    $debug and $debug and 4096 and Net::SSH::Any::_debug "on_end_of_dir";
-    pop @{$h->{dir_parts}};
-    my $perm = pop @{$h->{dir_perm}};
-    $perm = 0777 unless $h->{copy_perm};
-    chmod $perm, $h->{target_dir} if defined $perm;
-    $h->{target_dir} = pop @{$h->{parent_dir}};
+    $debug and $debug and 4096 and _debug "$h->on_end_of_dir";
+    my $perm = $h->{dir_perm}[-1];
+    if (defined $perm and $h->{copy_perm}) {
+	chmod ($perm & 0777, $h->{target_dir});
+    }
+    $h->_pop_dir;
     1;
 }
 

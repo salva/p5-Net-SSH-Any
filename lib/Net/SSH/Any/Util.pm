@@ -9,16 +9,21 @@ use File::Spec;
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw($debug _debug _debug_dump _debug_hexdump
+our @EXPORT = qw($debug _debug _debugf _debug_dump _debug_hexdump
                  _sub_options _croak_bad_options
                  _first_defined _array_or_scalar_to_list
-                 _inc_numbered);
+                 _inc_numbered _gen_wanted);
 
 our $debug ||= 0;
 
 sub _debug {
     local ($@, $!, $_);
     print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n"
+}
+
+sub _debugf {
+    my $t = shift;
+    _debug sprintf($t, map { defined($_) ? $_ : '<undef>' } @_);
 }
 
 sub _debug_dump {
@@ -72,6 +77,25 @@ sub _inc_numbered {
     $_[0] =~ s{^(.*)\((\d+)\)((?:\.[^\.]*)?)$}{"$1(" . ($2+1) . ")$3"}e or
     $_[0] =~ s{((?:\.[^\.]*)?)$}{(1)$1};
     $debug and $debug & 128 and _debug("numbering to: $_[0]");
+}
+
+sub _gen_wanted {
+    my ($ow, $onw) = my ($w, $nw) = @_;
+    if (ref $w eq 'Regexp') {
+	$w = sub { $_[0]{remote} =~ $ow }
+    }
+
+    if (ref $nw eq 'Regexp') {
+	$nw = sub { $_[0]{remote} =~ $onw }
+    }
+
+    if (defined $w and defined $nw) {
+	return sub { &$nw and not &$w }
+    }
+
+    return $w if defined $w;
+    return sub { not &$nw } if defined $nw;
+    undef;
 }
 
 # sub _mkpath {
