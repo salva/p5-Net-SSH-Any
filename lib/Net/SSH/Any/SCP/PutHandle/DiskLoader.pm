@@ -14,7 +14,8 @@ sub new {
     my @srcs = @$files;
     @$files = (@srcs > 1 ? pop @srcs : '.');
 
-    $h->{$_} = delete $opts->{$_} for qw(recursive glob);
+    $h->{glob} = delete $opts->{glob};
+    $h->{recursive} = $opts->{recursive};
 
     if ($h->{glob}) {
         require File::Glob;
@@ -37,7 +38,19 @@ sub push_local_error {
     $h->{local_errors}++;
 }
 
-sub on_next {
+sub _pop_dir {
+    my $h = shift;
+    my $dhs = $h->{dirhandles};
+    my $dns = $h->{dirnames};
+    if (@$dhs) {
+	pop @$dhs;
+	pop @$dns;
+    }
+}
+
+my @ignore_dirs = grep { defined } map { File::Spec->$_ } qw(curdir updir);
+
+sub on_next_action {
     my $h = shift;
     my $dhs = $h->{dirhandles};
     my $dns = $h->{dirnames};
@@ -49,8 +62,9 @@ sub on_next {
             unless (defined $rfn) {
                 pop @$dhs;
                 pop @$dns;
-                return { type => 'E' };
+                return { type => 'end_of_dir' };
             }
+	    redo if grep { $rfn eq $_ } @ignore_dirs;
             $lfn = File::Spec->join(@$dns, $rfn);
         }
         elsif (@$srcs) {
@@ -103,6 +117,24 @@ sub on_next {
     }
 }
 
+sub on_action_refused {
+    my ($h, $error_level, $error_msg) = @_;
+    my $action = $h->current_action;
+    if ($action->{type} eq 'D') {
+	$h->_pop_dir;
+    }
+    else {
+	delete @{$h}{qw(current_fh current_fn)};
+    }
+    1;
+}
+
+sub on_end_of_file {
+    my $h = shift;
+    delete @{$h}{qw(current_fh current_fn)};
+    1;
+}
+
 sub on_send_data {
     my ($h, $size) = @_;
     my $fh = $h->{current_fh} or return;
@@ -116,12 +148,6 @@ sub on_send_data {
         return
     }
     $buf;
-}
-
-sub on_end_of_file {
-    my $h = shift;
-    delete @{$h}{qw(current_fh current_fn)};
-    1;
 }
 
 1;

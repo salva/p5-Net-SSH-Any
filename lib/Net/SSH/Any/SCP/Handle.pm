@@ -56,6 +56,11 @@ sub last_error {
     _first_defined $h->{last_error}, "unknown error"
 }
 
+sub current_action {
+    my $h = shift;
+    $h->{action_log}[-1];
+}
+
 sub abort { shift->{aborted} = 1 }
 
 sub aborted { shift->{aborted} }

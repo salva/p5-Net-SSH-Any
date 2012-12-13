@@ -41,11 +41,15 @@ sub _scp_readline {
     return;
 }
 
-sub _scp_parse_response {
-    my $any = shift;
-    $_[0] eq "\x00" and return 0;
-    $_[0] =~ /^([\x01\x02])(.*)$/ and return (ord($1), $2);
-    return ()
+sub _scp_read_response {
+    my ($any, $pipe) = @_;
+    if ($any->_scp_readline($pipe, my $buf)) {
+	$buf eq "\x00" and return 0;
+	$buf =~ /^([\x01\x02])(.*)$/ and return(wantarray ? (ord($1), $2) : ord($1));
+	$debug and $debug & 4096 and _debug_hexdump "failed to read response", $buf;
+    }
+    $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
+    wantarray ? (2, $any->error) : 2
 }
 
 sub scp_get_with_handler {
@@ -101,15 +105,9 @@ sub scp_get_with_handler {
 			$h->on_data($buf) or last;
 			$size -= $read;
 		    }
-		    $any->_scp_readline($pipe, $buf) or last;
-		    if (my ($failed, $error) = $any->_scp_parse_response($buf)) {
-			$ok = $h->on_end_of_file($failed, $error);
-		    }
-		    else {
-			$any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
-			$debug and $debug & 4096 and _debug_hexdump "failed to read response", $buf;
-			last;
-		    }
+		    my ($error_level, $error_msg) = $any->_scp_read_response($pipe);
+		    $ok = $h->on_end_of_file($error_level, $error_msg);
+		    last if $error_level == 2;
 		}
             }
             else { # $type eq 'D'
@@ -128,9 +126,9 @@ sub scp_get_with_handler {
         elsif ($buf =~ /^E$/) {
             $ok = $h->on_end_of_dir();
         }
-        elsif (my ($fatal, $path, $error) = $buf =~ /^([\x01\x02])scp:(?:\s(.*))?:\s*(.*)$/) {
+        elsif (my ($error_level, $path, $error_msg) = $buf =~ /^([\x01\x02])scp:(?:\s(.*))?:\s*(.*)$/) {
 	    _scp_unescape($path) if defined $path;
-	    $h->on_remote_error($path, $error);
+	    $h->on_remote_error($path, $error_msg);
 	    next; # do not reply to errors!
 	}
 	else {
@@ -138,7 +136,7 @@ sub scp_get_with_handler {
 	    $debug and $debug & 4096 and _debug_hexdump "unknown command received", $buf;
 	    last;
 	}
-	
+
 	$pipe->syswrite( $ok 
 			 ? "\x00" 
 			 : ( $h->aborted ? "\x02" : "\x01") . $h->last_error . "\x0A" )
@@ -175,7 +173,7 @@ sub scp_put_with_handler {
     my $double_dash = _first_defined delete($opts->{double_dash}), 1;
     my $remote_scp_command =  _first_defined delete($opts->{remote_scp_cmd}), $any->{remote_cmd}{scp}, 'scp';
     my $target_is_dir = delete $opts->{target_is_dir};
-
+    my $recursive = delete $opts->{recursive};
     _croak_bad_options %$opts;
 
     my $pipe = $any->pipe({ %$opts, quote_args => 1 },
@@ -183,88 +181,96 @@ sub scp_put_with_handler {
                           $remote_scp_command,
                           '-t',
 			  ($target_is_dir ? '-d' : ()),
+			  ($recursive     ? '-r' : ()),
                           ($double_dash   ? '--' : ()),
-                          $target);
-    $any->error and return;
+                          $target) or return;
 
- OUT: while (1) {
-        my $buf;
-        $any->_scp_readline($pipe, $buf) or last;
-	if (my ($fatal, $error) = $buf =~ /^([\x01\x02])(.*)$/) {
-	    $fatal = ($fatal eq "\x02" ? 1 : 0);
-	    $h->on_response_error($fatal, $error);
-	    last if $fatal;
-	}
-	elsif ($buf ne "\x00") {
-            $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
-            last;
-        }
-
-        my $next = $h->on_next or last;
-
-        $debug and $debug & 4096 and _debug_dump("next file object description from handler", $next);
-
-        my $type = _first_defined $next->{type}, 'C';
-        $type =~ s/^file$/C/;
-        $type =~ s/^dir(?:ectory)?$/D/;
-        $type =~ s/^end_of_dir(?:ectory)?$/E/;
-
-        my ($size, $perm, $error, $line);
-        my $name = _first_defined $next->{remote}, $target;
-        my $ename = $name;
-        _scp_escape($ename);
-
-        if ($type =~ /^[CD]$/) {
-            $size = _first_defined $next->{size}, 0;
-            $perm = (_first_defined $next->{perm}, 0777) & 0777;
-            $line = sprintf("C%04o %d %s", $perm, $size, $ename);
-            # print STDERR "line: >$line<";
-        }
-        elsif ($type eq "E") {
-            $line = "E"
-        }
-        else {
-            croak "unknown action type <$type>";
-        }
-        $line .= "\x0A";
-        $debug and $debug & 4096 and _debug_hexdump("sending line", $line);
-
-        unless ($pipe->print($line)) {
-            $any->_or_set_error("broken pipe");
-            last OUT;
-        }
-
-        if ($type eq 'C') {
-            $debug and $debug & 4096 and _debug("sending file of $size bytes");
-            $any->_scp_readline($pipe, $buf) or last;
-            unless ($buf eq "\x00") {
-                $any->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error", $buf);
-                last;
-            }
-
-            while ($size > 0) {
-                my $data = $h->on_send_data($size);
-                unless (defined $data and length $data) {
-                    $debug and $debug & 4096 and _debug("no promised data from put handler");
-                    last;
-                }
-                if (length($data) > $size) {
-                    $debug and $debug & 4096 and _debug("too much data, discarding excess");
-                    substr($data, $size) = ''
-                }
-
-                $debug and $debug & 4096 and _debug("sending " . length($data) . " bytes of data");
-                unless ($pipe->print($data)) {
-                    $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
-                    last OUT;
-                }
-                $size -= length $data;
-            }
-            $pipe->print($h->on_end_of_file ? "\x00" : "\x01\x0A");
-        }
+    my ($error_level, $error_msg) = $any->_scp_read_response($pipe);
+    if ($error_level) {
+	$any->_or_set_error(SSHA_SCP_ERROR, "remote SCP refused transfer", $error_msg);
+	return;
     }
 
-    not $any->{error}
+ OUT: while (1) {
+        my $action = $h->on_next_action or last;
+
+	$debug and $debug & 4096 and _debug_dump("next action from handler", $action);
+
+	my $type = _first_defined $action->{type}, 'C';
+	$type =~ s/^file$/C/;
+	$type =~ s/^dir(?:ectory)?$/D/;
+	$type =~ s/^end_of_dir(?:ectory)?$/E/;
+
+	my ($size, $perm, $line);
+	my $name = _first_defined $action->{remote}, $target;
+	my $ename = $name;
+	_scp_escape($ename);
+
+	if ($type =~ /^[CD]$/) {
+	    $size = _first_defined $action->{size}, 0;
+	    $perm = (_first_defined $action->{perm}, 0777) & 0777;
+	    $line = sprintf("%s%04o %d %s", $type, $perm, $size, $ename);
+	}
+	elsif ($type eq "E") {
+	    $line = "E"
+	}
+	else {
+	    croak "unknown action type <$type>";
+	}
+	$line .= "\x0A";
+	$debug and $debug & 4096 and _debug_hexdump("sending line", $line);
+
+	unless ($pipe->print($line)) {
+	    $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
+	    last;
+	}
+
+	for my $first (1, 0) {
+	    my ($error_level, $error_msg) = $any->_scp_read_response($pipe);
+	    if ($error_level) {
+		$h->on_action_refused($error_level, $error_msg);
+		last OUT if $error_level == 2;
+		last;
+	    }
+
+	    last unless $first and $type eq 'C';
+
+	    $debug and $debug & 4096 and _debug("sending file of $size bytes");
+	    my $bad_size = 0;
+	    while ($size > 0) {
+		my $data;
+		if ($bad_size) {
+		    $data = "\0" x ($size > 16384 ? 16384 : $size);
+		}
+		else {
+		    $data = $h->on_send_data($size);
+		    unless (defined $data and length $data) {
+			$bad_size = 1;
+			$debug and $debug & 4096 and _debug("no data from put handler");
+			redo;
+		    }
+		    if (length($data) > $size) {
+			$debug and $debug & 4096 and _debug("too much data, discarding excess");
+			substr($data, $size) = '';
+			$bad_size = 1;
+		    }
+		}
+		$debug and $debug & 4096 and _debug_hexdump("sending data (bad_size: $bad_size)", $data);
+		unless ($pipe->print($data)) {
+		    $any->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
+		    last OUT;
+		}
+		$size -= length $data;
+	    }
+	    my $ok = $h->on_end_of_file($bad_size);
+	    $pipe->print($ok ? "\x00" : "\x01\x0A");
+	}
+    } # OUT
+
+    $pipe->close;
+
+    $h->on_end_of_put;
+    not $any->error
 }
 
 sub scp_put {

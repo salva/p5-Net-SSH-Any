@@ -16,6 +16,7 @@ sub _upgrade_socket {
     bless $socket, $class;
     ${*$socket}{_ssha_be_pid} = $pid;
     ${*$socket}{_ssha_be_any} = $any;
+    $socket->autoflush(1);
     $socket
 }
 

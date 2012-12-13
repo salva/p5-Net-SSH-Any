@@ -7,6 +7,8 @@ use warnings;
 use Carp;
 use File::Spec;
 
+use Devel::Peek;
+
 require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw($debug _debug _debugf _debug_dump _debug_hexdump
@@ -18,7 +20,9 @@ our $debug ||= 0;
 
 sub _debug {
     local ($@, $!, $_);
-    print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n"
+    print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n";
+    print STDERR join('', 'cp# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n");
+    #Dump \*STDERR;
 }
 
 sub _debugf {
@@ -37,15 +41,21 @@ sub _debug_dump {
 sub _debug_hexdump {
     no warnings qw(uninitialized);
     my $head = shift;
-    _debug("$head:");
 
-    my $data = shift;
-    while ($data =~ /(.{1,32})/smg) {
-        my $line=$1;
-        my @c= (( map { sprintf "%02x",$_ } unpack('C*', $line)),
-                (("  ") x 32))[0..31];
-        $line=~s/(.)/ my $c=$1; unpack("c",$c)>=32 ? $c : '.' /egms;
-        print STDERR "#> ", join(" ", @c, '|', $line), "\n";
+    _debugf("%s (%d bytes):", $head, length($_[0]));
+    if ($debug & 16384) {
+	my $data = shift;
+	while ($data =~ /(.{1,32})/smg) {
+	    my $line = $1;
+	    my @c= (( map { sprintf "%02x",$_ } unpack('C*', $line)),
+		    (("  ") x 32))[0..31];
+	    $line=~s/(.)/ my $c=$1; unpack("c",$c)>=32 ? $c : '.' /egms;
+	    print STDERR "#> ", join(" ", @c, '|', $line), "\n";
+	    if (!($debug & 32768) and $data =~ /(=?.)/csmg) {
+		print STDERR "#> ...\n";
+		last;
+	    }
+	}
     }
 }
 

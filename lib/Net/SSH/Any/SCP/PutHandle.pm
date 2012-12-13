@@ -14,4 +14,6 @@ sub on_send_data {}
 
 sub on_end_of_file {}
 
+sub on_end_of_put {}
+
 1;
