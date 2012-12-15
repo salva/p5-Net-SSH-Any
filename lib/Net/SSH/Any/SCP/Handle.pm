@@ -10,10 +10,14 @@ sub _new {
     my ($class, $any, $opts, $files) = @_;
 
     my $h = { any        => $any,
-              action_log => _first_defined(delete($opts->{action_log}), []),
+              action_log => _first_defined(delete($opts->{action_log})),
 	      wanted     => _gen_wanted(delete @{$opts}{qw(wanted not_wanted)}),
     };
     bless $h, $class;
+}
+
+sub open_dir {
+    my $h, $dir, $perm, $size;
 }
 
 sub set_local_error {
@@ -21,6 +25,8 @@ sub set_local_error {
     $h->{action_log}[-1]{error} = $h->{last_error} = (defined $error ? $error : $!);
     $h->{errors}++;
 }
+
+
 
 sub check_wanted {
     my $h = shift;

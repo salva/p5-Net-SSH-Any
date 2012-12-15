@@ -14,9 +14,9 @@ our @ISA = qw(Tie::Handle);
 
 sub _make {
     my $class = shift;
-    my $handle = gensym;
+    my $handle = Symbol::gensym();
     tie *$handle, $class, @_;
-    bless $handle, Net::SSH::Any::Pipe::Tie, $handle;
+    bless $handle, 'Net::SSH::Any::Pipe::Tie';
     $handle;
 }
 
@@ -203,10 +203,12 @@ package Net::SSH::Any::Pipe::Tie;
 sub AUTOLOAD {
     our $AUTOLOAD;
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
-    my $sub = sub { tied(shift)->$name(@_) };
+    my $sub = sub { tied(*{shift()})->$name(@_) };
     no strict 'refs';
     *{$AUTOLOAD} = $sub;
     goto &$sub;
 }
+
+sub DESTROY {}
 
 1;

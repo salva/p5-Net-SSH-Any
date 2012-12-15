@@ -7,8 +7,6 @@ use warnings;
 use Carp;
 use File::Spec;
 
-use Devel::Peek;
-
 require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw($debug _debug _debugf _debug_dump _debug_hexdump
@@ -21,8 +19,6 @@ our $debug ||= 0;
 sub _debug {
     local ($@, $!, $_);
     print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n";
-    print STDERR join('', 'cp# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n");
-    #Dump \*STDERR;
 }
 
 sub _debugf {
