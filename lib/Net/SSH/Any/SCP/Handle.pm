@@ -16,8 +16,8 @@ sub _new {
     bless $h, $class;
 }
 
-sub open_dir {
-    my $h, $dir, $perm, $size;
+sub _open_dir {
+    my ($h, $perm, $size, $name) = @_;
 }
 
 sub set_local_error {

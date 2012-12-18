@@ -12,7 +12,8 @@ our @ISA = qw(Exporter);
 our @EXPORT = qw($debug _debug _debugf _debug_dump _debug_hexdump
                  _sub_options _croak_bad_options
                  _first_defined _array_or_scalar_to_list
-                 _inc_numbered _gen_wanted);
+                 _inc_numbered _gen_wanted
+                 _scp_escape_name _scp_unescape_name);
 
 our $debug ||= 0;
 
@@ -102,6 +103,17 @@ sub _gen_wanted {
     return $w if defined $w;
     return sub { not &$nw } if defined $nw;
     undef;
+}
+
+sub _scp_unescape_name {
+    s/\\\\|\\\^([@-Z])/$1 ? chr(ord($1) - 64) : '\\'/ge for @_;
+}
+
+sub _scp_escape_name {
+    for (@_) {
+        s/\\/\\\\/;
+        s/([\x00-\x1f])/'\\^' . chr(64 + ord($1))/ge;
+    }
 }
 
 # sub _mkpath {

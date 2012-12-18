@@ -6,127 +6,22 @@ use warnings;
 use Carp;
 
 use Net::SSH::Any::Constants qw(SSHA_SCP_ERROR SSHA_REMOTE_CMD_ERROR);
-use Net::SSH::Any::Util qw($debug _debug _debug_hexdump
+use Net::SSH::Any::Util qw($debug _debug _debugf _debug_hexdump
                            _first_defined _inc_numbered _gen_wanted
                            _scp_escape_name _scp_unescape_name);
 
-sub _or_set_error { shift->{any}->_or_set_error(@_) }
+require Net::SSH::Any::SCP::Base;
+our @ISA = qw(Net::SSH::Any::SCP::Base);
 
 sub _new {
     my ($class, $any, $opts, @srcs) = @_;
-    my $g = { any          => $any,
-              recursive    => delete($opts->{recursive}),
-              glob         => delete($opts->{glob}),
-              log          => delete($opts->{log}),
-              # on_start   => ...
-              # on_end     => ... or enter/leave or whatever
-              scp_cmd      => _first_defined(delete($opts->{remote_scp_cmd}), $any->{remote_cmd}{scp}, 'scp'),
-              double_dash  => _first_defined(delete($opts->{double_dash}), 1),
-              request_time => delete($opts->{request_time}),
-
-              wanted       => _gen_wanted(delete ${$opts}{qw(wanted not_wanted)}),
-              srcs         => \@srcs,
-              actions      => [],
-              error_count  => 0,
-              aborted      => undef,
-              last_error   => undef,
-            };
-    bless $g, $class;
+    my $g = $class->SUPER::_new($any, $opts);
+    $g->{srcs} = \@srcs,
+    $g->{$_} = delete $opts->{$_} for qw(recursive glob request_time);
+    # TODO:
+    # on_start = ...
+    # on_end   = ... or enter/leave or whatever
     $g;
-}
-
-sub _read_line {
-    my $g = shift;
-    my $pipe = shift;
-    $debug and $debug & 4096 and _debug("$g->_read_line($pipe)...");
-    for ($_[0]) {
-        $_ = '';
-        $pipe->sysread($_, 1) or return;
-        if ($_ ne "\x00") {
-            while (1) {
-                $pipe->sysread($_, 1, length $_) or goto error;
-                last if /\x0A$/;
-            }
-        }
-        $debug and $debug & 4096 and _debug_hexdump("line read", $_);
-        return length $_;
-    }
- error:
-    $g->_or_set_error(SSHA_SCP_ERROR, 'broken pipe');
-    return;
-}
-
-sub _read_response {
-    my ($g, $pipe) = @_;
-    if ($g->_read_line($pipe, my $buf)) {
-	$buf eq "\x00" and return 0;
-	$buf =~ /^([\x01\x02])(.*)$/ and return(wantarray ? (ord($1), $2) : ord($1));
-	$debug and $debug & 4096 and _debug_hexdump "failed to read response", $buf;
-        $g->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
-    }
-    else {
-        $g->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
-    }
-    wantarray ? (2, $g->{any}->error) : 2
-}
-
-sub _push_action {
-    my ($g, %a) = @_;
-    push @{$g->{actions}}, \%a;
-    unless (defined $a{path}) {
-        # We don't use File::Spec here because we didn't know what
-        # the remote file system path separator may be.
-        # TODO: allow to change how paths are joined from some setting.
-        $a{path} = ( $a{name} =~ m|/|
-                     ? $a{name}
-                     : join('/', map $_->{name}, @{$g->{actions}}) );
-    }
-    defined $g->{$_} and $a{$_} = $g->{$_} for qw(mtime atime);
-    push @{$g->{log}}, \%a if $g->{log};
-    \%a;
-}
-
-sub _set_error {
-    my ($g, $action, $origin, $error) = @_;
-    $action->{error} = $error;
-    $action->{error_origin} = $origin;
-    $g->{error_count}++;
-}
-
-sub set_local_error {
-    my ($g, $action, $error) = @_;
-    $error = $! unless defined $error;
-    $g->{last_error} = $error;
-    $g->_set_error($action, 'local', $error);
-}
-
-sub last_error {
-    my $g = shift;
-    my $error = $g->{last_error};
-    (defined $error ? $error : 'unknown error')
-}
-
-sub abort {
-    my $g = shift;
-    $g->{aborted} = 1;
-}
-
-sub set_remote_error {
-    my ($g, $action, $error) = @_;
-    $g->_set_error($action, 'remote', $error);
-}
-
-sub _check_wanted {
-    my ($g, $action) = @_;
-    if (my $wanted = $g->{wanted}) {
-	unless ($wanted->($action)) {
-	    $debug and $debug & 4096 and
-		_debugf("%s->set_not_wanted, %s", $g, $action->{path});
-	    $action->{not_wanted} = 1;
-	    return;
-	}
-    }
-    1;
 }
 
 sub on_open {
@@ -215,7 +110,7 @@ sub run {
     my $any = $g->{any};
 
     my @cmd   = $any->_quote_args({quote_args => 1},
-                                  'strace', '-o', '/tmp/out',
+                                  # 'strace', '-o', '/tmp/out',
                                   $g->{scp_cmd},
                                   '-f',
                                   ($g->{request_time} ? '-p' : ()),
