@@ -75,6 +75,20 @@ sub _push_action {
     \%a;
 }
 
+sub _pop_action {
+    my ($g, $type, $may_be_undef) = @_;
+    my $action = pop @{$g->{actions}};
+    unless ($action) {
+        $may_be_undef and return;
+        croak "internal error: _pop_action called but action stack is empty!";
+    }
+    if (defined $type) {
+        $action->{type} eq $type or
+            croak "internal error: $type action expected at top of the queue but $action->{type} found";
+    }
+    $action
+}
+
 sub _set_error {
     my ($self, $action, $origin, $error) = @_;
     $action->{error} = $error;
@@ -97,6 +111,7 @@ sub last_error {
 
 sub abort {
     my $self = shift;
+    $self->_or_set_error(SSHA_SCP_ERROR, @_) if @_;
     $self->{aborted} = 1;
 }
 

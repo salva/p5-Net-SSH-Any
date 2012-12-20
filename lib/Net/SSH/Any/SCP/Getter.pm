@@ -31,17 +31,6 @@ sub on_open {
 
 sub on_open_before_wanted { 1 }
 
-sub _pop_action {
-    my ($g, $type) = @_;
-    my $action = pop @{$g->{actions}} or
-        croak "internal error: _pop_action called but action stack is empty!";
-    if (defined $type) {
-        $action->{type} eq $type or
-            croak "internal error: $type action expected at top of the queue but $action->{type} found";
-    }
-    $action
-}
-
 sub _open {
     my ($g, $type, $perm, $size, $name) = @_;
     my $action = $g->_push_action(type => $type,
@@ -57,12 +46,6 @@ sub _open {
     return;
 }
 
-sub _close_dir {
-    my ($g, $failed, $error) = @_;
-    my $action = $g->_pop_action('dir');
-    $g->on_close_dir($action);
-}
-
 sub on_close {
     my $g = shift;
     my $method = "on_close_$_[0]{type}";
@@ -70,8 +53,7 @@ sub on_close {
 }
 
 sub _close {
-    my ($g, $type, $failed, $error) = @_;
-    my $action = $g->_pop_action($type);
+    my ($action, $failed, $error) = @_;
     $g->_set_remote_error($action, $error) if $failed;
     $g->on_close($action, $failed);
 }
@@ -96,10 +78,8 @@ sub _remote_error {
 
 sub _clean_actions {
     my $g = shift;
-    while (@{$g->{actions}}) {
-        my $type = $g->{actions}[-1]{type};
-        my $method = "_close_$type";
-        $g->$method(1, "broken pipe");
+    while (my $action = $g->_pop_action(undef, 1)) {
+        $g->_close($action, 2, "broken pipe");
     }
 }
 
@@ -148,7 +128,7 @@ sub run {
 			my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
 			unless ($read) {
 			    $g->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
-			    $g->_close(file => 2, "broken pipe");
+			    $g->_close($g->_pop_action('file'), 2, "broken pipe");
 			    $debug and $debug & 4096 and _debug "read failed: " . $any->error;
 			    last;
 			}
@@ -156,7 +136,7 @@ sub run {
 			$size -= $read;
 		    }
 		    my ($error_level, $error_msg) = $g->_read_response($pipe);
-		    $ok = $g->_close(file => $error_level, $error_msg);
+		    $ok = $g->_close($g->_pop_action('file'), $error_level, $error_msg);
 		    last if $error_level == 2;
 		}
             }
@@ -174,7 +154,7 @@ sub run {
             $ok = $g->_matime($mtime, $atime);
         }
         elsif ($buf =~ /^E$/) {
-            $ok = $g->_close('dir');
+            $ok = $g->_close($g->_pop_action('dir'));
         }
         elsif (my ($error_level, $path, $error_msg) = $buf =~ /^([\x01\x02])scp:(?:\s(.*))?:\s*(.*)$/) {
 	    _scp_unescape_name($path) if defined $path;
