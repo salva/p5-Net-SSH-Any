@@ -2,6 +2,7 @@ package Net::SSH::Any::SCP::Base;
 
 use strict;
 use warnings;
+use Carp;
 
 use Net::SSH::Any::Constants qw(SSHA_SCP_ERROR);
 use Net::SSH::Any::Util qw($debug _debug _debugf _debug_hexdump
@@ -91,9 +92,12 @@ sub _pop_action {
 
 sub _set_error {
     my ($self, $action, $origin, $error) = @_;
-    $action->{error} = $error;
-    $action->{error_origin} = $origin;
-    $self->{error_count}++;
+    unless (defined ($action->{error})) {
+        $action->{error} = $error;
+        $action->{error_origin} = $origin;
+        $self->{error_count}++;
+    }
+    return
 }
 
 sub set_local_error {

@@ -23,10 +23,10 @@ sub scp_get {
 sub scp_put {
     my $any = shift;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    require Net::SSH::Any::SCP::PutHandle::DiskLoader;
-    my $h = Net::SSH::Any::SCP::PutHandle::DiskLoader->new($any, \%opts, \@_)
+    require Net::SSH::Any::SCP::Putter::Standard;
+    my $p = Net::SSH::Any::SCP::Putter::Standard->_new($any, \%opts, @_)
 	or return;
-    $any->scp_put_with_handler(\%opts, $h, @_);
+    $p->run(\%opts);
 }
 
 1;
