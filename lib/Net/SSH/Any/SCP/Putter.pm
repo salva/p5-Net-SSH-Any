@@ -19,7 +19,6 @@ sub _new {
     my $p = $class->SUPER::_new($any, $opts);
     $p->{target} = $target;
     $p->{recursive} = delete $opts->{recursive};
-    $p->{target_is_dir} = delete $opts->{target_is_dir};
     $p->{send_time} = delete $opts->{send_time};
     $p;
 }
@@ -171,10 +170,9 @@ sub run {
                           # 'strace', '-fo', '/tmp/scp.strace',
                           $p->{scp_cmd},
                           '-t',
-                          ($p->{send_time}     ? '-p' : ()),
-			  ($p->{target_is_dir} ? '-d' : ()),
-			  ($p->{recursive}     ? '-r' : ()),
-                          ($p->{double_dash}   ? '--' : ()),
+                          ($p->{send_time}   ? '-p' : ()),
+			  ($p->{recursive}   ? '-r' : ()),
+                          ($p->{double_dash} ? '--' : ()),
                           $p->{target} );
     $any->error and return;
 
@@ -185,6 +183,7 @@ sub run {
 	$any->_or_set_error(SSHA_SCP_ERROR, "remote SCP refused transfer", $error_msg);
 	return;
     }
+
  OUT: while (not $p->{aborted}) {
         my $line;
         my $current_dir_action = $p->{actions}[-1];

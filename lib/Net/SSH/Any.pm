@@ -427,22 +427,29 @@ sub _load_module {
     return;
 }
 
+sub _scp_delegate {
+    my $any = shift;
+    my $class = shift;
+    $any->_load_module($class) or return;
+    my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
+    my $obj = $class->_new($any, \%opts, @_) or return;
+    $obj->run(\%opts);
+}
+
+sub scp_get   { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
+sub scp_mkdir { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
+sub scp_put   { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
+
 # transparently delegate method calls to backend packages:
 sub AUTOLOAD {
     our $AUTOLOAD;
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
     no strict 'refs';
-    if ($name =~ /^scp_(?:get|put)$/) {
-        $_[0]->_load_module('Net::SSH::Any::SCP') or return;
-        goto &{$AUTOLOAD};
-    }
-    else {
-        my $sub = sub {
-            goto &{"$_[0]->{backend_module}::$name"}
-        };
-        *{$AUTOLOAD} = $sub;
-        goto &$sub;
-    }
+    my $sub = sub {
+        goto &{"$_[0]->{backend_module}::$name"}
+    };
+    *{$AUTOLOAD} = $sub;
+    goto &$sub;
 }
 
 sub DESTROY {

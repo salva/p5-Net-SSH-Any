@@ -3,6 +3,7 @@ package Net::SSH::Any::SCP::Base;
 use strict;
 use warnings;
 use Carp;
+our @CARP_NOT = qw(Net::SSH::Any);
 
 use Net::SSH::Any::Constants qw(SSHA_SCP_ERROR);
 use Net::SSH::Any::Util qw($debug _debug _debugf _debug_hexdump
