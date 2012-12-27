@@ -29,8 +29,6 @@ sub on_open {
     shift->$method(@_)
 }
 
-sub on_open_before_wanted { 1 }
-
 sub _open {
     my ($g, $type, $perm, $size, $name) = @_;
     my $action = $g->_push_action(type => $type,
@@ -53,7 +51,7 @@ sub on_close {
 }
 
 sub _close {
-    my ($action, $failed, $error) = @_;
+    my ($g, $action, $failed, $error) = @_;
     $g->_set_remote_error($action, $error) if $failed;
     $g->on_close($action, $failed);
 }
@@ -83,7 +81,12 @@ sub _clean_actions {
     }
 }
 
-sub on_end_of_get { 1 }
+sub on_open_before_wanted { 1 }
+sub on_open_file          { 1 }
+sub on_open_dir           { 1 }
+sub on_close_file         { 1 }
+sub on_close_dir          { 1 }
+sub on_end_of_get         { 1 }
 
 sub run {
     my ($g, $opts) = @_;

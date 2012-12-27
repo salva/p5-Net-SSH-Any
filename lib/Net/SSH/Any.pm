@@ -436,9 +436,10 @@ sub _scp_delegate {
     $obj->run(\%opts);
 }
 
-sub scp_get   { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
-sub scp_mkdir { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
-sub scp_put   { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
+sub scp_get         { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
+sub scp_get_content { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
+sub scp_mkdir       { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
+sub scp_put         { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
 
 # transparently delegate method calls to backend packages:
 sub AUTOLOAD {
