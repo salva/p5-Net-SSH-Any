@@ -485,12 +485,12 @@ Net::SSH::Any - Use any SSH module
 
 =head1 DESCRIPTION
 
-  *******************************************************************
-  ***                                                             ***
-  *** NOTE: This is a very early release that may contain lots of ***
-  *** bugs. The API is not stable and may change between releases ***
-  ***                                                             ***
-  *******************************************************************
+  **************************************************************
+  ***                                                        ***
+  *** NOTE: This is an early release that may contain bugs.  ***
+  *** The API is not stable and may change between releases. ***
+  ***                                                        ***
+  **************************************************************
 
 Currently, there are several SSH client modules available from CPAN,
 but no one can be used on all the situations.
@@ -509,6 +509,376 @@ binary and maybe another one for L<Net::SSH::Perl>.
 
 The API is mostly a subset of the one from L<Net::OpenSSH>, though
 there are some minor deviations in some methods.
+
+=head1 API
+
+=head2 Optional parameters
+
+Almost all methods in this package accept as first argument a
+reference to a hash containing optional parameters. In example:
+
+  $ssh->scp_get({recursive => 1}, $remote_src, $local_target);
+
+The hash reference can be omitted when optional parameters are not
+required. In example:
+
+  @out = $ssh->capture("ls ~/");
+
+=head2 Error handling
+
+Most methods return undef or an empty list to indicate
+failure. Exceptions to this rule are the constructor, which always
+returns and object, and those methods able to generate partial results
+as for instance <c>capture</c> or <c>scp_get_content</c>.
+
+The L</error> method can always be used to explicitly check for
+errors. For instance:
+
+  my $out = $ssh->capture($cmd);
+  $ssh->error and die "capture method failed: " . $ssh->error;
+
+=head2 Shell quoting
+
+By default when calling remote commands, this module tries to mimic
+perl C<system> builtin in regard to argument processing.
+
+When calling some method as, for instance, <c>capture</c>:
+
+   $out = $ssh->capture($cmd)
+
+The command line in C<$cmd> is first processed by the remote shell
+honoring shell metacharacters, redirections, etc.
+
+If more than one argument is passed, as in the following example:
+
+   $out = $ssh->capture($cmd, $arg1, $arg2)
+
+The module will escape any shell metacharacter so that effectively the
+remote call is equivalent to executing the remote command without going
+through a shell (the SSH protocol does not allow to do that directly).
+
+All the methods that invoke a remote command (system, capture, etc.)
+accept the option C<quote_args> that allows one to force/disable shell
+quoting.
+
+For instance, spaces in the command path will be correctly handled in
+the following case:
+
+  $ssh->system({quote_args => 1}, "/path with spaces/bin/foo");
+
+Deactivating quoting when passing multiple arguments can also be
+useful, for instance:
+
+  $ssh->system({quote_args => 0}, 'ls', '-l', "/tmp/files_*.dat");
+
+When the C<glob> option is set in SCP file transfer methods, it is
+used an alternative quoting mechanism which leaves file wildcards
+unquoted.
+
+Another way to selectively use quote globing or fully disable quoting
+for some specific arguments is to pass them as scalar references or
+double scalar references respectively. In practice, that means
+prepending them with one or two backslashes. For instance:
+
+  # quote the last argument for globing:
+  $ssh->system('ls', '-l', \'/tmp/my files/filed_*dat');
+
+  # append a redirection to the remote command
+  $ssh->system('ls', '-lR', \\'>/tmp/ls-lR.txt');
+
+  # expand remote shell variables and glob in the same command:
+  $ssh->system('tar', 'czf', \\'$HOME/out.tgz', \'/var/log/server.*.log');
+
+The current shell quoting implementation expects a shell compatible
+with Unix C<sh> in the remote side. It will not work as expected if
+for instance, the remote machine runs Windows, VMS or if it is a
+router exposing an ad-hoc shell.
+
+As a workaround, do any required quoting yourself and pass the quoted
+command as a string so that no further quoting is performed. For
+instance:
+
+  # for VMS
+  $ssh->system('DIR/SIZE NFOO::USERS:[JSMITH.DOCS]*.TXT;0');
+
+
+=head2 Net::SSH::Any methods
+
+These are the methods available from the module:
+
+=over 4
+
+=item $ssh = Net::SSH::Any->new($target, %opts)
+
+This method creates a new Net::SSH::Any object representing a SSH
+connection to the remote machine as described by C<$target>.
+
+C<$target> has to follow the pattern
+<c>user:password@hostname:port</c> where all parts but hostname are
+optional. For instance, the following constructor calls are all
+equivalent:
+
+   Net::SSH::Any->new('hberlioz:f#nta$71k6@harpe.cnsmdp.fr:22');
+   Net::SSH::Any->new('hberlioz@harpe.cnsmdp.fr',
+                      password => 'f#nta$71k6', port => 22);
+   Net::SSH::Any->new('harpe.cnsmdp.fr',
+                      user => 'hberlioz', password => 'f#nta$71k6');
+
+=over 4
+
+=item user => $user_name
+
+Login name
+
+=item port => $port
+
+TCP port number where the remote server is listening.
+
+=item password => $password
+
+Password for user authentication.
+
+=item key_path => $key_path
+
+Path to file containing the private key to be used for
+user authentication.
+
+Some backends (i.e. Net::SSH2), require the pulic key to be
+stored in a file of the same name with C<.pub> appended.
+
+=item passphrase => $passphrase
+
+Passphrase to be used to unlock the private key.
+
+=item timeout => $seconds
+
+Default timeout.
+
+=item argument_encoding => $encoding
+
+The encoding used for the commands and arguments sent to the remote stream.
+
+=item stream_encoding => $encoding
+
+On operation interchanging data between perl and the remote commands
+(as oposed to operations redirecting the remote commands output to the
+file system) the encoding to be used.
+
+=item encoding => $encoding
+
+This option is equivalent to setting C<argument_encoding> and
+C<stream_encoding>.
+
+=item remote_*_cmd => $remote_cmd_path
+
+Some operations (i.e. SCP operations) execute a remote
+command implicitly. By default the corresponding standard command
+without any path is invoked (i.e C<scp>).
+
+If any other command is preferred, it can be requested through these
+set of options. For instance:
+
+   $ssh = Net::SSH::Any->new($target,
+                             remote_scp_cmd => '/usr/local/bin/scp',
+                             remote_tar_cmd => '/usr/local/bin/gtar');
+
+=item backends => \@preferred_backends
+
+List of preferred backends to be tried.
+
+=item backend_opts => \%backend_opts
+
+Options specific for the backends.
+
+=back
+
+=item $ssh->error
+
+This method returns the error, if any, from the last method.
+
+=item $ssh->system(\%opts, @cmd)
+
+Runs a command on the remote machine redirecting the stdout and stderr
+streams to STDOUT and STDERR respectively.
+
+Note than STDIN is not forwarded to the remote command.
+
+The set of options accepted by this method is as follows:
+
+=over 4
+
+=item timeout => $seconds
+
+If there is not any network traffic over the given number of seconds,
+the command is aborted.
+
+=item stdin_data => $data
+
+=item stdin_data => \@data
+
+The given data is sent as the remote command stdin stream.
+
+=item stdout_fh => $fh
+
+The remote stdout stream is redirected to the given file handle.
+
+=item stdout_file => $filename
+
+The remote stdout stream is saved to the given file.
+
+=item stdout_discard => $bool
+
+The remote stdout stream is discarded.
+
+=item stderr_to_stdout => $bool
+
+The remote stderr stream is mixed into the stdout stream.
+
+=item stderr_fh => $fh
+
+The remote stderr stream is redirected to the given file handle.
+
+=item stderr_file => $filename
+
+The remote stderr stream is saved on the given file.
+
+=item stderr_discard => $bool
+
+The remote stderr stream is discarded.
+
+=back
+
+=item $output = $ssh->capture(\%opts, @cmd)
+
+=item @output = $ssh->capture(\%opts, @cmd)
+
+The given command is executed on the remote machine and the output
+captured and returned.
+
+When called in list context this method returns the output split in
+lines.
+
+In case of error the partial output is returned. The C<error> method
+should be used to check that no error hapenned even when output has
+been returned.
+
+The set of options accepted by this method is as follows:
+
+=over 4
+
+=item timeout => $seconds
+
+Remote command timeout.
+
+=item stdin_data => $data
+
+=item stdin_data => \@data
+
+Data to be sent through the remote command stdin stream.
+
+=item stderr_to_stdout => $bool
+
+The remote stderr stream is redirected to the stdout stream (and then
+captured).
+
+=item stderr_discard => $bool
+
+Remote stderr is discarded.
+
+=item stderr_fh => $fh
+
+Redirect remote stderr stream to the given file handle.
+
+=item stderr_file => $filename
+
+Save the remote stderr stream to the given file.
+
+=back
+
+=item ($stdout, $stderr) = $ssh->capture2(\%opts, @cmd)
+
+Captures both the stdout and stderr streams from the remote command
+and returns them.
+
+=over 4
+
+=item timeout => $seconds
+
+=item stdin_data => $data
+
+=item stdin_data => \@data
+
+=back
+
+=item $pipe = $ssh->pipe(\%opts, @cmd)
+
+=over 4
+
+=item stderr_to_stdout => $bool
+
+=item stderr_discard => $bool
+
+=back
+
+=item $ssh->scp_get(\%opts, @srcs, $target)
+
+=over
+
+=item glob => $bool
+
+=item recursive => $bool
+
+=item copy_attr => $bool
+
+=item copy_perm => $bool
+
+=item copy_time => $bool
+
+=item update => $bool
+
+=item numbered => $bool
+
+=item overwrite => $bool
+
+=back
+
+=item $ssh->scp_put(\%opts, @srcs, $target)
+
+=over 4
+
+=item glob => $bool
+
+=item recursive => $bool
+
+=item copy_attr => $bool
+
+=item follow_links => 0
+
+=back
+
+=item $data = $ssh->scp_get_content(\%opts, @srcs)
+
+=over 4
+
+=item glob => $bool
+
+=item recursive => $bool
+
+=back
+
+=item $ssh->scp_mkdir(\%opts, $dir)
+
+=item $sftp = $ssh->sftp(%opts);
+
+=over
+
+=item fs_encoding => $encoding
+
+=item timeout => $seconds
+
+=back
+
+=back
 
 =head1 SEE ALSO
 
