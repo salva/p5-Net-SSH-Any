@@ -1,18 +1,35 @@
-# Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl Net-SSH-Any.t'
-
-#########################
-
-# change 'tests => 1' to 'tests => last_test_to_print';
+#!/usr/bin/perl
 
 use strict;
 use warnings;
 
-use Test::More tests => 1;
-BEGIN { use_ok('Net::SSH::Any') };
+use Test::More;
 
-#########################
+my $sshd = eval {
+    require Test::SSH;
+    Test::SSH->new(run_server => ($ENV{AUTHOR_TESTING} || $ENV{AUTOMATED_TESTING}));
+};
 
-# Insert your test code below, the Test::More module is use()ed here so read
-# its man page ( perldoc Test::More ) for help writing this test script.
+if (!$sshd) {
+    plan skip_all => 'Test::SSH is not installed or the module was not able to find a SSH server';
+    exit(0);
+}
+
+plan tests => 2;
+use_ok('Net::SSH::Any');
+my $ssh = Net::SSH::Any->new($sshd->connection_params);
+ok($ssh, "connects ok");
+
+my $out = $ssh->capture("uname -a");
+if ($? == 0) {
+    diag "remote system runs unix";
+}
+else {
+    $out = $ssh->capture('cmd /c ver');
+    if ($? == 0) {
+        diag "remote system runs windows";
+    }
+}
+
+
 
