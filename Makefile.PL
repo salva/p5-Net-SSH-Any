@@ -5,7 +5,7 @@ use 5.008;
 
 use ExtUtils::MakeMaker;
 
-my %prereq_pm = ($ENV{AUTHOR_TESTING} ? 'Test::SSH' => '0.03' : ());
+my %prereq_pm = ($ENV{AUTHOR_TESTING} ? ('Test::SSH' => '0.03') : ());
 
 WriteMakefile( NAME          => 'Net::SSH::Any',
                VERSION_FROM  => 'lib/Net/SSH/Any.pm',

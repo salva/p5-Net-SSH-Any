@@ -53,7 +53,8 @@ sub _connect {
     my @args = ($any->{host}, $any->{port} || 22);
     push @args, Timeout => $any->{timeout} if defined $any->{timeout};
     $ssh2->connect(@args) or
-        return __copy_error($any, SSHA_CONNECTION_ERROR);
+        # return __copy_error($any, SSHA_CONNECTION_ERROR); # Net::SSH2::connect does not set error
+        return $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to connect to remote host");
 
     my %aa;
     $aa{username} = _first_defined($any->{user},
