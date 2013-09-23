@@ -13,6 +13,20 @@ use Net::SSH2;
 use File::Spec;
 use Errno ();
 
+use Config;
+my %sig_name2num;
+if (defined($Config{sig_name}) {
+    my $i = 0;
+    $sig_name2num{$_} = $i++ for split //, $Config{sig_name};
+}
+
+sub _sig_name2num {
+    my $signal = shift;
+    return 0 unless defined $signal and length $signal;
+    my $num = $sig_name2num{$signal};
+    (defined $num ? $num : 254);
+}
+
 sub _backend_api_version { 1 }
 
 our ($block_inbound, $block_outbound, $eagain);
@@ -249,7 +263,7 @@ sub __io3 {
     $channel->wait_closed;
 
     my $code = $channel->exit_status || 0;
-    my $signal = $channel->exit_signal || 0;
+    my $signal = _sig_name2num($channel->exit_signal) || 0;
 
     $channel->close or __copy_error($any, SSHA_CONNECTION_ERROR);
 
