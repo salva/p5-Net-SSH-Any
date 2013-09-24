@@ -357,13 +357,13 @@ sub capture {
     my $stream_encoding = $any->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
-    my $out = $any->_capture(\%opts, $cmd);
+    my ($out) = $any->_capture(\%opts, $cmd) or return;
     if ($stream_encoding) {
-        $any->_decode_data($stream_encoding => $out) or return;
+	$any->_decode_data($stream_encoding => $out) or return;
     }
     if (wantarray) {
-        my $pattern = quotemeta $/;
-        return split /(?<=$pattern)/, $out;
+	my $pattern = quotemeta $/;
+	return split /(?<=$pattern)/, $out;
     }
     $out
 }
@@ -376,7 +376,7 @@ sub capture2 {
     my $stream_encoding = $any->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
-    my ($out, $err) = $any->_capture2(\%opts, $cmd);
+    my ($out, $err) = $any->_capture2(\%opts, $cmd) or return;
     if ($stream_encoding) {
         $any->_decode_data($stream_encoding => $out) or return;
         $any->_decode_data($stream_encoding => $err) or return;

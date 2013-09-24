@@ -133,33 +133,42 @@ sub __parse_fh_opts {
     return @fh;
 }
 
-sub _system {
+sub __open_channel_and_exec {
     my ($any, $opts, $cmd) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
-    my $channel = $ssh2->channel;
-    my ($out_fh, $err_fh) = __parse_fh_opts($any, $opts, $channel) or return;
-    $channel->exec($cmd);
-    __io3($any, $ssh2, $channel, $opts->{timeout},
+    if (my $channel = $ssh2->channel) {
+	my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
+	if ($channel->process((defined $cmd and length $cmd) 
+			      ? ('exec' => $cmd)
+			      : 'shell')) {
+	    return ($channel, @fhs);
+	}
+    }
+    __copy_error($any, SSHA_CHANNEL_ERROR);
+    return;
+}
+
+sub _system {
+    my ($any, $opts, $cmd) = @_;
+    my ($channel, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
+    __io3($any, $channel, $opts->{timeout},
 	  $opts->{stdin_data}, $out_fh || \*STDOUT, $err_fh || \*STDERR);
 }
 
 sub _capture {
     my ($any, $opts, $cmd) = @_;
-    my $ssh2 = $any->{be_ssh2} or return;
-    my $channel = $ssh2->channel;
-    my ($out_fh, $err_fh) = __parse_fh_opts($any, $opts, $channel) or return;
-    $out_fh and die 'Internal error: $out_fh is not undef';
-    $channel->exec($cmd);
-    (__io3($any, $ssh2, $channel, $opts->{timeout},
+    my ($channel, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
+    die 'Internal error: $out_fh is not undef' if $out_fh;
+    (__io3($any, $channel, $opts->{timeout},
 	   $opts->{stdin_data}, undef, $err_fh || \*STDERR))[0];
 }
 
 sub _capture2 {
     my ($any, $opts, $cmd) = @_;
-    my $ssh2 = $any->{be_ssh2} or return;
-    my $channel = $ssh2->channel;
-    $channel->exec($cmd);
-    __io3($any, $ssh2, $channel, $opts->{timeout}, $opts->{stdin_data});
+    my ($channel, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
+    die 'Internal error: $out_fh is not undef' if $out_fh;
+    die 'Internal error: $err_fh is not undef' if $err_fh;
+    __io3($any, $channel, $opts->{timeout}, $opts->{stdin_data});
 }
 
 sub __write_all {
@@ -206,7 +215,8 @@ sub _wait_for_more_data {
 }
 
 sub __io3 {
-    my ($any, $ssh2, $channel, $timeout, $stdin_data, @fh) = @_;
+    my ($any, $channel, $timeout, $stdin_data, @fh) = @_;
+    my $ssh2 = $any->{be_ssh2} or return;
     $channel->blocking(0);
     my $in = '';
     my @cap = ('', '');
@@ -292,11 +302,8 @@ sub __io3 {
 
 sub _pipe {
     my ($any, $opts, $cmd) = @_;
-    my $ssh2 = $any->{be_ssh2} or return;
-    my $channel = $ssh2->channel;
-    __parse_fh_opts($any, $opts, $channel) or return;
+    my ($channel) = __open_channel_and_exec($any, $opts, $cmd) or return;
     # TODO: do something with the parsed options?
-    $channel->exec($cmd);
     require Net::SSH::Any::Backend::Net_SSH2::Pipe;
     Net::SSH::Any::Backend::Net_SSH2::Pipe->_make($any, $channel);
 }
