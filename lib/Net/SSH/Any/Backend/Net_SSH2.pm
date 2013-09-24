@@ -12,10 +12,11 @@ use Net::SSH::Any::Constants qw(:error);
 use Net::SSH2;
 use File::Spec;
 use Errno ();
+use Time::HiRes ();
 
 use Config;
 my %sig_name2num;
-if (defined($Config{sig_name}) {
+if (defined($Config{sig_name})) {
     my $i = 0;
     $sig_name2num{$_} = $i++ for split //, $Config{sig_name};
 }
@@ -138,7 +139,8 @@ sub _system {
     my $channel = $ssh2->channel;
     my ($out_fh, $err_fh) = __parse_fh_opts($any, $opts, $channel) or return;
     $channel->exec($cmd);
-    __io3($any, $ssh2, $channel, $opts->{stdin_data}, $out_fh || \*STDOUT, $err_fh || \*STDERR);
+    __io3($any, $ssh2, $channel, $opts->{timeout},
+	  $opts->{stdin_data}, $out_fh || \*STDOUT, $err_fh || \*STDERR);
 }
 
 sub _capture {
@@ -148,7 +150,8 @@ sub _capture {
     my ($out_fh, $err_fh) = __parse_fh_opts($any, $opts, $channel) or return;
     $out_fh and die 'Internal error: $out_fh is not undef';
     $channel->exec($cmd);
-    (__io3($any, $ssh2, $channel, $opts->{stdin_data}, undef, $err_fh || \*STDERR))[0];
+    (__io3($any, $ssh2, $channel, $opts->{timeout},
+	   $opts->{stdin_data}, undef, $err_fh || \*STDERR))[0];
 }
 
 sub _capture2 {
@@ -156,7 +159,7 @@ sub _capture2 {
     my $ssh2 = $any->{be_ssh2} or return;
     my $channel = $ssh2->channel;
     $channel->exec($cmd);
-    __io3($any, $ssh2, $channel, $opts->{stdin_data});
+    __io3($any, $ssh2, $channel, $opts->{timeout}, $opts->{stdin_data});
 }
 
 sub __write_all {
@@ -203,11 +206,13 @@ sub _wait_for_more_data {
 }
 
 sub __io3 {
-    my ($any, $ssh2, $channel, $stdin_data, @fh) = @_;
+    my ($any, $ssh2, $channel, $timeout, $stdin_data, @fh) = @_;
     $channel->blocking(0);
     my $in = '';
     my @cap = ('', '');
     my $eof_sent;
+    $timeout = $any->{timeout} unless defined $timeout;
+    my $start;
     while (1) {
         my $delay = 1;
         #$debug and $debug and 1024 and _debug("looping...");
@@ -254,6 +259,20 @@ sub __io3 {
             }
         }
         last if $channel->eof;
+
+	if ($timeout) {
+	    if ($delay) {
+		my $now = Time::HiRes::time();
+		$start ||= $now;
+		if ($now - $start > $timeout) {
+		    $any->_set_error(SSHA_TIMEOUT_ERROR, "command timed out");
+		    last;
+		}
+	    }
+	    else {
+		undef $start;
+	    }
+	}
 
         $any->_wait_for_more_data(0.2) if $delay;
     }
