@@ -1,5 +1,15 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.04  Sep 25, 2013
+        - add support for SCP
+        - handle errors on Net_SSH2 backend when calling channel and
+          exec methods (bug report by mpapec)
+        - infer default remote login name from local one
+        - allow configuration of remote slave commands
+        - add support for timeouts on Net_SSH2 backend
+        - several bugs corrected
+        - better docs
+
 0.03  Nov 19, 2012
         - add support for SFTP via Net::SFTP::Foreign
 
