@@ -13,6 +13,8 @@ use Net::SSH2;
 use File::Spec;
 use Errno ();
 use Time::HiRes ();
+use Socket qw(SO_LINGER SO_KEEPALIVE);
+use IO::Socket::INET;
 
 use Config;
 my %sig_name2num;
@@ -65,11 +67,16 @@ sub _connect {
     }
     $debug and $debug & 2048 and $ssh2->trace(-1);
 
-    my @args = ($any->{host}, $any->{port} || 22);
-    push @args, Timeout => $any->{timeout} if defined $any->{timeout};
-    $ssh2->connect(@args) or
-        # return __copy_error($any, SSHA_CONNECTION_ERROR); # Net::SSH2::connect does not set error
+    my $socket = IO::Socket::INET->new(PeerHost => $any->{host},
+                                       PeerPort => ($any->{port} || 22),
+                                       ($any->{timeout} ? (Timeout => $any->{timeout}) : ()));
+    if ($socket) {
+        $socket->sockopt(SO_LINGER, pack(SS => 0, 0)); # FIXME, copied from Net::SSH2, is really a good idea?
+        $socket->sockopt(SO_KEEPALIVE, 1);
+    }
+    unless ($socket and $ssh2->connect($socket)) {
         return $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to connect to remote host");
+    }
 
     my %aa;
     $aa{username} = _first_defined($any->{user},
