@@ -3,7 +3,7 @@ package Net::SSH::Any::Backend::Net_OpenSSH;
 use strict;
 use warnings;
 
-BEGIN { die "Net::OpenSSH does not work on Windows" if $^O =~ /Win(?:32|64)/ }
+BEGIN { die "Net::OpenSSH does not work on Windows" if $^O =~ /Win32|Win64|Cygwin/i }
 
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
