@@ -330,9 +330,11 @@ sub _delete_stream_encoding_and_encode_input_data {
     my $stream_encoding = $any->_delete_stream_encoding($opts) or return;
     $debug and $debug & 1024 and _debug("stream_encoding: "
                                         . ($stream_encoding ? $stream_encoding : '<undef>') );
-    my @input = grep defined, _array_or_scalar_to_list delete $opts->{stdin_data};
-    $any->_encode_data($stream_encoding => @input) or return;
-    $opts->{stdin_data} = \@input;
+    if (defined(my $data = $opts->{stdin_data})) {
+        my @input = grep defined, _array_or_scalar_to_list $data;
+        $any->_encode_data($stream_encoding => @input) or return;
+        $opts->{stdin_data} = \@input;
+    }
     $stream_encoding
 }
 
@@ -447,7 +449,9 @@ sub AUTOLOAD {
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
     no strict 'refs';
     my $sub = sub {
-        goto &{"$_[0]->{backend_module}::$name"}
+        my $method = $_[0]->{backend_module}->can($name)
+            or croak "method '$name' not defined in backend '$_[0]->{backend_module}";
+        goto &$method;
     };
     *{$AUTOLOAD} = $sub;
     goto &$sub;
