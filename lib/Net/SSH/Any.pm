@@ -606,6 +606,27 @@ instance:
   $ssh->system('DIR/SIZE NFOO::USERS:[JSMITH.DOCS]*.TXT;0');
 
 
+=head2 Timeouts
+
+Several of the methods described below support a C<timeout> argument
+that aborts the remote command when the given time lapses without any
+data arriving via SSH.
+
+In order to stop some remote process when it times out, the ideal
+aproach would be to send appropriate signals through the SSH
+connection. Unfortunatelly, neither Net::SSH2/libssh2, nor
+Net::OpenSSH/OpenSSH ssh support sending arbitrary signals, even if
+the SSH standard provides support for it.
+
+As a less than perfect alternative solution, the module closes the
+stdio streams of the remote process. That would deliver a SIGPIPE on
+the remote process next time it tries to write something.
+
+On the other hand timeouts due to broken connections can be detected
+by other means. For instance, enabling C<SO_KEEPALIVE> on the TCP
+socket, or using the protocol internal keep alive (currently, only
+supported by the Net::OpenSSH backend).
+
 =head2 Net::SSH::Any methods
 
 These are the methods available from the module:
@@ -714,7 +735,7 @@ The set of options accepted by this method is as follows:
 =item timeout => $seconds
 
 If there is not any network traffic over the given number of seconds,
-the command is aborted.
+the command is aborted. See L</Timeouts>.
 
 =item stdin_data => $data
 
