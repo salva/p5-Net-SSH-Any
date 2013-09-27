@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::Net_OpenSSH::Pipe;
+package Net::SSH::Any::Backend::_Cmd::Pipe;
 
 use strict;
 use warnings;
@@ -31,7 +31,7 @@ sub close {
 	undef $ok;
     }
     if (defined $pid) {
-	$any->{be_ssh}->_waitpid($pid) or undef $ok;
+	$any->_waitpid($pid) or undef $ok;
 	delete ${*$socket}{_ssha_be_pid};
     }
     return $ok;

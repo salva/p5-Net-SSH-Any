@@ -86,16 +86,22 @@ sub _pipe {
     my $ssh = __ssh($any) or return undef;
     my ($socket, $pid) = $ssh->open2socket($opts, $cmd);
     __check_error($any) or return;
-    require Net::SSH::Any::Backend::Net_OpenSSH::Pipe;
-    Net::SSH::Any::Backend::Net_OpenSSH::Pipe->_upgrade_socket($socket, $pid, $any);
+    require Net::SSH::Any::Backend::_Cmd::Pipe;
+    Net::SSH::Any::Backend::_Cmd::Pipe->_upgrade_socket($socket, $pid, $any);
 }
 
 sub _sftp {
     my ($any, $opts) = @_;
     my $ssh = __ssh($any) or return undef;
     my $sftp = $ssh->sftp(%$opts);
-    __check_error($ssh);
+    __check_error($any);
     return $sftp;
+}
+
+sub _waitpid {
+    my ($any, $pid) = @_;
+    $any->{be_ssh}->_waitpid($pid);
+    __check_error($any);
 }
 
 1;

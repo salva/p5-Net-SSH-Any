@@ -66,9 +66,10 @@ sub new {
 
     my $backend_opts = delete $opts{backend_opts};
 
-    my %remote_cmd;
+    my (%remote_cmd, %local_cmd);
     for (keys %opts) {
         /^remote_(.*)_cmd$/ and $remote_cmd{$1} = $opts{$_};
+        /^local_(.*)_cmd$/ and $local_cmd{$1} = $opts{$_};
     }
 
     my $any = { host => $host,
@@ -84,6 +85,7 @@ sub new {
                 backend_opts => $backend_opts,
                 error_prefix => [],
                 remote_cmd => \%remote_cmd,
+                local_cmd => \%local_cmd,
                };
     bless $any, $class;
 
@@ -449,8 +451,9 @@ sub AUTOLOAD {
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
     no strict 'refs';
     my $sub = sub {
-        my $method = $_[0]->{backend_module}->can($name)
-            or croak "method '$name' not defined in backend '$_[0]->{backend_module}";
+        my $backend = $_[0]->{backend_module} or return;
+        my $method = $backend->can($name)
+            or croak "method '$name' not defined in backend '$backend'";
         goto &$method;
     };
     *{$AUTOLOAD} = $sub;
