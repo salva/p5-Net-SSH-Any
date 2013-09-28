@@ -17,7 +17,12 @@ sub _backend_api_version { 1 }
 
 sub _connect {
     my $any = shift;
-    my %opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout);
+    my %opts;
+    for (qw(host port user password passphrase key_path timeout)) {
+        if (defined(my $v = $any->{$_})) {
+            $opts{$_} = $v;
+        }
+    }
     $opts{default_stdin_discard} = 1;
     # $opts{default_stdout_discard} = 1;
     # $opts{default_stderr_discard} = 1;

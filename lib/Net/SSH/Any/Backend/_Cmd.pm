@@ -53,6 +53,106 @@ sub __fileno_dup_over {
     undef;
 }
 
+sub _interactive_login {
+    my ($any, $pty, $pid) = @_;
+
+    my $opts = $any->{be_connect_opts};
+    my $user = $opts->{user};
+    my $password = $opts->{password};
+    my $password_prompt = $opts->{password_prompt};
+    my $asks_username_at_login = $opts->{asks_username_at_login};
+    
+    if (defined $password_prompt) {
+        unless (ref $password_prompt eq 'Regexp') {
+            $password_prompt = quotemeta $password_prompt;
+            $password_prompt = qr/$password_prompt\s*$/i;
+        }
+    }
+
+    if ($asks_username_at_login) {
+         croak "ask_username_at_login set but user was not given" unless defined $user;
+         croak "ask_username_at_login set can not be used with a custom password prompt"
+             if defined $password_prompt;
+    }
+
+    local ($ENV{SSH_ASKPASS}, $ENV{SSH_AUTH_SOCK});
+
+    my $rv = '';
+    vec($rv, fileno($pty), 1) = 1;
+    my $buffer = '';
+    my $at = 0;
+    my $password_sent;
+    my $start_time = time;
+    while(1) {
+        if ($any->{_timeout}) {
+            $debug and $debug & 1024 and _debug "checking timeout, max: $any->{_timeout}, ellapsed: " . (time - $start_time);
+            if (time - $start_time > $any->{_timeout}) {
+                $any->_set_error(SSHA_TIMEOUT_ERROR, "timed out while login");
+                __kill_process($pid);
+                return;
+            }
+        }
+
+        if (waitpid($pid, POSIX::WNOHANG()) > 0) {
+            my $err = $? >> 8;
+            $any->_set_error(SSHA_CONNECTION_ERROR, "slave process exited unexpectedly with error code $err");
+            return;
+        }
+
+        $debug and $debug & 1024 and _debug "waiting for data from the pty to become available";
+
+        my $rv1 = $rv;
+        select($rv1, undef, undef, 1) > 0 or next;
+        if (my $bytes = sysread($pty, $buffer, 4096, length $buffer)) {
+            $debug and $debug & 1024 and _debug "$bytes bytes readed from pty";
+
+            if ($buffer =~ /^The authenticity of host/mi or
+                $buffer =~ /^Warning: the \S+ host key for/mi) {
+                $any->_set_error(SSHA_CONNECTION_ERROR,
+                                  "the authenticity of the target host can't be established, " .
+                                  "the remote host public key is probably not present on the " .
+                                  "'~/.ssh/known_hosts' file");
+                __kill_process($pid);
+                return;
+            }
+            if ($password_sent) {
+                $debug and $debug & 1024 and _debug "looking for password ok";
+                last if substr($buffer, $at) =~ /\n$/;
+            }
+            else {
+                $debug and $debug & 1024 and _debug "looking for user/password prompt";
+                my $re = ( defined $password_prompt
+                           ? $password_prompt
+                           : qr/(user|name|login)?[:?]\s*$/i );
+
+                $debug and $debug & 1024 and _debug "matching against $re";
+
+                if (substr($buffer, $at) =~ $re) {
+                    if ($asks_username_at_login and
+                        ($asks_username_at_login ne 'auto' or defined $1)) {
+                        $debug and $debug & 1024 and _debug "sending username";
+                        print $pty "$user\n";
+                        undef $asks_username_at_login;
+                    }
+                    else {
+                        $debug and $debug & 1024 and _debug "sending password";
+                        print $pty "$password\n";
+                        $password_sent = 1;
+                    }
+                    $at = length $buffer;
+                }
+            }
+        }
+        else {
+            $debug and $debug & 1024 and _debug "no data available from pty, delaying until next read";
+            sleep 0.1;
+        }
+
+    }
+    $debug and $debug & 1024 and _debug "password authentication done";
+    return 1;
+}
+
 sub __fork_cmd {
     my ($any, $opts, $cmd) = @_;
 
@@ -107,12 +207,21 @@ sub __fork_cmd {
     @too_many and croak "unsupported options or bad combination ('".join("', '", @too_many)."')";
 
     my @cmd = $any->_make_cmd($opts, $cmd) or return;
+
+    my $pty;
+    if ($any->{be_interactive_login}) {
+        $any->_load_module('IO::Pty') or return;
+        $pty = IO::Pty->new;
+    }
+
     my $pid = fork;
     unless ($pid) {
         unless (defined $pid) {
             $any->__set_error(SSHA_CONNECTION_ERROR, "unable to fork new process: $!");
             return;
         }
+
+        $pty->make_slave_controlling_terminal if $pty;
 
         close $_ for grep defined, @pipes;
         my @fds = map __fileno_dup_over(3 => $_), @fhs;
@@ -125,6 +234,13 @@ sub __fork_cmd {
         do { exec @cmd };
         POSIX::_exit(255);
     }
+
+    if ($pty) {
+        $any->_interactive_login($pty, $pid) or return undef;
+        $any->{be_pty} = $pty;
+        $pty->close_slave;
+    }
+
     return ($pid, @pipes);
 }
 

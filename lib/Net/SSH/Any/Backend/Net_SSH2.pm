@@ -233,21 +233,23 @@ sub __io3 {
     while (1) {
         my $delay = 1;
         #$debug and $debug and 1024 and _debug("looping...");
-        $in .= shift @$stdin_data while @$stdin_data and length $in < 36000;
-        if (length $in) {
-            my $bytes = $channel->write($in);
-            if (not $bytes) {
-                __check_channel_error_nb($any) or last;
-            }
-            elsif ($bytes < 0) {
-                if ($bytes != $eagain) {
-                    $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
-                    last;
+        if ($stdin_data and @$stdin_data) {
+            $in .= shift @$stdin_data while @$stdin_data and length $in < 36000;
+            if (length $in) {
+                my $bytes = $channel->write($in);
+                if (not $bytes) {
+                    __check_channel_error_nb($any) or last;
                 }
-            }
-            else {
-                $delay = 0;
-                substr($in, 0, $bytes, '');
+                elsif ($bytes < 0) {
+                    if ($bytes != $eagain) {
+                        $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
+                        last;
+                    }
+                }
+                else {
+                    $delay = 0;
+                    substr($in, 0, $bytes, '');
+                }
             }
         }
         elsif (!$eof_sent) {
