@@ -908,6 +908,28 @@ and returns them.
 
 =back
 
+=head2 Backends
+
+Currently the available backends are as follows:
+
+=over 4
+
+=item Net_OpenSSH
+
+Uses the perl module Net::OpenSSH which uses OpenSSH C<ssh> binary to
+connect to the remote host.
+
+=item Net_SSH2
+
+Uses the perl module Net::SSH2 which is a wrapper for the libssh2 C
+library implementing the client side of the SSH version 2 protocol.
+
+=item SSH_Cmd
+
+Uses the system C<ssh> binary to connect to the remote host.
+
+=back
+
 =head1 SEE ALSO
 
 L<Net::OpenSSH>, L<Net::SSH2>, L<Net::SSH::Perl>.

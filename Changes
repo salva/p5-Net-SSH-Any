@@ -1,5 +1,10 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.05  Sep 28, 2013
+        - add new experimental backend SSH_Cmd that opens a new
+          connection every time
+        - several files where missing from MANIFEST in version 0.04
+
 0.04  Sep 25, 2013
         - add support for SCP
         - handle errors on Net_SSH2 backend when calling channel and
