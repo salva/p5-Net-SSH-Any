@@ -58,6 +58,69 @@ sub __copy_error {
     return;
 }
 
+sub __check_host_keys {
+    my $any = shift;
+    my $ssh2 = $any->{be_ssh2} or croak "internal error: be_ssh2 is not set";
+
+    my $known_host_path = $any->{known_hosts_path};
+    unless (defined $known_host_path) {
+        my $config_dir;
+        if ($^O =~ /^Win/) {
+            _load_module('Win32') or return;
+            my $appdata = Win32::GetFolderPath(Win32::CSIDL_APPDATA());
+            unless (defined $appdata) {
+                $any->_set_error(SSHA_CONNECTION_ERROR, "unable to determine directory for user application data");
+                return;
+            }
+            $config_dir = File::Spec->join($appdata, 'libnet-ssh-any-perl');
+        }
+        else {
+            my $home = (getpwuid $>)[7];
+            $home = $ENV{HOME} unless defined $home;
+            unless (defined $home) {
+                $any->_set_error(SSHA_CONNECTION_ERROR, "unable to determine user home directory");
+                return;
+            }
+            $config_dir = File::Spec->join($home, '.ssh');
+        }
+        unless (-d $config_dir or mkdir $config_dir, 0700) {
+            $any->_set_error(SSHA_CONNECTION_ERROR, "unable to create directory '$config_dir': $^E");
+            return;
+        }
+        $known_host_path = File::Spec->join($config_dir, 'known_hosts');
+    }
+
+    $debug and $debug & 1024 and _debug "reading known host keys from '$known_host_path'";
+
+    my @keys;
+    if (open my $kh, '<', $known_host_path) {
+        while (<$kh>) {
+            chomp;
+            s/\s+//;
+            next if /^(?:#.*)$/;
+            next if /^\@/; # revoked keys are not supported yet
+            my ($host, $type, $data) = split //;
+            $host =~ s/,.*//;
+            if ($host eq $any->{host}) {
+                push @keys, [$type, $data];
+            }
+        }
+    }
+
+    if ($debug and $debug & 1024) {
+        _debug "known key: @$_\n" for @keys;
+    }
+
+    for my $key_type ('LIBSSH2_HOSTKEY_HASH_SHA1', 'LIBSSH2_HOSTKEY_HASH_MD5') {
+        if (defined(my $key = $ssh2->hostkey($key_type))) {
+            $debug and $debug & 1024 and _debug("host key: $key");
+            return 1;
+        }
+    }
+    $any->_set_error(SSHA_CONNECTION_ERROR, "remote host key verification failed");
+    ()
+}
+
 sub _connect {
     my $any = shift;
     my $ssh2 = $any->{be_ssh2} = Net::SSH2->new;
@@ -77,6 +140,8 @@ sub _connect {
     unless ($socket and $ssh2->connect($socket)) {
         return $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to connect to remote host");
     }
+
+    __check_host_keys($any);
 
     my %aa;
     $aa{username} = _first_defined($any->{user},

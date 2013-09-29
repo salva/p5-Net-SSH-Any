@@ -64,7 +64,12 @@ sub new {
     my $argument_encoding =
         _first_defined delete $opts{argument_encoding}, $encoding, 'utf8';
 
+    my $known_hosts_path = delete $opts{known_hosts_path};
+    my $strict_host_key_checking = delete $opts{strict_host_key_checking};
+
     my $backend_opts = delete $opts{backend_opts};
+
+
 
     my (%remote_cmd, %local_cmd);
     for (keys %opts) {
@@ -82,6 +87,8 @@ sub new {
                 target_os => $target_os,
                 stream_encoding => $stream_encoding,
                 argument_encoding => $argument_encoding,
+                known_hosts_path => $known_hosts_path,
+                strict_host_key_checking => $strict_host_key_checking,
                 backend_opts => $backend_opts,
                 error_prefix => [],
                 remote_cmd => \%remote_cmd,
@@ -916,13 +923,27 @@ Currently the available backends are as follows:
 
 =item Net_OpenSSH
 
-Uses the perl module Net::OpenSSH which uses OpenSSH C<ssh> binary to
-connect to the remote host.
+Uses the perl module Net::OpenSSH which relies on OpenSSH C<ssh>
+binary to connect to the remote hosts. As it uses the multiplexing
+feature of OpenSSH, it can run several commands (or other operations)
+over one single connection, so it is quite fast.
+
+Using OpenSSH client ensures maximum interoperability and a mature an
+secure protocol implementation.
+
+The downside is that Net::OpenSSH doesn't work on Windows because OpenSSH
+multiplexing feature has not been ported there.
 
 =item Net_SSH2
 
 Uses the perl module Net::SSH2 which is a wrapper for the libssh2 C
-library implementing the client side of the SSH version 2 protocol.
+library which is a fast and portable implementation of the client side
+of the SSH version 2 protocol.
+
+L<Net::SSH2> is an actively maintaned module that works on both
+Unix/Linux an Windows systems (don't known about VMS). Compiling it
+may be a hard task, specially on Windows, but prepackaged versions are
+available from the Internet.
 
 =item SSH_Cmd
 
