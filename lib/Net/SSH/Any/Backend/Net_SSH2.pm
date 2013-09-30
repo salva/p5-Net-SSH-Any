@@ -92,31 +92,64 @@ sub __check_host_keys {
 
     $debug and $debug & 1024 and _debug "reading known host keys from '$known_host_path'";
 
-    my @keys;
-    if (open my $kh, '<', $known_host_path) {
-        while (<$kh>) {
-            chomp;
-            s/\s+//;
-            next if /^(?:#.*)$/;
-            next if /^\@/; # revoked keys are not supported yet
-            my ($host, $type, $data) = split //;
-            $host =~ s/,.*//;
-            if ($host eq $any->{host}) {
-                push @keys, [$type, $data];
-            }
-        }
+    my $kh = $ssh2->known_hosts;
+    unless ($kh->readfile($known_host_path)) {
+        $debug and $debug & 1024 and _debug "unable to read known hosts file: " . $ssh2->error;
     }
+
+    my ($key, $type) = $ssh2->remote_hostkey;
 
     if ($debug and $debug & 1024) {
-        _debug "known key: @$_\n" for @keys;
+        _debug "remote key is of type $type";
+        _debug_hexdump("key", $key);
     }
 
-    for my $key_type ('LIBSSH2_HOSTKEY_HASH_SHA1', 'LIBSSH2_HOSTKEY_HASH_MD5') {
-        if (defined(my $key = $ssh2->hostkey($key_type))) {
-            $debug and $debug & 1024 and _debug("host key: $key");
-            return 1;
-        }
+    my $check = $kh->check($any->{host}, $any->{port}, $key, 1 | (1 << 16) | (($type + 1) << 18) );
+
+    if ($check == 0) {
+        $debug and $debug & 1024 and _debug("host key matched");
+        return 1;
     }
+    elsif ($check == 1) {
+        $debug and $debug & 1024 and _debug("host key found but did not match");
+    }
+    elsif($check == 2) {
+        $debug and $debug & 1024 and _debug("host key not found, adding it");
+        $kh->add($any->{host}, '', $key, "added by perl module Net::SSH::Any (Net::SSH2 backend)",
+                 1 | (1 << 16) | (($type + 1) << 18));
+        $kh->writefile("/tmp/known_hosts");
+        return 1;
+    }
+    else {
+        $debug and $debug & 1024 and _debug("host key check failure!");
+    }
+
+    # my @keys;
+    # if (open my $kh, '<', $known_host_path) {
+    #     while (<$kh>) {
+    #         chomp;
+    #         s/\s+//;
+    #         next if /^(?:#.*)$/;
+    #         next if /^\@/; # revoked keys are not supported yet
+    #         my ($host, $type, $data) = split //;
+    #         $host =~ s/,.*//;
+    #         if ($host eq $any->{host}) {
+    #             push @keys, [$type, $data];
+    #         }
+    #     }
+    # }
+
+    # if ($debug and $debug & 1024) {
+    #     _debug "known key: @$_\n" for @keys;
+    # }
+
+    # for my $key_type ('LIBSSH2_HOSTKEY_HASH_SHA1', 'LIBSSH2_HOSTKEY_HASH_MD5') {
+    #     if (defined(my $key = $ssh2->hostkey($key_type))) {
+    #         $debug and $debug & 1024 and _debug("host key: $key");
+    #         return 1;
+    #     }
+    # }
+
     $any->_set_error(SSHA_CONNECTION_ERROR, "remote host key verification failed");
     ()
 }
