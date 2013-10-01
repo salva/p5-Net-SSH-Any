@@ -29,6 +29,12 @@ sub _connect {
     if (my $extra = $any->{backend_opts}{$any->{backend}}) {
         @opts{keys %$extra} = values %$extra;
     }
+    my $master_opts = [_array_or_scalar_to_list delete $opts{master_opts}];
+    push @$master_opts, ('-o', 'StrictHostKeyChecking='.($any->{strict_host_key_checking} ? 'yes' : 'no'));
+    push @$master_opts, ('-o', "UserKnownHostsFile=$any->{known_hosts_path}")
+        if defined $any->{known_hosts_path};
+    $opts{master_opts} = $master_opts;
+
     $any->{be_ssh} = Net::OpenSSH->new(%opts);
     __check_error($any);
 }
