@@ -65,11 +65,8 @@ sub new {
         _first_defined delete $opts{argument_encoding}, $encoding, 'utf8';
 
     my $known_hosts_path = delete $opts{known_hosts_path};
-    my $strict_host_key_checking = delete $opts{strict_host_key_checking};
-
+    my $strict_host_key_checking = _first_defined delete $opts{strict_host_key_checking}, 1;
     my $backend_opts = delete $opts{backend_opts};
-
-
 
     my (%remote_cmd, %local_cmd);
     for (keys %opts) {
