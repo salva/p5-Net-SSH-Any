@@ -701,6 +701,22 @@ file system) the encoding to be used.
 This option is equivalent to setting C<argument_encoding> and
 C<stream_encoding>.
 
+=item known_hosts_path => $path
+
+Location of the C<known_hosts> file where host keys are saved.
+
+On Unix/Linux systems defaults to C<~/.ssh/known_hosts>, on Windows to
+C<%APPDATA%/libnet-ssh-any-perl/known_hosts>.
+
+=item strict_host_key_checking => $bool
+
+When this flag is set, the connection to the remote host will be
+aborted unless the host key is already stored in the C<known_hosts>
+file.
+
+Setting this flag to zero, relaxes that condition so that remote keys
+are accepted unless a different key exists on the C<known_hosts> file.
+
 =item remote_*_cmd => $remote_cmd_path
 
 Some operations (i.e. SCP operations) execute a remote
@@ -713,6 +729,15 @@ set of options. For instance:
    $ssh = Net::SSH::Any->new($target,
                              remote_scp_cmd => '/usr/local/bin/scp',
                              remote_tar_cmd => '/usr/local/bin/gtar');
+
+=item local_*_cmd => $local_cmd_path
+
+Similar to C<remote_*_cmd> parameters but for local commands.
+
+For instance:
+
+   $ssh = Net::SSH::Any->new($target,
+                             remote_ssh_cmd => '/usr/local/bin/ssh');
 
 =item backends => \@preferred_backends
 
@@ -840,67 +865,139 @@ and returns them.
 
 =item stdin_data => \@data
 
+Sends the given data through the stdin stream of the remote process.
+
+Example:
+
+    $ssh->system({stdin_data => \@data}, "cat >/tmp/foo")
+        or die "unable to write file: " . $ssh->error;
+
+
 =back
 
 =item $pipe = $ssh->pipe(\%opts, @cmd)
+
+Returns a L<Net::SSH::Any::Pipe> object that allows to perform
+bidirectional communication with the remote process.
 
 =over 4
 
 =item stderr_to_stdout => $bool
 
+Redirects the stderr stream of the remote process into its stdout
+stream.
+
 =item stderr_discard => $bool
+
+Discards the stderr stream of the remote process.
 
 =back
 
 =item $ssh->scp_get(\%opts, @srcs, $target)
 
+Copies the given files from the remote host using scp.
+
+The accepted set of options are as follow:
+
 =over
 
 =item glob => $bool
 
+Allows to expand wildcards on the remote machine when selecting the
+files to download.
+
 =item recursive => $bool
 
+When this flag is set, the module will descend into directories and
+retrieve them recursively.
+
 =item copy_attr => $bool
+
+When this flag is set the attributes of the local files (permissions
+and timestamps) are copied from the remote ones.
 
 =item copy_perm => $bool
 
 =item copy_time => $bool
 
+Selectively copy the permissions or the timestamps.
+
 =item update => $bool
+
+If the target file already exists locally, it is only copied when the
+timestamp of the remote version is newier. If the file doesn't exist
+locally, it is unconditionally copied.
 
 =item numbered => $bool
 
+When for some remote file a local file of the same name already exists
+at its destination, a increasing suffix is added just before any
+extension.
+
+For instance, C<foo> may become C<foo(1)>, C<foo(2)>, etc.; C<foo.txt>
+may become C<foo(1).txt>, C<foo(2).txt>, etc.
+
 =item overwrite => $bool
+
+When a local file of the same name already exist, overwrite it. Set by
+default.
 
 =back
 
 =item $ssh->scp_put(\%opts, @srcs, $target)
 
+Copies the set of given files to the remote host.
+
+The accepted options are as follows:
+
 =over 4
 
 =item glob => $bool
 
+Allows willcard expansion when selecting the files to copy.
+
 =item recursive => $bool
+
+Recursively descend into directories.
 
 =item copy_attr => $bool
 
+Copy permission and time attributes from the local files.
+
 =item follow_links => 0
+
+Symbolic links are not supported by SCP. By default, when a symbolic
+link is found, the method just copies the file pointed by the link.
+
+If this flag is unset symbolic links are skipped.
 
 =back
 
 =item $data = $ssh->scp_get_content(\%opts, @srcs)
 
+Retrieves the contents of some file or files via SCP.
+
 =over 4
 
 =item glob => $bool
 
+Allows willcard expansion on the remote host when selecting the files
+to transfer.
+
 =item recursive => $bool
+
+Recursively descends into directories
 
 =back
 
 =item $ssh->scp_mkdir(\%opts, $dir)
 
+Creates a directory using SCP.
+
 =item $sftp = $ssh->sftp(%opts);
+
+Returns a new L<Net::SFTP::Foreign> object connected to the remote
+system.
 
 =over
 
@@ -945,6 +1042,68 @@ available from the Internet.
 =item SSH_Cmd
 
 Uses the system C<ssh> binary to connect to the remote host.
+
+=back
+
+=head1 FAQ
+
+Frequent questions about this module:
+
+over 4
+
+=item Disabling host key checking
+
+B<Query>: How can host key checking be completely disabled?
+
+B<Answer>: You don't want to do that, disabling host key checking
+breaks SSH security model. You will be exposed to man-in-the-middle
+attacks, and anything transferred over the SSH connection may be
+captured by a third party, including passwords if you are also using
+password authentication.
+
+B<Q>: I don't mind about security, can I disable host key checking?
+
+B<A>: You have been warned...
+
+The way to disable host key checking is to unset the
+C<strict_host_key_checking> flag and point C<known_hosts> to
+C</dev/null> or your preferred OS equivalent.
+
+In example:
+
+  my $ssh = Net::SSH::Any->new($host,
+                               strict_host_key_checking => 0,
+                               known_hosts_path => ($^O =~ /^Win/
+                                                    ? 'NUL:'
+                                                    : '/dev/null'));
+
+I have not made that easier on purpose!
+
+=item known_hosts file
+
+B<Q>: How can I manipulate the C<known_hosts> file. I.e, adding and
+removing entries?
+
+B<A>: If you have a recent version of OpenSSH installed on your
+machine, the companion utility C<ssh-keygen(1)> provides a relatively
+easy to use command line interface to such file.
+
+Otherwise, you can just add or remove the entries manually using a
+text editor.
+
+If you are on Linux/Unix and using the default C<known_hosts> file, an
+easy way to add some host key to it is to just log once manually from
+the command line using your system C<ssh> command. It will get the key
+from the remote host and ask you if you want to add the key to the
+store.
+
+Later versions of L<Net::SSH2> provide basic support for
+C<known_hosts> file manipulation in L<Net::SSH2::KnownHosts>.
+
+=item More questions
+
+See also the FAQ from the L<Net::OpenSSH/FAQ> module as most of the
+entries there are generic.
 
 =back
 
