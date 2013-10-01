@@ -32,17 +32,30 @@ sub _sig_name2num {
 
 sub _backend_api_version { 1 }
 
-our ($block_inbound, $block_outbound, $eagain);
+my %C = ( SOCKET_BLOCK_INBOUND => 1,
+          SOCKET_BLOCK_OUTBOUND => 2,
+          ERROR_EAGAIN => -37,
+          ERROR_FILE => 16,
+          KNOWNHOST_TYPE_PLAIN => 1,
+          KNOWNHOST_KEYENC_RAW => 2,
+          KNOWNHOST_KEY_SHIFT => (1<<18),
+          KNOWNHOST_CHECK_MATCH => 0,
+          KNOWNHOST_CHECK_MISMATCH => 1,
+          KNOWNHOST_CHECK_NOTFOUND => 2,
+        );
+
 do {
     local ($@, $SIG{__DIE__});
-    $block_inbound  = (eval { Net::SSH2::LIBSSH2_SOCKET_BLOCK_INBOUND()  } ||   1);
-    $block_outbound = (eval { Net::SSH2::LIBSSH2_SOCKET_BLOCK_OUTBOUND() } ||   2);
-    $eagain         = (eval { Net::SSH2::LIBSSH2_ERROR_EAGAIN()          } || -37);
+    for my $c (keys %C) {
+        if (defined (my $v = eval "Net::SSH2::LIBSSH2_$c()")) {
+            $C{$c} = $v;
+        }
+    }
 };
 
 sub __set_error_from_ssh_error_code {
     my ($any, $ssh_error_code, $error) = @_;
-    $error = ($ssh_error_code == $eagain ? SSHA_EAGAIN : ($error || SSHA_CHANNEL_ERROR));
+    $error = ($ssh_error_code == $C{ERROR_EAGAIN} ? SSHA_EAGAIN : ($error || SSHA_CHANNEL_ERROR));
     $any->_set_error($error, "libssh2 error $ssh_error_code");
     return;
 }
@@ -53,17 +66,17 @@ sub __copy_error {
         or die "internal error: __copy_error called, but there is no ssh2 object";
     my $error = $ssh2->error
         or die "internal error: __copy_error called, but there is no error";
-    my $code = ($error == $eagain ? SSHA_EAGAIN : (shift || SSHA_CHANNEL_ERROR));
+    my $code = ($error == $C{ERROR_EAGAIN} ? SSHA_EAGAIN : (shift || SSHA_CHANNEL_ERROR));
     $any->_set_error($code, ($ssh2->error)[2]);
     return;
 }
 
-sub __check_host_keys {
+sub __check_host_key {
     my $any = shift;
     my $ssh2 = $any->{be_ssh2} or croak "internal error: be_ssh2 is not set";
 
-    my $known_host_path = $any->{known_hosts_path};
-    unless (defined $known_host_path) {
+    my $known_hosts_path = $any->{known_hosts_path};
+    unless (defined $known_hosts_path) {
         my $config_dir;
         if ($^O =~ /^Win/) {
             _load_module('Win32') or return;
@@ -87,14 +100,27 @@ sub __check_host_keys {
             $any->_set_error(SSHA_CONNECTION_ERROR, "unable to create directory '$config_dir': $^E");
             return;
         }
-        $known_host_path = File::Spec->join($config_dir, 'known_hosts');
+        $known_hosts_path = File::Spec->join($config_dir, 'known_hosts');
     }
 
-    $debug and $debug & 1024 and _debug "reading known host keys from '$known_host_path'";
+    $debug and $debug & 1024 and _debug "reading known host keys from '$known_hosts_path'";
 
     my $kh = $ssh2->known_hosts;
-    unless ($kh->readfile($known_host_path)) {
+    my $ok = $kh->readfile($known_hosts_path);
+    unless (defined $ok) {
         $debug and $debug & 1024 and _debug "unable to read known hosts file: " . $ssh2->error;
+        if ($ssh2->error == $C{ERROR_FILE}) {
+            if (-f $known_hosts_path) {
+                $any->_set_error(SSHA_CONNECTION_ERROR, "unable to read known_hosts file at '$known_hosts_path'");
+                return;
+            }
+            # a non-existent file is not an error, continue...
+        }
+        else {
+            $any->_set_error(SSHA_CONNECTION_ERROR,
+                             "Unable to parse known_hosts file at '$known_hosts_path': ". ($ssh2->error)[2]);
+            return;
+        }
     }
 
     my ($key, $type) = $ssh2->remote_hostkey;
@@ -104,53 +130,37 @@ sub __check_host_keys {
         _debug_hexdump("key", $key);
     }
 
-    my $check = $kh->check($any->{host}, $any->{port}, $key, 1 | (1 << 16) | (($type + 1) << 18) );
+    my $key_type = ( $C{KNOWNHOST_TYPE_PLAIN} |
+                     $C{KNOWNHOST_KEYENC_RAW} |
+                     (($type + 1) << $C{KNOWNHOST_KEY_SHIFT}) );
 
-    if ($check == 0) {
+    my $check = $kh->check($any->{host}, $any->{port}, $key, $key_type);
+
+    if ($check == $C{KNOWNHOST_CHECK_MATCH}) {
         $debug and $debug & 1024 and _debug("host key matched");
         return 1;
     }
-    elsif ($check == 1) {
+    elsif ($check == $C{KNOWNHOST_CHECK_MISMATCH}) {
         $debug and $debug & 1024 and _debug("host key found but did not match");
+        $any->_set_error(SSHA_CONNECTION_ERROR, "The host key for '$any->{host}' has changed");
+        return;
     }
-    elsif($check == 2) {
-        $debug and $debug & 1024 and _debug("host key not found, adding it");
-        $kh->add($any->{host}, '', $key, "added by perl module Net::SSH::Any (Net::SSH2 backend)",
-                 1 | (1 << 16) | (($type + 1) << 18));
-        $kh->writefile("/tmp/known_hosts");
-        return 1;
+    elsif ($check == $C{KNOWNHOST_CHECK_NOTFOUND}) {
+        $debug and $debug & 1024 and _debug("host key not found in known_hosts");
+        if ($any->{strict_host_key_checking}) {
+            $any->_set_error(SSHA_CONNECTION_ERROR, "the authenticity of host '$any->{host}' can't be established");
+            return;
+        }
+        else {
+            $debug and $debug & 1024 and _debug "saving host key to '$known_hosts_path'";
+            $kh->add($any->{host}, '', $key, "added by Perl module Net::SSH::Any (Net::SSH2 backend)", $key_type);
+            $kh->writefile($known_hosts_path);
+            return 1;
+        }
     }
-    else {
-        $debug and $debug & 1024 and _debug("host key check failure!");
-    }
 
-    # my @keys;
-    # if (open my $kh, '<', $known_host_path) {
-    #     while (<$kh>) {
-    #         chomp;
-    #         s/\s+//;
-    #         next if /^(?:#.*)$/;
-    #         next if /^\@/; # revoked keys are not supported yet
-    #         my ($host, $type, $data) = split //;
-    #         $host =~ s/,.*//;
-    #         if ($host eq $any->{host}) {
-    #             push @keys, [$type, $data];
-    #         }
-    #     }
-    # }
-
-    # if ($debug and $debug & 1024) {
-    #     _debug "known key: @$_\n" for @keys;
-    # }
-
-    # for my $key_type ('LIBSSH2_HOSTKEY_HASH_SHA1', 'LIBSSH2_HOSTKEY_HASH_MD5') {
-    #     if (defined(my $key = $ssh2->hostkey($key_type))) {
-    #         $debug and $debug & 1024 and _debug("host key: $key");
-    #         return 1;
-    #     }
-    # }
-
-    $any->_set_error(SSHA_CONNECTION_ERROR, "remote host key verification failed");
+    $debug and $debug & 1024 and _debug("host key check failure (check: $check)!");
+    $any->_set_error(SSHA_CONNECTION_ERROR, "unable to check host key, libssh2_knownhost_check failed");
     ()
 }
 
@@ -174,7 +184,7 @@ sub _connect {
         return $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to connect to remote host");
     }
 
-    __check_host_keys($any);
+    __check_host_key($any) or return;
 
     my %aa;
     $aa{username} = _first_defined($any->{user},
@@ -298,7 +308,7 @@ sub __write_all {
 sub __check_channel_error_nb {
     my $any = shift;
     my $error = $any->{be_ssh2}->error;
-    return 1 unless $error and $error != $eagain;
+    return 1 unless $error and $error != $C{ERROR_EAGAIN};
     __copy_error($any, SSHA_CHANNEL_ERROR);
 }
 
@@ -313,8 +323,8 @@ sub _wait_for_more_data {
     my ($any, $timeout) = @_;
     my $ssh2 = $any->{be_ssh2};
     if (my $dir = $ssh2->block_directions) {
-        my $wr = ($dir & $block_inbound  ? $any->{__select_bm} : '');
-        my $ww = ($dir & $block_outbound ? $any->{__select_bm} : '');
+        my $wr = ($dir & $C{SOCKET_BLOCK_INBOUND}  ? $any->{__select_bm} : '');
+        my $ww = ($dir & $C{SOCKET_BLOCK_OUTBOUND} ? $any->{__select_bm} : '');
         select($wr, $ww, undef, $timeout);
     }
 }
@@ -339,7 +349,7 @@ sub __io3 {
                     __check_channel_error_nb($any) or last;
                 }
                 elsif ($bytes < 0) {
-                    if ($bytes != $eagain) {
+                    if ($bytes != $C{ERROR_EAGAIN}) {
                         $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
                         last;
                     }
@@ -360,7 +370,7 @@ sub __io3 {
                 __check_channel_error_nb($any) or last;
             }
             elsif ($bytes < 0) {
-                if ($bytes != $eagain) {
+                if ($bytes != $C{ERROR_EAGAIN}) {
                     $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
                     last;
                 }
