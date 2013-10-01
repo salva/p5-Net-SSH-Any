@@ -75,6 +75,16 @@ sub __check_host_key {
     my $any = shift;
     my $ssh2 = $any->{be_ssh2} or croak "internal error: be_ssh2 is not set";
 
+    my $hostkey_method = $ssh2->can('remote_hostkey');
+    unless ($hostkey_method) {
+        carp "The version of Net::SSH2 installed ($Net::SSH2::VERSION) doesn't support " .
+            "checking the host key against a known_hosts file. This script is exposed to ".
+                "man-in-the-middle atacks!!!";
+        return 1;
+    }
+
+    my ($key, $type) = $hostkey_method->($ssh2);
+
     my $known_hosts_path = $any->{known_hosts_path};
     unless (defined $known_hosts_path) {
         my $config_dir;
@@ -122,8 +132,6 @@ sub __check_host_key {
             return;
         }
     }
-
-    my ($key, $type) = $ssh2->remote_hostkey;
 
     if ($debug and $debug & 1024) {
         _debug "remote key is of type $type";
