@@ -212,3 +212,11 @@ sub AUTOLOAD {
 sub DESTROY {}
 
 1;
+
+__END__
+
+=head1 NAME
+
+Net::SSH::Any::Pipe - bidirectional comunication with remote process
+
+
