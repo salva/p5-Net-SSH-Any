@@ -42,6 +42,7 @@ my %C = ( SOCKET_BLOCK_INBOUND => 1,
           KNOWNHOST_CHECK_MATCH => 0,
           KNOWNHOST_CHECK_MISMATCH => 1,
           KNOWNHOST_CHECK_NOTFOUND => 2,
+          FLAG_COMPRESS => 2,
         );
 
 do {
@@ -180,6 +181,10 @@ sub _connect {
         return;
     }
     $debug and $debug & 2048 and $ssh2->trace(-1);
+    if (defined(my $flag_method = $ssh2->can('flag'))) {
+        $debug and $debug & 1024 and _debug "enabling compression";
+        $flag_method->($ssh2, $C{FLAG_COMPRESS}, 1);
+    }
 
     my $socket = IO::Socket::INET->new(PeerHost => $any->{host},
                                        PeerPort => ($any->{port} || 22),
@@ -191,6 +196,7 @@ sub _connect {
     unless ($socket and $ssh2->connect($socket)) {
         return $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to connect to remote host");
     }
+    $debug and $debug & 1024 and _debug 'COMP_SC: ' . $ssh2->method('COMP_SC') . ' COMP_CS: ' .$ssh2->method('COMP_CS');
 
     __check_host_key($any) or return;
 
