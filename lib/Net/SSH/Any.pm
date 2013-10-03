@@ -67,6 +67,7 @@ sub new {
     my $known_hosts_path = delete $opts{known_hosts_path};
     my $strict_host_key_checking = _first_defined delete $opts{strict_host_key_checking}, 1;
     my $backend_opts = delete $opts{backend_opts};
+    my $server_alive_interval = _first_defined delete $opts{server_alive_interval}, 10;
 
     my (%remote_cmd, %local_cmd);
     for (keys %opts) {
@@ -86,6 +87,7 @@ sub new {
                 argument_encoding => $argument_encoding,
                 known_hosts_path => $known_hosts_path,
                 strict_host_key_checking => $strict_host_key_checking,
+                server_alive_interval => $server_alive_interval,
                 backend_opts => $backend_opts,
                 error_prefix => [],
                 remote_cmd => \%remote_cmd,

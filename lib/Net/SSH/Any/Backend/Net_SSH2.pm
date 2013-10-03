@@ -193,12 +193,18 @@ sub _connect {
         $socket->sockopt(SO_LINGER, pack(SS => 0, 0)); # FIXME, copied from Net::SSH2, is really a good idea?
         $socket->sockopt(SO_KEEPALIVE, 1);
     }
+
     unless ($socket and $ssh2->connect($socket)) {
         return $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to connect to remote host");
     }
     $debug and $debug & 1024 and _debug 'COMP_SC: ' . $ssh2->method('COMP_SC') . ' COMP_CS: ' .$ssh2->method('COMP_CS');
 
     __check_host_key($any) or return;
+
+    if (my $keepalive_config_method = $ssh2->can('keepalive_config')) {
+        $debug and $debug & 1024 and _debug "setting server alive interval to $any->{server_alive_interval}";
+        $keepalive_config_method->($ssh2, 1, $any->{server_alive_interval});
+    }
 
     my %aa;
     $aa{username} = _first_defined($any->{user},
@@ -215,10 +221,29 @@ sub _connect {
         return;
     }
 
-    my $bm = '';
-    vec ($bm, fileno($ssh2->sock), 1) = 1;
-    $any->{__select_bm} = $bm;
+    $any->{be_fileno} = fileno($ssh2->sock);
+    $any->{be_select_bm} = '';
+    vec ($any->{be_select_bm}, $any->{be_fileno}, 1) = 1;
     1;
+}
+
+sub __send_keepalive {
+    my $any = shift;
+    my $now = time;
+    if (($any->{be_next_keepalive} || 0) < $now) {
+        my $ssh2 = $any->{be_ssh2} or return;
+        my $method = $ssh2->can('keepalive_send') or return;
+        $debug and $debug & 1024 and _debug "sending keepalive, now=$now";
+        if (defined (my $next = $method->($ssh2))) {
+            $any->{be_next_keepalive} = $now + $next;
+        }
+        else {
+            $debug and $debug & 1024 and _debug "send_keepalive failed: " . ($ssh2->error)[2];
+            $any->{be_next_keepalive} = $now + 10;
+        }
+        $debug and $debug & 1024 and _debug "next keepalive scheduled for t=$any->{be_next_keepalive} (Dt=".
+            ($any->{be_next_keepalive} - $now)."s)";
+    }
 }
 
 sub __open_file {
@@ -265,6 +290,7 @@ sub __parse_fh_opts {
 sub __open_channel_and_exec {
     my ($any, $opts, $cmd) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
+    __send_keepalive($any);
     if (my $channel = $ssh2->channel) {
 	my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
 	if ($channel->process((defined $cmd and length $cmd) 
@@ -334,13 +360,19 @@ sub __check_channel_error {
 }
 
 sub _wait_for_more_data {
-    my ($any, $timeout) = @_;
+    my ($any, $timeout, $allbound) = @_;
     my $ssh2 = $any->{be_ssh2};
-    if (my $dir = $ssh2->block_directions) {
-        my $wr = ($dir & $C{SOCKET_BLOCK_INBOUND}  ? $any->{__select_bm} : '');
-        my $ww = ($dir & $C{SOCKET_BLOCK_OUTBOUND} ? $any->{__select_bm} : '');
-        select($wr, $ww, undef, $timeout);
+    my $dirs = $ssh2->block_directions || 0;
+    my $wants_to_read  = ($allbound || ($dirs & $C{SOCKET_BLOCK_INBOUND} ));
+    my $wants_to_write = ($allbound || ($dirs & $C{SOCKET_BLOCK_OUTBOUND}));
+    if ($wants_to_read or $wants_to_write) {
+        my $rbm = ($wants_to_read  ? $any->{be_select_bm} : '');
+        my $wbm = ($wants_to_write ? $any->{be_select_bm} : '');
+        if (select($rbm, $wbm, undef, $timeout) > 0) {
+            return (vec($rbm, $any->{be_fileno}, 1), vec($wbm, $any->{be_fileno}, 1));
+        }
     }
+    return;
 }
 
 sub __io3 {
@@ -359,23 +391,30 @@ sub __io3 {
             $in .= shift @$stdin_data while @$stdin_data and length $in < 36000;
             if (length $in) {
                 my $bytes = $channel->write($in);
-                if (not $bytes) {
-                    __check_channel_error_nb($any) or last;
-                }
-                elsif ($bytes < 0) {
-                    if ($bytes != $C{ERROR_EAGAIN}) {
-                        $any->_set_error(SSHA_CHANNEL_ERROR, $bytes);
+                if (defined $bytes) {
+                    if ($bytes > 0) {
+                        $delay = 0;
+                        substr($in, 0, $bytes, '');
+                    }
+                    elsif ($bytes < 0 and $bytes $!= $C{ERROR_EGAIN}) {
+                        $any->_set_error(SSHA_CHANNEL_ERROR, "unexpected Net::SSH2 error $bytes");
                         last;
                     }
                 }
                 else {
+                    __check_channel_error_nb($any) or last;
+                }
+                elsif ($bytes) {
                     $delay = 0;
                     substr($in, 0, $bytes, '');
                 }
             }
         }
         elsif (!$eof_sent) {
-            $channel->send_eof;
+            unless ($channel->send_eof) {
+                # due to the brain-dead design of libssh2, an EGAIN error is fatal here!
+                __check_channel_error($any) or last;
+            }
             $eof_sent = 1;
         }
         for my $ext (0, 1) {
@@ -415,7 +454,10 @@ sub __io3 {
 	    }
 	}
 
-        $any->_wait_for_more_data(0.2) if $delay;
+        if ($delay) {
+            __send_keepalive($any);
+            $any->_wait_for_more_data(1);
+        }
     }
 
     $channel->blocking(1);
