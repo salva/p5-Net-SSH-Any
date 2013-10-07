@@ -116,8 +116,10 @@ sub __check_host_key {
 
     $debug and $debug & 1024 and _debug "reading known host keys from '$known_hosts_path'";
 
+    local ($@, $SIG{__DIE__});
+
     my $kh = $ssh2->known_hosts;
-    my $ok = $kh->readfile($known_hosts_path);
+    my $ok = eval { $kh->readfile($known_hosts_path) };
     unless (defined $ok) {
         $debug and $debug & 1024 and _debug "unable to read known hosts file: " . $ssh2->error;
         if ($ssh2->error == $C{ERROR_FILE}) {
@@ -162,8 +164,10 @@ sub __check_host_key {
         }
         else {
             $debug and $debug & 1024 and _debug "saving host key to '$known_hosts_path'";
-            $kh->add($any->{host}, '', $key, "added by Perl module Net::SSH::Any (Net::SSH2 backend)", $key_type);
-            $kh->writefile($known_hosts_path);
+            eval {
+                $kh->add($any->{host}, '', $key, "added by Perl module Net::SSH::Any (Net::SSH2 backend)", $key_type);
+                $kh->writefile($known_hosts_path);
+            };
             return 1;
         }
     }
