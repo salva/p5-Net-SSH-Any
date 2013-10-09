@@ -219,9 +219,9 @@ sub _connect {
         return;
     }
 
-    my $bm = '';
-    vec ($bm, fileno($ssh2->sock), 1) = 1;
-    $any->{be_select_bm} = $bm;
+    $any->{be_fileno} = fileno($ssh2->sock);
+    $any->{be_select_bm} = '';
+    vec($any->{be_select_bm}, $any->{be_fileno}, 1) = 1;
     1;
 }
 
