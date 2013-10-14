@@ -56,6 +56,7 @@ sub new {
         $key_path = delete $opts{key_path};
         $passphrase = delete $opts{passphrase};
     }
+    my $io_timeout = _first_defined delete $opts{io_timeout}, 120;
     my $timeout = delete $opts{timeout};
     my $target_os = _first_defined delete $opts{target_os}, 'unix';
     my $encoding = delete $opts{encoding};
@@ -81,6 +82,7 @@ sub new {
                 key_path => $key_path,
                 passphrase => $passphrase,
                 timeout => $timeout,
+                io_timeout => $io_timeout,
                 target_os => $target_os,
                 stream_encoding => $stream_encoding,
                 argument_encoding => $argument_encoding,
@@ -366,6 +368,7 @@ sub capture {
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
     my ($out) = $any->_capture(\%opts, $cmd) or return;
+    $any->_check_child_error;
     if ($stream_encoding) {
 	$any->_decode_data($stream_encoding => $out) or return;
     }
@@ -385,6 +388,7 @@ sub capture2 {
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
     my ($out, $err) = $any->_capture2(\%opts, $cmd) or return;
+    $any->_check_child_error;
     if ($stream_encoding) {
         $any->_decode_data($stream_encoding => $out) or return;
         $any->_decode_data($stream_encoding => $err) or return;
