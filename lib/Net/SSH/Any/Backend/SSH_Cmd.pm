@@ -45,10 +45,14 @@ sub _make_cmd {
 
     my @args = ( $connect_opts->{local_ssh_cmd},
                  $connect_opts->{host} );
+    push @args, '-C';
     push @args, -l => $connect_opts->{user} if defined $connect_opts->{user};
     push @args, -p => $connect_opts->{port} if defined $connect_opts->{port};
     push @args, -i => $connect_opts->{key_path} if defined $connect_opts->{key_path};
     push @args, -o => 'BatchMode=yes' unless grep defined($connect_opts->{$_}), qw(password passphrase);
+    push @args, -o => 'StrictHostKeyChecking=no' unless $connect_opts->{strict_host_key_checking};
+    push @args, -o => "UserKnownHostsFile=$connect_opts->{known_hosts_path}"
+        if defined $connect_opts->{known_hosts_path};
 
     if ($any->{be_auth_type} eq 'password') {
         push @args, ( -o => 'PreferredAuthentications=keyboard-interactive,password',
