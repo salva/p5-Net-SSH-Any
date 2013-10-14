@@ -24,7 +24,8 @@ sub _connect {
     }
     my $extra = $any->{backend_opts}{$any->{backend}};
     $any->_validate_connect_opts( ( map  { $_ => $any->{$_} }
-                                    qw(host port user password passphrase key_path timeout) ),
+                                    qw(host port user password passphrase key_path timeout
+                                       strict_host_key_checking known_hosts_path) ),
                                   ( $extra ? %$extra : () ) );
 }
 
@@ -213,6 +214,8 @@ sub __fork_cmd {
         $any->_load_module('IO::Pty') or return;
         $pty = IO::Pty->new;
     }
+
+    $debug and $debug & 1024 and _debug("forking cmd: '", join("', '", @cmd), "'");
 
     my $pid = fork;
     unless ($pid) {
