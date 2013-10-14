@@ -219,9 +219,9 @@ sub _connect {
         return;
     }
 
-    my $bm = '';
-    vec ($bm, fileno($ssh2->sock), 1) = 1;
-    $any->{__select_bm} = $bm;
+    $any->{be_fileno} = fileno($ssh2->sock);
+    $any->{be_select_bm} = '';
+    vec($any->{be_select_bm}, $any->{be_fileno}, 1) = 1;
     1;
 }
 
@@ -341,8 +341,8 @@ sub _wait_for_more_data {
     my ($any, $timeout) = @_;
     my $ssh2 = $any->{be_ssh2};
     if (my $dir = $ssh2->block_directions) {
-        my $wr = ($dir & $C{SOCKET_BLOCK_INBOUND}  ? $any->{__select_bm} : '');
-        my $ww = ($dir & $C{SOCKET_BLOCK_OUTBOUND} ? $any->{__select_bm} : '');
+        my $wr = ($dir & $C{SOCKET_BLOCK_INBOUND}  ? $any->{be_select_bm} : '');
+        my $ww = ($dir & $C{SOCKET_BLOCK_OUTBOUND} ? $any->{be_select_bm} : '');
         select($wr, $ww, undef, $timeout);
     }
 }
