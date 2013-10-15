@@ -12,6 +12,7 @@ use Net::SSH::Any::Constants qw(:error);
 use Net::SSH2;
 use File::Spec;
 use Errno ();
+use Fcntl ();
 use Time::HiRes ();
 use Socket qw(SO_LINGER SO_KEEPALIVE);
 use IO::Socket::INET;
@@ -193,7 +194,7 @@ sub _connect {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to create Net::SSH2 object");
         return;
     }
-    $debug and $debug & 2048 and $ssh2->trace(~$C{TRACE_DUMP});
+    $debug and $debug & 2048 and $ssh2->trace(~$C{TRACE_TRANS} );
 
     $ssh2->timeout(1000 * $any->{io_timeout});
 
@@ -300,10 +301,10 @@ sub __channel_do {
 }
 
 sub __open_file {
-    my ($any, $name_or_args) = @_;
+    my ($any, $def_mode, $name_or_args) = @_;
     my ($mode, @args) = (ref $name_or_args
 			 ? @$name_or_args
-			 : ('>', $name_or_args));
+			 : ($def_mode, $name_or_args));
     if (open my $fh, $mode, @args) {
         return $fh;
     }
@@ -314,7 +315,31 @@ sub __open_file {
 sub __parse_fh_opts {
     my ($any, $opts, $channel) = @_;
     my @name = qw(stdout stderr);
-    my @fh;
+    my $in_fh;
+    my @out_fh;
+
+    my $stdin_data = delete $opts->{stdin_data};
+    unless (defined $stdin_data) {
+        if (defined (my $stdin_file = delete $opts->{stdin_file})) {
+            $in_fh = __open_file($any, '<', $stdin_file) or return;
+        }
+        elsif (defined(my $fh = delete $opts->{stdin_fh})) {
+            $in_fh = __open_file($any, '<&', $fh) or return;
+        }
+        if (defined $in_fh) {
+            binmode $in_fh;
+            # Calling those function on a non socket should be harmless...
+            if ($^O =~ /^Win/) {
+                my $true = 1;
+                ioctl($in_fh, 0x8004667e, \$true);
+            }
+            else {
+                my $flags = fcntl($in_fh, Fcntl::F_GETFL(), 0);
+                fcntl($in_fh, Fcntl::F_SETFL(), $flags | Fcntl::O_NONBLOCK());
+            }
+        }
+    }
+
     for my $stream (qw(stdout stderr)) {
         my $fh = delete $opts->{"${stream}_fh"};
         unless ($fh) {
@@ -322,7 +347,7 @@ sub __parse_fh_opts {
                          ? File::Spec->devnull
                          : delete $opts->{"${stream}_file"} );
             if (defined $file) {
-                $fh = __open_file($any, $file) or return;
+                $fh = __open_file($any, '>', $file) or return;
             }
             if ($stream eq 'stderr' and not defined $fh) {
                 if (delete $opts->{stderr_to_stdout}) {
@@ -333,11 +358,12 @@ sub __parse_fh_opts {
                 }
             }
         }
-        push @fh, $fh;
+        push @out_fh, $fh;
     }
-    grep /^std(?:out|err)_/, keys %$opts and
+
+    grep /^std(?:out|err|in)_/, keys %$opts and
         croak "invalid option(s) '" . join("', '", grep /^std(?:out|err)_/, keys %$opts) . "'";
-    return @fh;
+    return ($stdin_data, $in_fh, @out_fh);
 }
 
 sub __open_channel_and_exec {
@@ -384,25 +410,25 @@ sub __open_channel_and_exec {
 
 sub _system {
     my ($any, $opts, $cmd) = @_;
-    my ($channel, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
+    my ($channel, $in_data, $in_fh, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
     __io3($any, $channel, $opts->{timeout},
-	  $opts->{stdin_data}, $out_fh || \*STDOUT, $err_fh || \*STDERR);
+	  $in_data, $in_fh, $out_fh || \*STDOUT, $err_fh || \*STDERR);
 }
 
 sub _capture {
     my ($any, $opts, $cmd) = @_;
-    my ($channel, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
+    my ($channel, $in_data, $in_fh, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
     die 'Internal error: $out_fh is not undef' if $out_fh;
     (__io3($any, $channel, $opts->{timeout},
-	   $opts->{stdin_data}, undef, $err_fh || \*STDERR))[0];
+	   $in_data, $in_fh, undef, $err_fh || \*STDERR))[0];
 }
 
 sub _capture2 {
     my ($any, $opts, $cmd) = @_;
-    my ($channel, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
+    my ($channel, $in_data, $in_fh, $out_fh, $err_fh) = __open_channel_and_exec($any, $opts, $cmd) or return;
     die 'Internal error: $out_fh is not undef' if $out_fh;
     die 'Internal error: $err_fh is not undef' if $err_fh;
-    __io3($any, $channel, $opts->{timeout}, $opts->{stdin_data});
+    __io3($any, $channel, $opts->{timeout}, $in_data, $in_fh);
 }
 
 sub __write_all {
@@ -424,38 +450,62 @@ sub __write_all {
     return 1;
 }
 
+my $write_chunk_size = 4000;
+
 sub __io3 {
-    my ($any, $channel, $timeout, $stdin_data, @fh) = @_;
+    my ($any, $channel, $timeout, $in_data, $in_fh, @out_fh) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
     my $in = '';
+    my ($in_at_eof, $in_refill);
     my @cap = ('', '');
     my ($eof_sent, $eof_received);
     $timeout ||= $any->{timeout};
     my $start = time;
-    $stdin_data ||= [];
     my $select_bm = $any->{be_select_bm};
  OUTER:
     while (1) {
         my $delay = 3;
         unless ($eof_sent) {
-            $in .= shift @$stdin_data while @$stdin_data and length $in < 32000;
-            if (length $in) {
-                if (select(undef, "select_bm", undef, 0) > 0) {
-                    # we limit the size of the packet because
-                    # __channel_do is going to block until all the
-                    # data has been queued at the TCP level
-                    my $bytes = __channel_do($any, $channel,
-                                             'write', substr($in, 0, 4000));
-                    defined $bytes or last OUTER;
-                    if ($bytes) {
-                        $delay = 0;
-                        substr($in, 0, $bytes, '');
+            if ($channel->window_write > 0) {
+                if (length $in < $write_chunk_size and not $in_at_eof) {
+                    if ($in_data and @$in_data) {
+                        $in .= shift @$in_data while @$in_data and length $in < 32000;
+                    }
+                    elsif ($in_fh) {
+                        my $bytes = sysread($in_fh, $in, 32000, length $in);
+                        if (not defined $bytes and $! == Errno::EAGAIN()) {
+                            $in_refill = 1;
+                        }
+                        else {
+                            $in_refill = 0;
+                            unless ($bytes) {
+                                $debug and $debug & 1024 and _debug "end of in file reached";
+                                undef $in_fh;
+                            }
+                        }
+                    }
+                    else {
+                        $in_at_eof = 1;
                     }
                 }
-            }
-            else {
-                __channel_do($any, $channel, 'send_eof') or last;
-                $eof_sent = 1;
+                if (length $in) {
+                    if (select(undef, "$select_bm", undef, 0) > 0) {
+                        # we limit the size of the packet because
+                        # __channel_do is going to block until all the
+                        # data has been queued at the TCP level
+                        my $bytes = __channel_do($any, $channel,
+                                                 'write', substr($in, 0, $write_chunk_size));
+                        defined $bytes or last OUTER;
+                        if ($bytes) {
+                            $delay = 0;
+                            substr($in, 0, $bytes, '');
+                        }
+                    }
+                }
+                elsif ($in_at_eof) {
+                    __channel_do($any, $channel, 'send_eof') or last;
+                    $eof_sent = 1;
+                }
             }
         }
         unless ($eof_received) {
@@ -464,8 +514,8 @@ sub __io3 {
                 defined $bytes or last OUTER;
                 if ($bytes) {
                     $delay = 0;
-                    if ($fh[$ext]) {
-                        __write_all($any, $fh[$ext], $buf) or last OUTER;
+                    if ($out_fh[$ext]) {
+                        __write_all($any, $out_fh[$ext], $buf) or last OUTER;
                     }
                     else {
                         $cap[$ext] .= $buf;
@@ -495,8 +545,10 @@ sub __io3 {
 	    }
 	}
         if ($delay) {
+            my $rbm = $select_bm;
+            vec($rbm, fileno($in_fh), 1) = 1 if $in_refill;
             $debug and $debug & 1024 and _debug "delaying ${delay}s";
-            my $n = select("$select_bm", ($eof_sent ? undef : "$select_bm"), undef, $delay);
+            my $n = select($rbm, ($eof_sent ? undef : "$select_bm"), undef, $delay);
             $debug and $debug & 1024 and _debug "active sockets: ", $n;
         }
     }

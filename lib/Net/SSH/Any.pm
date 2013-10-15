@@ -396,7 +396,7 @@ sub capture2 {
     wantarray ? ($out, $err) : $out
 }
 
-_sub_options system => qw(timeout stdin_data
+_sub_options system => qw(timeout stdin_data stdin_file stdin_fh
                           stdout_fh stdout_file stdout_discard
                           stderr_to_stdout stderr_fh stderr_file stderr_discard);
 sub system {
