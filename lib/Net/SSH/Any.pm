@@ -865,6 +865,9 @@ and returns them.
 
 =item timeout => $seconds
 
+Command is aborted after the given numbers of seconds with no activity
+elapse.
+
 =item stdin_data => $data
 
 =item stdin_data => \@data
@@ -876,13 +879,16 @@ Example:
     $ssh->system({stdin_data => \@data}, "cat >/tmp/foo")
         or die "unable to write file: " . $ssh->error;
 
-
 =back
 
 =item $pipe = $ssh->pipe(\%opts, @cmd)
 
-Returns a L<Net::SSH::Any::Pipe> object that allows to perform
-bidirectional communication with the remote process.
+Returns a bidirectional file handle object (that may be a real
+operating system file handle or an emulated tied file handle,
+depending on the used backend), connected to the remote command stdin
+and stdout streams.
+
+The returned pipe objects provide most of the API of L<IO::Handle>.
 
 =over 4
 
