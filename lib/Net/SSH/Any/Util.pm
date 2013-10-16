@@ -38,7 +38,7 @@ sub _debug_dump {
 sub _debug_hexdump {
     no warnings qw(uninitialized);
     my $head = shift;
-
+    local ($@, $!, $_);
     _debugf("%s (%d bytes):", $head, length($_[0]));
     if ($debug & 16384) {
 	my $data = shift;

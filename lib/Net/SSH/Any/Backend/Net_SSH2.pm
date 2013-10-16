@@ -17,6 +17,8 @@ use Time::HiRes ();
 use Socket qw(SO_LINGER SO_KEEPALIVE);
 use IO::Socket::INET;
 
+my $windows = $^O =~ /^MSWin/;
+
 use Config;
 my %sig_name2num;
 if (defined($Config{sig_name})) {
@@ -99,7 +101,7 @@ sub __check_host_key {
     my $known_hosts_path = $any->{known_hosts_path};
     unless (defined $known_hosts_path) {
         my $config_dir;
-        if ($^O =~ /^Win/) {
+        if ($windows) {
             _load_module('Win32') or return;
             my $appdata = Win32::GetFolderPath(Win32::CSIDL_APPDATA());
             unless (defined $appdata) {
@@ -317,6 +319,7 @@ sub __parse_fh_opts {
     my @name = qw(stdout stderr);
     my $in_fh;
     my @out_fh;
+    my $in_fh_comes_from_the_outside;
 
     my $stdin_data = delete $opts->{stdin_data};
     unless (defined $stdin_data) {
@@ -324,19 +327,23 @@ sub __parse_fh_opts {
             $in_fh = __open_file($any, '<', $stdin_file) or return;
         }
         elsif (defined(my $fh = delete $opts->{stdin_fh})) {
-            $in_fh = __open_file($any, '<&', $fh) or return;
+            $in_fh = $fh;
+            $in_fh_comes_from_the_outside = 1;
         }
-        if (defined $in_fh) {
-            binmode $in_fh;
-            # Calling those function on a non socket should be harmless...
-            if ($^O =~ /^Win/) {
-                my $true = 1;
-                ioctl($in_fh, 0x8004667e, \$true);
-            }
-            else {
-                my $flags = fcntl($in_fh, Fcntl::F_GETFL(), 0);
-                fcntl($in_fh, Fcntl::F_SETFL(), $flags | Fcntl::O_NONBLOCK());
-            }
+    }
+
+    if ($in_fh and (-s $in_fh or (not $windows and -p $in_fh))) {
+        if ($in_fh_comes_from_the_outside) {
+            $in_fh = __open_file($any, '<&', $in_fh) or return;
+        }
+        binmode $in_fh;
+        if ($windows) {
+            my $true = 1;
+            ioctl($in_fh, 0x8004667e, \$true);
+        }
+        else {
+            my $flags = fcntl($in_fh, Fcntl::F_GETFL(), 0);
+            fcntl($in_fh, Fcntl::F_SETFL(), $flags | Fcntl::O_NONBLOCK());
         }
     }
 
@@ -450,7 +457,7 @@ sub __write_all {
     return 1;
 }
 
-my $write_chunk_size = 4000;
+my $in_buffer_size = 40000;
 
 sub __io3 {
     my ($any, $channel, $timeout, $in_data, $in_fh, @out_fh) = @_;
@@ -466,13 +473,16 @@ sub __io3 {
     while (1) {
         my $delay = 3;
         unless ($eof_sent) {
-            if ($channel->window_write > 0) {
-                if (length $in < $write_chunk_size and not $in_at_eof) {
+            my $window_write = $channel->window_write;
+            $debug and $debug & 1024 and _debug("window write: ", $window_write);
+            if ($window_write) {
+                if (length $in < $in_buffer_size and not $in_at_eof) {
                     if ($in_data and @$in_data) {
-                        $in .= shift @$in_data while @$in_data and length $in < 32000;
+                        $in .= shift @$in_data while @$in_data and length $in < $in_buffer_size;
                     }
                     elsif ($in_fh) {
-                        my $bytes = sysread($in_fh, $in, 32000, length $in);
+                        my $bytes = sysread($in_fh, $in, $in_buffer_size, length $in);
+                        $debug and $debug and _debug "stdin sysread: ", $bytes, " \$!: ", $!;
                         if (not defined $bytes and $! == Errno::EAGAIN()) {
                             $in_refill = 1;
                         }
@@ -485,21 +495,25 @@ sub __io3 {
                         }
                     }
                     else {
+                        $debug and $debug & 1024 and _debug "in_at_eof = 1";
                         $in_at_eof = 1;
                     }
                 }
                 if (length $in) {
+                    $debug and $debug & 1024 and _debug "bytes in stdin buffer: ", length $in;
                     if (select(undef, "$select_bm", undef, 0) > 0) {
                         # we limit the size of the packet because
                         # __channel_do is going to block until all the
                         # data has been queued at the TCP level
-                        my $bytes = __channel_do($any, $channel,
-                                                 'write', substr($in, 0, $write_chunk_size));
+                        my $bytes = __channel_do($any, $channel, 'write', $in);
                         defined $bytes or last OUTER;
                         if ($bytes) {
                             $delay = 0;
                             substr($in, 0, $bytes, '');
                         }
+                    }
+                    else {
+                        $debug and $debug & 1024 and _debug "socket is not ready for writting";
                     }
                 }
                 elsif ($in_at_eof) {
