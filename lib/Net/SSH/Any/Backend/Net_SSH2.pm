@@ -379,7 +379,7 @@ sub __open_channel_and_exec {
     $ssh2->blocking(1);
     my $time_limit = $any->{io_timeout} + time;
     while ($time_limit >= time) {
-        if (my $channel = $ssh2->channel) {
+        if (my $channel = $ssh2->channel("session", 1024*1024)) {
             my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
             if (__channel_do($any, $channel,
                              'process',
@@ -463,6 +463,7 @@ sub __io3 {
     my ($any, $channel, $timeout, $in_data, $in_fh, @out_fh) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
     my $in = '';
+    my $out;
     my ($in_at_eof, $in_refill);
     my @cap = ('', '');
     my ($eof_sent, $eof_received);
@@ -523,17 +524,23 @@ sub __io3 {
             }
         }
         unless ($eof_received) {
+            if (1 or ($debug and $debug & 1024)) {
+                my ($size, $avail, $size0) = $channel->window_read;
+                _debug "window_read avail: $avail, size: $size/$size0";
+            }
             for my $ext (0, 1) {
-                my $bytes = __channel_do($any, $channel, 'read', my($buf), 256000, $ext);
+                my $bytes = __channel_do($any, $channel, 'read', $out, 262144, $ext);
                 defined $bytes or last OUTER;
                 if ($bytes) {
                     $delay = 0;
                     if ($out_fh[$ext]) {
-                        __write_all($any, $out_fh[$ext], $buf) or last OUTER;
+                        __write_all($any, $out_fh[$ext], $out) or last OUTER;
                     }
                     else {
-                        $cap[$ext] .= $buf;
+                        $cap[$ext] .= $out;
                     }
+                    # we reuse out to avoid the allocation of 256KB every time
+                    $out = '';
                 }
             }
             if ($channel->eof) {
@@ -566,6 +573,9 @@ sub __io3 {
             $debug and $debug & 1024 and _debug "active sockets: ", $n;
         }
     }
+
+    # clear buffer memory
+    undef $in; undef $out;
 
     __channel_do($any, $channel, 'close');
     __channel_do($any, $channel, 'wait_closed');
