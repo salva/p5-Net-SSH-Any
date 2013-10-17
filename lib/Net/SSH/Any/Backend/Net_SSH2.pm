@@ -200,9 +200,11 @@ sub _connect {
 
     $ssh2->timeout(1000 * $any->{io_timeout});
 
-    if (defined(my $flag_method = $ssh2->can('flag'))) {
-        $debug and $debug & 1024 and _debug "enabling compression";
-        $flag_method->($ssh2, $C{FLAG_COMPRESS}, 1);
+    if ($any->{compress}) {
+        if (defined(my $flag_method = $ssh2->can('flag'))) {
+            $debug and $debug & 1024 and _debug "enabling compression";
+            $flag_method->($ssh2, $C{FLAG_COMPRESS}, 1);
+        }
     }
 
     my $socket = IO::Socket::INET->new(PeerHost => $any->{host},
@@ -377,9 +379,10 @@ sub __open_channel_and_exec {
     my ($any, $opts, $cmd) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
     $ssh2->blocking(1);
+    my $window_size = delete $opts->{_window_size} || 256 * 1024;
     my $time_limit = $any->{io_timeout} + time;
     while ($time_limit >= time) {
-        if (my $channel = $ssh2->channel("session", 1024*1024)) {
+        if (my $channel = $ssh2->channel("session", $window_size)) {
             my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
             if (__channel_do($any, $channel,
                              'process',
@@ -524,7 +527,7 @@ sub __io3 {
             }
         }
         unless ($eof_received) {
-            if (1 or ($debug and $debug & 1024)) {
+            if ($debug and $debug & 1024) {
                 my ($size, $avail, $size0) = $channel->window_read;
                 _debug "window_read avail: $avail, size: $size/$size0";
             }

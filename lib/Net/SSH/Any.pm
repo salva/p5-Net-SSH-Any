@@ -67,6 +67,7 @@ sub new {
 
     my $known_hosts_path = delete $opts{known_hosts_path};
     my $strict_host_key_checking = _first_defined delete $opts{strict_host_key_checking}, 1;
+    my $compress = _first_defined delete $opts{compress}, 1;
     my $backend_opts = delete $opts{backend_opts};
 
     my (%remote_cmd, %local_cmd);
@@ -88,6 +89,7 @@ sub new {
                 argument_encoding => $argument_encoding,
                 known_hosts_path => $known_hosts_path,
                 strict_host_key_checking => $strict_host_key_checking,
+                compress => $compress,
                 backend_opts => $backend_opts,
                 error_prefix => [],
                 remote_cmd => \%remote_cmd,
@@ -398,7 +400,8 @@ sub capture2 {
 
 _sub_options system => qw(timeout stdin_data stdin_file stdin_fh
                           stdout_fh stdout_file stdout_discard
-                          stderr_to_stdout stderr_fh stderr_file stderr_discard);
+                          stderr_to_stdout stderr_fh stderr_file stderr_discard
+                          _window_size);
 sub system {
     my $any = shift;
     $any->_clear_error or return undef;
