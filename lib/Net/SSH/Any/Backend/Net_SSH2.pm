@@ -49,7 +49,6 @@ my %C = ( SOCKET_BLOCK_INBOUND => 1,
           FLAG_COMPRESS => 2,
           TRACE_TRANS => (1<<1),
           TRACE_DUMP => (1<<10),
-
         );
 
 do {
@@ -244,7 +243,7 @@ sub _connect {
 
 # those are the operations that can be safely carried on in a
 # non-blocking fashion:
-my %non_blocking_methods = map { $_ => 1 } qw(read);
+my %non_blocking_methods = (nb_read => 'read');
 
 sub __channel_do {
     my $any = shift;
@@ -256,7 +255,13 @@ sub __channel_do {
     }
     my $ssh2 = $any->{be_ssh2};
     my $time_limit = time + $any->{io_timeout};
-    my $blocking = ($non_blocking_methods{$method} ? 0 : 1);
+    my $blocking;
+    if (defined (my $real_method = $non_blocking_methods{$method})) {
+        $method = $real_method;
+    }
+    else {
+        $blocking = 1;
+    }
     $ssh2->blocking($blocking);
     while (1) {
         $debug and $debug & 1024 and _debug "calling $channel->$method";
@@ -532,7 +537,7 @@ sub __io3 {
                 _debug "window_read avail: $avail, size: $size/$size0";
             }
             for my $ext (0, 1) {
-                my $bytes = __channel_do($any, $channel, 'read', $out, 262144, $ext);
+                my $bytes = __channel_do($any, $channel, 'nb_read', $out, 262144, $ext);
                 defined $bytes or last OUTER;
                 if ($bytes) {
                     $delay = 0;
@@ -604,25 +609,26 @@ sub _pipe {
 
 sub _syswrite {
     my ($any, $channel) = @_;
-    my $bytes = __channel_do($any, $channel, $any->{timeout}, 'write', substr($_[2], 0, 4000));
-    return $bytes if $bytes;
-    $any->_set_error(SSHA_EAGAIN, "Retry write") if defined $bytes;
+    if (length $_[2]) {
+        my $bytes = __channel_do($any, $channel, 'write', $_[2]);
+        return $bytes if $bytes;
+        return unless defined $bytes;
+    }
+    $any->_set_error(SSHA_EAGAIN, "Retry write");
     return;
 }
 
 # appends at the end of $_[2] always!
 sub _sysread {
-    my ($any, $channel, undef, $len, $ext) = @_;
+    my ($any, $channel, $blocking, undef, $len, $ext) = @_;
     $debug and $debug & 8192 and _debug("trying to read $len bytes from channel");
-    my $bytes = __channel_do($any, $channel, $any->{timeout}, 'read', my($buf), $len, $ext || 0);
+    my $bytes = __channel_do($any, $channel, ($blocking ? 'read' : 'nb_read'), my($buf), $len, $ext || 0);
     if ($bytes) {
         $debug and $debug & 8192 and _debug_hexdump("data read", $buf);
         no warnings;
-        $_[2] .= $buf;
-        return $bytes
-    };
-    $any->_set_error(SSHA_EAGAIN, "Retry read") if defined $bytes;
-    return;
+        $_[3] .= $buf;
+    }
+    $bytes
 }
 
 sub _sftp {

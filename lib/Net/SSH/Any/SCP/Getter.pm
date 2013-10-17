@@ -128,7 +128,7 @@ sub run {
 		    $pipe->syswrite("\x00");
 		    $buf = '';
 		    while ($size) {
-			my $read = $pipe->sysread($buf, ($size > 16384 ? 16384 : $size));
+			my $read = $pipe->sysread($buf, ($size > 64000 ? 64000 : $size));
 			unless ($read) {
 			    $g->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
 			    $g->_close($g->_pop_action('file'), 2, "broken pipe");

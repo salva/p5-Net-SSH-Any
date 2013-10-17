@@ -33,11 +33,9 @@ sub _syswrite {
 sub _sysread {
     my ($pipe, undef, $len, $ext) = @_;
     my $channel = $pipe->{_be_channel};
-    $debug and $debug & 8192 and _debug("$pipe->_sysread($len)...");
-    $channel->blocking($pipe->{blocking});
-    my $bytes = $pipe->{any}->_sysread($pipe->{_be_channel}, $_[1], $len, $ext);
-    $channel->blocking(1);
-    $debug and $debug & 8192 and _debug("$bytes bytes read");
+    $debug and $debug & 8192 and _debug("$pipe->_sysread($len, blocking => $pipe->{blocking})...");
+    my $bytes = $pipe->{any}->_sysread($pipe->{_be_channel}, $pipe->{blocking}, $_[1], $len, $ext);
+    $debug and $debug & 8192 and _debug($bytes, " bytes read");
     return $bytes;
 }
 
