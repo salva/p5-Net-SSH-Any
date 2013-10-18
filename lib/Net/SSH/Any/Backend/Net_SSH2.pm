@@ -40,6 +40,7 @@ my %C = ( SOCKET_BLOCK_INBOUND => 1,
           ERROR_EAGAIN => -37,
           ERROR_FILE => -16,
           ERROR_CHANNEL_CLOSED => -26,
+          ERROR_CHANNEL_EOF_SENT => -27,
           KNOWNHOST_TYPE_PLAIN => 1,
           KNOWNHOST_KEYENC_RAW => 2,
           KNOWNHOST_KEY_SHIFT => (1<<18),
@@ -243,37 +244,35 @@ sub _connect {
 
 # those are the operations that can be safely carried on in a
 # non-blocking fashion:
-my %non_blocking_methods = (nb_read => 'read');
+my %non_blocking_method = (read => 1);
 
-sub __channel_do {
+sub _channel_do {
     my $any = shift;
     my $channel = shift;
+    my $blocking = shift;
     my $method = shift;
     if ($any->error == SSHA_CONNECTION_ERROR) {
         $debug and $debug & 1024 and _debug "skipping $channel->$method call because connection is broken";
         return
     }
     my $ssh2 = $any->{be_ssh2};
-    my $time_limit = time + $any->{io_timeout};
-    my $blocking;
-    if (defined (my $real_method = $non_blocking_methods{$method})) {
-        $method = $real_method;
-    }
-    else {
-        $blocking = 1;
-    }
+    $blocking ||= !$non_blocking_method{$method};
     $ssh2->blocking($blocking);
+
+    $debug and $debug & 1024 and _debug "calling $channel->$method with args: ",
+        join ", ", map { defined($_) ? "'$_'" : '<undef>' } @_;
+
+    my $time_limit = time + $any->{io_timeout};
     while (1) {
-        $debug and $debug & 1024 and _debug "calling $channel->$method";
         my $rc = $channel->$method(@_);
         $debug and $debug & 1024 and _debug "$channel->$method rc: ", $rc;
         return $rc if defined $rc and $rc >= 0;
         my ($error, $error_name, $error_msg) = $ssh2->error;
-        $debug and $debug & 1024 and _debug("error: ", $error, ", name: ",
-                                            $error_name, ", msg: ", $error_msg);
         # We assume Net::SSH2 masked a LIBSSH2_ERROR_EAGAIN if
         # both $rc and $ssh->error are unset
         $rc ||= $error || $C{ERROR_EAGAIN};
+        $debug and $debug & 1024 and _debug("rc: ", $rc, "error: ", $error, ", name: ",
+                                            $error_name, ", msg: ", $error_msg);
         if ($rc == $C{ERROR_EAGAIN} and not $blocking) {
             # When an EAGAIN arrives and there is data queued for
             # writting we have to repeat the operation unchanged until
@@ -284,7 +283,7 @@ sub __channel_do {
                     $any->_set_error(SSHA_CONNECTION_ERROR, "connection lost, timeout");
                     return;
                 }
-                $debug and $debug & 1024 and _debug "waiting for readability of the socket";
+                $debug and $debug & 1024 and _debug "waiting for the socket to become writable";
                 select(undef, "$any->{__select_bm}", undef, 1);
             }
             else {
@@ -294,7 +293,8 @@ sub __channel_do {
             }
         }
         else {
-            unless ($rc == $C{ERROR_CHANNEL_CLOSED}) {
+            unless ($rc == $C{ERROR_CHANNEL_CLOSED} or
+                    $rc == $C{ERROR_CHANNEL_EOF_SENT}) {
                 $error_msg ||= $error_name || "unknown libssh2 error";
                 if ($rc == $C{ERROR_EAGAIN}) {
                     $any->_set_error(SSHA_CONNECTION_ERROR,
@@ -383,43 +383,17 @@ sub __parse_fh_opts {
 sub __open_channel_and_exec {
     my ($any, $opts, $cmd) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
-    $ssh2->blocking(1);
     my $window_size = delete $opts->{_window_size} || 256 * 1024;
-    my $time_limit = $any->{io_timeout} + time;
-    while ($time_limit >= time) {
-        if (my $channel = $ssh2->channel("session", $window_size)) {
-            my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
-            if (__channel_do($any, $channel,
-                             'process',
-                             ( (defined $cmd and length $cmd) 
-                               ? ('exec' => $cmd)
-                               : 'shell'))) {
-                return ($channel, @fhs);
-            }
-            return;
-        }
-        my $error = $ssh2->error;
-        if ($error and $error != $C{ERROR_EAGAIN}) {
-            _debug "foo: $error";
-            $any->__copy_error(SSHA_CONNECTION_ERROR);
-            return;
-        }
-
-        if (my $dir = $ssh2->block_directions) {
-            $debug and $debug & 1024 and _debug "delay after EAGAIN, block_directions: $dir";
-            select (($dir & $C{SOCKET_BLOCK_INBOUND} ? "$any->{be_select_bm}" : ''),
-                    ($dir & $C{SOCKET_BLOCK_OUTBOUND} ? "$any->{be_select_bm}" : ''),
-                    undef, 1);
-        }
-        else {
-            $any->_set_error(SSHA_CONNECTION_ERROR,
-                             "connection lost: internal libssh2 error, ".
-                             "block_directions unset after EAGAIN");
-            return;
+    if (my $channel = $ssh2->channel("session", $window_size)) {
+        my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
+        if ($any->_channel_do($channel, 1,
+                              'process',
+                              ( (defined $cmd and length $cmd) 
+                                ? ('exec' => $cmd)
+                                : 'shell'))) {
+            return ($channel, @fhs);
         }
     }
-
-    $any->_set_error(SSHA_CONNECTION_ERROR, "connection lost: timeout");
     return;
 }
 
@@ -463,6 +437,23 @@ sub __write_all {
         }
     }
     return 1;
+}
+
+sub _channel_close {
+    my ($any, $channel) = @_;
+
+    $any->_channel_do($channel, 1, 'close');
+    $any->_channel_do($channel, 1, 'wait_closed');
+
+    if ($any->error) {
+        $? = (255 << 8);
+    }
+    else {
+        my $code = $channel->exit_status || 0;
+        my $signal = _sig_name2num($channel->exit_signal) || 0;
+        $? = (($code << 8) | $signal);
+    }
+    1
 }
 
 my $in_buffer_size = 40000;
@@ -511,10 +502,7 @@ sub __io3 {
                 if (length $in) {
                     $debug and $debug & 1024 and _debug "bytes in stdin buffer: ", length $in;
                     if (select(undef, "$select_bm", undef, 0) > 0) {
-                        # we limit the size of the packet because
-                        # __channel_do is going to block until all the
-                        # data has been queued at the TCP level
-                        my $bytes = __channel_do($any, $channel, 'write', $in);
+                        my $bytes = $any->_channel_do($channel, 1, 'write', $in);
                         defined $bytes or last OUTER;
                         if ($bytes) {
                             $delay = 0;
@@ -526,7 +514,7 @@ sub __io3 {
                     }
                 }
                 elsif ($in_at_eof) {
-                    __channel_do($any, $channel, 'send_eof') or last;
+                    $any->_channel_do($channel, 1, 'send_eof') or last;
                     $eof_sent = 1;
                 }
             }
@@ -537,7 +525,7 @@ sub __io3 {
                 _debug "window_read avail: $avail, size: $size/$size0";
             }
             for my $ext (0, 1) {
-                my $bytes = __channel_do($any, $channel, 'nb_read', $out, 262144, $ext);
+                my $bytes = $any->_channel_do($channel, 0, 'read', $out, 262144, $ext);
                 defined $bytes or last OUTER;
                 if ($bytes) {
                     $delay = 0;
@@ -573,30 +561,40 @@ sub __io3 {
 		undef $start;
 	    }
 	}
-        if ($delay) {
-            my $rbm = $select_bm;
-            vec($rbm, fileno($in_fh), 1) = 1 if $in_refill;
-            $debug and $debug & 1024 and _debug "delaying ${delay}s";
-            my $n = select($rbm, ($eof_sent ? undef : "$select_bm"), undef, $delay);
-            $debug and $debug & 1024 and _debug "active sockets: ", $n;
-        }
+        $any->_wait_for_data($eof_sent, $delay, ($in_refill ? [$in_fh] : ()));
     }
 
     # clear buffer memory
     undef $in; undef $out;
 
-    __channel_do($any, $channel, 'close');
-    __channel_do($any, $channel, 'wait_closed');
-
-    if ($any->error) {
-        $? = (255 << 8);
-    }
-    else {
-        my $code = $channel->exit_status || 0;
-        my $signal = _sig_name2num($channel->exit_signal) || 0;
-        $? = (($code << 8) | $signal);
-    }
+    $any->_channel_close($channel);
     return @cap;
+}
+
+sub _wait_for_data {
+    my ($any, $write, $max_delay, $extra_read) = @_;
+    if ($max_delay) {
+        my $rbm = $any->{be_select_bm};
+        my $wbm = ($write ? $rbm : '');
+        if ($extra_read) {
+            vec($rbm, fileno($_), 1) = 1 for @$extra_read;
+        }
+        my $n = select($rbm, $wbm, undef, $max_delay);
+        $debug and $debug & 1024 and _debug "active sockets: ", $n;
+        $n;
+    }
+}
+
+sub _channel_read {
+    my $any = shift;
+    my $channel = shift;
+    my $blocking = shift;
+    while (1) {
+        my $rc = $any->_channel_do($channel, 0, 'read', @_);
+        return $rc if $rc or not defined $rc or not $blocking;
+        return if $channel->eof;
+        $any->_wait_for_data(0, 1);
+    }
 }
 
 sub _pipe {
@@ -605,30 +603,6 @@ sub _pipe {
     # TODO: do something with the parsed options?
     require Net::SSH::Any::Backend::Net_SSH2::Pipe;
     Net::SSH::Any::Backend::Net_SSH2::Pipe->_make($any, $channel);
-}
-
-sub _syswrite {
-    my ($any, $channel) = @_;
-    if (length $_[2]) {
-        my $bytes = __channel_do($any, $channel, 'write', $_[2]);
-        return $bytes if $bytes;
-        return unless defined $bytes;
-    }
-    $any->_set_error(SSHA_EAGAIN, "Retry write");
-    return;
-}
-
-# appends at the end of $_[2] always!
-sub _sysread {
-    my ($any, $channel, $blocking, undef, $len, $ext) = @_;
-    $debug and $debug & 8192 and _debug("trying to read $len bytes from channel");
-    my $bytes = __channel_do($any, $channel, ($blocking ? 'read' : 'nb_read'), my($buf), $len, $ext || 0);
-    if ($bytes) {
-        $debug and $debug & 8192 and _debug_hexdump("data read", $buf);
-        no warnings;
-        $_[3] .= $buf;
-    }
-    $bytes
 }
 
 sub _sftp {
