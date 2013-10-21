@@ -139,7 +139,7 @@ sub on_open_file {
 
 sub on_write {
     my ($g, $action) = @_;
-    $debug and $debug & 4096 and _debug_hexdump('data received', $_[2]);
+    # $debug and $debug & 4096 and _debug_hexdump('data received', $_[2]);
     print {$g->{cfh}} $_[2];
     1;
 }
