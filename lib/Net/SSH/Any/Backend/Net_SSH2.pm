@@ -309,18 +309,6 @@ sub _channel_do {
     }
 }
 
-sub __open_file {
-    my ($any, $def_mode, $name_or_args) = @_;
-    my ($mode, @args) = (ref $name_or_args
-			 ? @$name_or_args
-			 : ($def_mode, $name_or_args));
-    if (open my $fh, $mode, @args) {
-        return $fh;
-    }
-    $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to open file '@args': $!");
-    return undef;
-}
-
 sub __parse_fh_opts {
     my ($any, $opts, $channel) = @_;
     my @name = qw(stdout stderr);
@@ -331,7 +319,7 @@ sub __parse_fh_opts {
     my $stdin_data = delete $opts->{stdin_data};
     unless (defined $stdin_data) {
         if (defined (my $stdin_file = delete $opts->{stdin_file})) {
-            $in_fh = __open_file($any, '<', $stdin_file) or return;
+            $in_fh = $any->_open_file('<', $stdin_file) or return;
         }
         elsif (defined(my $fh = delete $opts->{stdin_fh})) {
             $in_fh = $fh;
@@ -341,7 +329,7 @@ sub __parse_fh_opts {
 
     if ($in_fh and (-s $in_fh or (not $windows and -p $in_fh))) {
         if ($in_fh_comes_from_the_outside) {
-            $in_fh = __open_file($any, '<&', $in_fh) or return;
+            $in_fh = $any->_open_file('<&', $in_fh) or return;
         }
         binmode $in_fh;
         if ($windows) {
@@ -361,7 +349,7 @@ sub __parse_fh_opts {
                          ? File::Spec->devnull
                          : delete $opts->{"${stream}_file"} );
             if (defined $file) {
-                $fh = __open_file($any, '>', $file) or return;
+                $fh = $any->_open_file('>', $file) or return;
             }
             if ($stream eq 'stderr' and not defined $fh) {
                 if (delete $opts->{stderr_to_stdout}) {

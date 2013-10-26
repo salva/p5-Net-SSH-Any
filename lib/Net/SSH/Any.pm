@@ -360,6 +360,18 @@ sub _check_child_error {
     return 1;
 }
 
+sub _open_file {
+    my ($any, $def_mode, $name_or_args) = @_;
+    my ($mode, @args) = (ref $name_or_args
+			 ? @$name_or_args
+			 : ($def_mode, $name_or_args));
+    if (open my $fh, $mode, @args) {
+        return $fh;
+    }
+    $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to open file '@args': $!");
+    return undef;
+}
+
 _sub_options capture => qw(timeout stdin_data stderr_to_stdout stderr_discard
                            stderr_fh stderr_file);
 sub capture {

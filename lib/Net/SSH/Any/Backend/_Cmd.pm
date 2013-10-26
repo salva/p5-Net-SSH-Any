@@ -29,18 +29,6 @@ sub _connect {
                                   ( $extra ? %$extra : () ) );
 }
 
-sub __open_file {
-    my ($any, $name_or_args) = @_;
-    my ($mode, @args) = (ref $name_or_args
-			 ? @$name_or_args
-			 : ('>', $name_or_args));
-    if (open my $fh, $mode, @args) {
-        return $fh;
-    }
-    $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to open file '@args': $!");
-    return undef;
-}
-
 sub __fileno_dup_over {
     my ($good_fn, $fh) = @_;
     if (defined $fh) {
@@ -191,7 +179,7 @@ sub __fork_cmd {
                     $file = File::Spec->devnull;
                 }
                 if (defined $file) {
-                    $fh = __open_file($any, $file) or return;
+                    $fh = $any->_open_file('>', $file) or return;
                 }
             }
         }
