@@ -196,7 +196,7 @@ sub _connect {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to create Net::SSH2 object");
         return;
     }
-    $debug and $debug & 2048 and $ssh2->trace(~$C{TRACE_TRANS} );
+    $debug and $debug & 2048 and $ssh2->trace(~$C{TRACE_TRANS});
 
     $ssh2->timeout(1000 * $any->{io_timeout});
 
@@ -259,8 +259,7 @@ sub _channel_do {
     $blocking ||= !$non_blocking_method{$method};
     $ssh2->blocking($blocking);
 
-    $debug and $debug & 1024 and _debug "calling $channel->$method with args: ",
-        join ", ", map { defined($_) ? "'$_'" : '<undef>' } @_;
+    $debug and $debug & 1024 and _debug "calling $channel->$method with ", scalar(@_), " args";
 
     my $time_limit = time + $any->{io_timeout};
     while (1) {
