@@ -370,7 +370,7 @@ sub __parse_fh_opts {
 sub __open_channel_and_exec {
     my ($any, $opts, $cmd) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
-    my $window_size = delete $opts->{_window_size} || 256 * 1024;
+    my $window_size = delete $opts->{_window_size} || 2 * 1024 * 1024;
     if (my $channel = $ssh2->channel("session", $window_size)) {
         my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
         if ($any->_channel_do($channel, 1,
