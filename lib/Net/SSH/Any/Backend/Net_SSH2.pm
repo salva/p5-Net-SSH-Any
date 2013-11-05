@@ -227,7 +227,19 @@ sub _connect {
                                    eval { getlogin() });
     $aa{password} = $any->{password} if defined $any->{password};
     $aa{password} = $any->{passphrase} if defined $any->{passphrase};
-    @aa{'privatekey', 'publickey'} = ($any->{key_path}, "$any->{key_path}.pub") if defined $any->{key_path};
+    if (defined (my $private = $any->{key_path})) {
+        unless (-f $private) {
+            $any->_set_error(SSHA_CONNECTION_ERROR, "Private key '$private' does not exist on file system");
+            return;
+        }
+        my $public = $private.".pub";
+        unless (-f $public) {
+            $any->_set_error(SSHA_CONNECTION_ERROR, "Public key '$public' does not exist on file system");
+            return;
+        }
+        $aa{privatekey} = $private;
+        $aa{publickey}  = $public;
+    }
     # TODO: use default user keys on ~/.ssh/id_dsa and ~/.ssh/id_rsa
 
     $ssh2->auth(%aa);
