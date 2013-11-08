@@ -425,7 +425,7 @@ sub system {
     $any->_check_child_error;
 }
 
-_sub_options pipe => qw(stderr_to_stdout stderr_discard);
+_sub_options pipe => qw(stderr_to_stdout stderr_discard subsystem);
 sub pipe {
     my $any = shift;
     $any->_clear_error or return undef;

@@ -189,7 +189,7 @@ sub CLOSE {
     $any->_check_child_error or $pipe->_check_error;
 }
 
-sub FILENO {}
+sub FILENO { shift->{any}{be_fileno} }
 
 sub blocking {
     my $pipe = shift;

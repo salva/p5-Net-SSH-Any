@@ -383,12 +383,15 @@ sub __open_channel_and_exec {
     my ($any, $opts, $cmd) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
     my $window_size = delete $opts->{_window_size} || 2 * 1024 * 1024;
+    my $subsystem = delete $opts->{subsystem};
+    croak "subsystem name missing" if $subsystem and not defined $cmd;
+
     if (my $channel = $ssh2->channel("session", $window_size)) {
         my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
         if ($any->_channel_do($channel, 1,
                               'process',
-                              ( (defined $cmd and length $cmd) 
-                                ? ('exec' => $cmd)
+                              ( (defined $cmd and length $cmd)
+                                ? ( ($subsystem ? 'subsystem' : 'exec') => $cmd)
                                 : 'shell'))) {
             return ($channel, @fhs);
         }
@@ -607,9 +610,10 @@ sub _pipe {
 sub _sftp {
     my ($any, $opts) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
-    $any->_load_module("Net::SFTP::Foreign::Backend::Net_SSH2") or return;
-    my $sftp = Net::SFTP::Foreign->new(ssh2 => $ssh2,
-                                       backend => 'Net_SSH2',
+    my $pipe = $any->pipe({subsystem => 1}, 'sftp');
+    require Net::SSH::Any::Backend::Net_SSH2::SFTP;
+    my $sftp_backend = Net::SSH::Any::Backend::Net_SSH2::SFTP->_new($any, $pipe);
+    my $sftp = Net::SFTP::Foreign->new(backend => $sftp_backend,
                                        autodisconnect => 2,
                                        %$opts);
     if ($sftp->error) {
