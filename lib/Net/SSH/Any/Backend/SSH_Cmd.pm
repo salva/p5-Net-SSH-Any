@@ -62,6 +62,8 @@ sub _make_cmd {
         push @args, -o => 'PreferredAuthentications=publickey';
     }
 
+    push @args, '-s' if delete $opts->{subsystem};
+
     push @args, _array_or_scalar_to_list($connect_opts->{ssh_opts})
         if defined $connect_opts->{ssh_opts};
 
