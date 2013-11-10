@@ -196,7 +196,7 @@ sub _connect {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to create Net::SSH2 object");
         return;
     }
-    $debug and $debug & 2048 and $ssh2->trace(~$C{TRACE_TRANS});
+    $debug and $debug & 2048 and $ssh2->trace(~0); #~$C{TRACE_TRANS});
 
     $ssh2->timeout(1000 * $any->{io_timeout});
 
