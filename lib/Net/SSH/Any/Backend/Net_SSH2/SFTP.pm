@@ -73,6 +73,7 @@ sub _do_io {
         $debug and $debug & 4096 and _debug "SFTP reading...";
         my $bytes = sysread $pipe, $$bin, 64 * 1024, length($$bin);
         if ($bytes) {
+            $debug and $debug & 4096 and _debug "SFTP read $bytes bytes";
             $delay = 0
         }
         elsif (defined $bytes or $! != Errno::EAGAIN()) {
@@ -81,7 +82,7 @@ sub _do_io {
         }
 
         my $lbin = length $$bin;
-        $debug and $debug & 4096 and _debug "SFTP input buffer has $lbin bytes";
+        $debug and $debug & 4096 and _debug "SFTP buffers, input: $lbin, ouput: ".lenght($$bout)
 
         if (defined $len) {
             return 1 if $lbin >= $len;
