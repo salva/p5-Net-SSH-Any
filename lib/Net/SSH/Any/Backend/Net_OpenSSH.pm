@@ -43,7 +43,7 @@ sub __make_proxy_method {
     my $name = shift;
     my $sub = sub {
         my ($any, $opts, $cmd) = @_;
-        my $ssh = __ssh($any) or return undef;
+        my $ssh = __ssh($any) or return;
         if (wantarray) {
             my @r = $ssh->$name($opts, $cmd);
             __check_error($any);
@@ -59,7 +59,15 @@ sub __make_proxy_method {
     *{"_$name"} = $sub;
 }
 
-__make_proxy_method 'capture';
+sub _capture {
+    my ($any, $opts, $cmd) = @_;
+    my $ssh = __ssh($any) or return;
+    # Net::OpenSSH capture has to be called in scalar context
+    my $out = $ssh->capture($opts, $cmd);
+    __check_error($any);
+    return $out;
+}
+
 __make_proxy_method 'capture2';
 __make_proxy_method 'system';
 
