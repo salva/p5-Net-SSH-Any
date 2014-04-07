@@ -1105,6 +1105,15 @@ available from the Internet.
 
 Uses the system C<ssh> binary to connect to the remote host.
 
+=item Plink_Cmd
+
+Uses the C<plink> utility from the
+L<http://www.chiark.greenend.org.uk/~sgtatham/putty/|PuTTY> project.
+
+It is probably the easiest way to get something working on Windows.
+
+See also L<Net::SSH::Any::Backend::Plink_Cmd>.
+
 =back
 
 =head1 FAQ
@@ -1139,7 +1148,7 @@ In example:
                                                     ? 'NUL:'
                                                     : '/dev/null'));
 
-I have not made that easier on purpose!
+I am not making that easier on purpose!
 
 =item known_hosts file
 
@@ -1205,7 +1214,7 @@ upon: L<http://www.openssh.org/donations.html>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2013 by Salvador Fandiño, E<lt>sfandino@yahoo.comE<gt>
+Copyright (C) 2011-2014 by Salvador Fandiño, E<lt>sfandino@yahoo.comE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.12.4 or,
