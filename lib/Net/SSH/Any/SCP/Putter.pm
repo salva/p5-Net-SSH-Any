@@ -63,6 +63,8 @@ sub _read_file {
 
 sub _send_line_and_get_response {
     my ($p, $pipe, $action, $line) = @_;
+    $debug and $debug & 4096 and
+        _debug_hexdump("writting line", $line);
     my ($fatal, $error) = ( $pipe->print($line)
                             ? $p->_read_response($pipe)
                             : (2, "broken pipe"));
@@ -93,6 +95,8 @@ sub _clean_actions {
         $p->_close($action, 2, "broken pipe");
     }
 }
+
+sub do_stat { 1 }
 
 sub _do_stat {
     my ($p, $action) = @_;
