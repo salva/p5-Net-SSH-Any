@@ -1018,9 +1018,43 @@ Recursively descends into directories
 
 =back
 
+=item $ssh->scp_put_content(\%opts, $target, $content)
+
+Creates or overwrites the remote file C<$target> with the data given
+in C<$content>.
+
+=over 4
+
+=item perm => $perm
+
+The permissions for the new remote file. Defaults to 0666.
+
+=item atime => $atime
+
+=item mtime => $mtime
+
+Sets the atime and mtime properties of the remote file.
+
+=back
+
 =item $ssh->scp_mkdir(\%opts, $dir)
 
 Creates a directory using SCP.
+
+=over 4
+
+=item perm => $perm
+
+Sets the permissions of the remote directories created. Defaults to
+0777.
+
+=item atime => $atime
+
+=item mtime => $mtime
+
+Sets the atime and mtime properties of the remote directories.
+
+=back
 
 =item $sftp = $ssh->sftp(%opts);
 
