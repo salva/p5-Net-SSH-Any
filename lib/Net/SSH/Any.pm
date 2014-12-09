@@ -11,6 +11,8 @@ use Net::SSH::Any::Constants qw(:error);
 use Scalar::Util qw(dualvar);
 use Encode ();
 
+our @CARP_NOT = qw(Net::SSH::Any::Util);
+
 my $REQUIRED_BACKEND_VERSION = '1';
 our @BACKENDS = qw(Net::OpenSSH Net::SSH2 Net::SSH::Perl SSH_Cmd);
 
@@ -467,6 +469,7 @@ sub scp_get         { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Standard
 sub scp_get_content { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
 sub scp_mkdir       { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
 sub scp_put         { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
+sub scp_put_content { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
 
 # transparently delegate method calls to backend packages:
 sub AUTOLOAD {
