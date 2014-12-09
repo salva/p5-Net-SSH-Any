@@ -26,17 +26,13 @@ sub read_dir {
     my ($p, $action, $fh) = @_;
     unless ($p->{entry_ix}++) {
         if (defined (my $name = shift @{$p->{parts}})) {
-            return { type => 'dir', name => $name };
+            return { type => 'dir',
+                     name => $name,
+                     perm => $p->{perm},
+                     size => 0 };
         }
     }
     return
-}
-
-sub do_stat {
-    my ($p, $action) = @_;
-    $action->{perm} = 0777;
-    $action->{size} = 0;
-    1;
 }
 
 sub open_dir  {
