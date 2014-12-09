@@ -10,7 +10,7 @@ require Net::SSH::Any::SCP::Putter;
 our @ISA = qw(Net::SSH::Any::SCP::Putter);
 
 sub _new {
-    @_ == 4 or croak 'Usage: $ssh->scp_mkdir($dir)';
+    @_ == 4 or croak 'Usage: $ssh->scp_mkdir(\%opts, $dir)';
     my ($class, $any, $opts, $target) = @_;
     my @parts = grep $_ ne '.', ($target =~ m|[^/]+|g);
     my $absolute = $target =~ m|^/|;
