@@ -8,7 +8,7 @@ use Socket;
 use Errno;
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
-use IPC::Open3 qw(open3);
+use Win32API::File ();
 
 require Net::SSH::Any::Backend::_Cmd::OS::_Base;
 our @ISA = qw(Net::SSH::Any::Backend::_Cmd::OS::_Base);
@@ -33,68 +33,82 @@ sub pipe {
     ($r, $w);
 }
 
+sub unset_pipe_inherit_flag {
+    my ($os, $any, $pipe) = @_;
+    my $wh = Win32API::File::FdGetOsFHandle(fileno $pipe)
+        or croak "Win32API::File::FdGetOsFHandle failed unexpectedly";
+    Win32API::File::SetHandleInformation($wh, Win32API::File::HANDLE_FLAG_INHERIT, 0)
+}
+
 sub pty {
     my ($os, $any) = @_;
     croak "PTYs are not supported on Windows";
 }
 
-# sub open4 {
-#     my ($any, $fhs, $pty, $stderr_to_stdout, @cmd) = @_;
-#     my ($in, $out, $err) = @$fhs;
-#     $in = \*STDIN unless defined $in;
-#     $out = \*STDOUT unless defined $out;
-#     $err = ($stderr_to_stdout ? $out : \*STDERR) unless defined $err;
-
-#     local ($@, $SIG{__DIE__}, $SIG{__WARN__});
-#     my $pid = eval { open3($in, $out, $err, @cmd) };
-#     $@ and warn $@;
-#     $pid;
-# }
-
-sub _fileno_dup_over {
-    my ($good_fn, $fh) = @_;
-    if (defined $fh) {
-        my $fn = fileno $fh;
-        for (1..5) {
-            $fn >= $good_fn and return $fn;
-            $fn = POSIX::dup($fn);
-        }
-        POSIX::_exit(255);
-    }
-    undef;
-}
-
 sub open4 {
     my ($os, $any, $fhs, $close, $pty, $stderr_to_stdout, @cmd) = @_;
+    my ($pid, $error);
 
-    my $pid = fork;
-    unless ($pid) {
-        unless (defined $pid) {
-            $any->_set_error(SSHA_CONNECTION_ERROR, "unable to fork new process: $!");
-            return;
+    my (@old, @new);
+
+    $pty and croak "PTYs are not supported on Windows";
+    grep tied $_, *STDIN, *STDOUT, *STDERR
+        and croak "STDIN, STDOUT or STDERR is tied";
+    grep { defined $_ and (tied $_ or not defined fileno $_) } @$fhs
+        and croak "At least one of the given file-handles is tied or is not backed by a real OS file handle";
+
+    use Data::Dumper;
+    print Dumper $fhs;
+
+    for my $fd (0..2) {
+        if (defined $fhs->[$fd]) {
+            my $dir = ($fd ? '>' : '<');
+            open $old[$fd], "$dir&", (\*STDIN, \*STDOUT, \*STDERR)[$fd] or $error = $!;
+            open $new[$fd], "$dir&", $fhs->[$fd] or $error = $!;
         }
-
-        $pty->make_slave_controlling_terminal if $pty;
-
-        my @fds = map _fileno_dup_over(3 => $_), @$fhs;
-        close $_ for grep defined, @$close;
-
-        for (0..2) {
-            my $fd = $fds[$_];
-            POSIX::dup2($fd, $_) if defined $fd;
-        }
-
-        POSIX::dup2(1, 2) if $stderr_to_stdout;
-
-        do { exec @cmd };
-        POSIX::_exit(255);
     }
-    $pid;
+    open $old[2], '<&', \*STDERR or $error = $! if $stderr_to_stdout;
+
+    unless (defined $error) {
+        if (not $new[0] or open STDIN, '<&', $new[0]) {
+            if (not $new[1] or open STDOUT, '>&', $new[1]) {
+                $new[2] = \*STDOUT if $stderr_to_stdout;
+                if (not $new[2] or open STDERR, '>&', $new[2]) {
+                    $pid = eval { system 1, @cmd } or $error = $!;
+                    open STDERR, '>&', $old[2] or $error = $!
+                        if $new[2]
+                    }
+                else {
+                    $error = $!;
+                }
+                open STDOUT, '>&', $old[1] or $error = $!
+                    if $new[1];
+            }
+            else {
+                $error = $!
+            }
+            open STDIN, '<&', $old[0] or $error = $!
+                if $new[0];
+        }
+        else {
+            $error = $!;
+        }
+    }
+
+    undef $_ for @old, @new;
+
+    if (defined $error) {
+        $any->_set_error(SSHA_CONNECTION_ERROR, "unable to start slave process: $error");
+    }
+    return { pid => $pid };
 }
 
-sub waitpid {
-    my ($os, $any, $pid, $timeout, $force_kill) = @_;
+sub wait_proc {
+    my ($os, $any, $proc, $timeout, $force_kill) = @_;
+    my $pid = $proc->{pid};
     $? = 0;
+
+    $debug and $debug & 1024 and _debug "waiting for slave process $pid to exit";
     waitpid($pid, 0);
 }
 
@@ -102,15 +116,17 @@ my @retriable = (Errno::EINTR, Errno::EAGAIN);
 push @retriable, Errno::EWOULDBLOCK if Errno::EWOULDBLOCK != Errno::EAGAIN;
 
 sub io3 {
-    my ($os, $any, $pid, $timeout, $data, $in, $out, $err) = @_;
+    my ($os, $any, $proc, $timeout, $data, $in, $out, $err) = @_;
     my @data = _array_or_scalar_to_list $data;
     $timeout = $any->{timeout} unless defined $timeout;
 
     if (defined $in) {
         for my $data (grep { defined and length } @data) {
-            print $in $data; # FIXME: print may fail to send all the data
+            #my $bytes = print $in $data; # FIXME: print may fail to send all the data
+            my $bytes = syswrite $in, $data;
+            $debug and $debug & 1024 and _debug "send $bytes bytes of data";
         }
-        close $in;
+        $debug and $debug & 1024 and _debug "closing slave stdin channel";
     }
 
     my $bout = '';
@@ -131,7 +147,7 @@ sub io3 {
         close $err;
     }
 
-    $os->waitpid($any, $pid, $timeout);
+    $os->wait_proc($any, $proc, $timeout);
 
     $debug and $debug & 1024 and _debug "leaving __io3()";
     return ($bout, $berr);

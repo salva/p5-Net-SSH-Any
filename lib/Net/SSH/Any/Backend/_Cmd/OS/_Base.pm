@@ -25,6 +25,8 @@ sub pty {
     IO::Pty->new;
 }
 
+sub unset_pipe_inherit_flag {}
+
 sub run_cmd {
     my ($os, $any, $opts, $cmd) = @_;
 
@@ -56,7 +58,8 @@ sub run_cmd {
                     $file = File::Spec->devnull;
                 }
                 if (defined $file) {
-                    $fh = $any->_open_file('>', $file) or return;
+                    my $dir = ($stream eq 'stdin' ? '<' : '>');
+                    $fh = $any->_open_file($dir, $file) or return;
                 }
             }
         }
@@ -64,6 +67,9 @@ sub run_cmd {
         push @fhs, $fh;
         push @pipes, $pipe;
     }
+
+    $os->unset_pipe_inherit_flag($any, $_)
+        for grep defined, @pipes;
 
     my $stderr_to_stdout = (defined $fhs[2] ? 0 : delete $opts->{stderr_to_stdout});
 
