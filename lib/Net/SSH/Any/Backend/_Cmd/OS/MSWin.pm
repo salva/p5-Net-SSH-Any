@@ -8,7 +8,6 @@ use Socket;
 use Errno;
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
-use Win32API::File ();
 use Time::HiRes qw(sleep);
 
 require Net::SSH::Any::Backend::_Cmd::OS::_Base;
