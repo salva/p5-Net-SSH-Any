@@ -19,7 +19,7 @@ our $debug ||= 0;
 
 sub _debug {
     local ($@, $!, $_);
-    print STDERR '# ', (map { defined($_) ? $_ : '<undef>' } @_), "\n";
+    print STDERR '#', (time - $^T), ': ', (map { defined($_) ? $_ : '<undef>' } @_), "\n";
 }
 
 sub _debugf {
