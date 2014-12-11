@@ -3,7 +3,7 @@ package Net::SSH::Any::Backend::Plink_Cmd;
 use strict;
 use warnings;
 use Carp;
-use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list);
+use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug);
 use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR);
 
 use parent 'Net::SSH::Any::Backend::_Cmd';
@@ -29,8 +29,14 @@ sub _validate_connect_opts {
             local $?;
             my $cmd = _first_defined $opts{local_puttygen_cmd},
                 $any->{local_cmd}{puttygen}, 'puttygen';
-            unless (system($cmd, -O 'private', -o => $ppk, $key)) {
+            my @cmd = ($cmd, -O => 'private', -o => $ppk, $key);
+            $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
+            if (system @cmd) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed, rc: ' . ($? >> 8));
+                return
+            }
+            unless (-e $ppk) {
+                $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed to convert key to PPK format');
                 return
             }
         }
