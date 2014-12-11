@@ -9,6 +9,7 @@ use Errno;
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
 use Win32API::File ();
+use Time::HiRes qw(sleep);
 
 require Net::SSH::Any::Backend::_Cmd::OS::_Base;
 our @ISA = qw(Net::SSH::Any::Backend::_Cmd::OS::_Base);
@@ -33,11 +34,53 @@ sub pipe {
     ($r, $w);
 }
 
+my $win32_set_named_pipe_handle_state;
+my $win32_get_osfhandle;
+my $win32_set_handle_information;
+my $win32_handle_flag_inherit = 0x1;
+my $win32_pipe_nowait = 0x1;
+
+sub _wrap_win32_functions {
+    unless (defined $win32_set_named_pipe_handle_state) {
+        require Config;
+        require Win32::API;
+        $Config::Config{libperl} =~ /libperl(\d+)/
+            or croak "unable to infer Perl DLL version";
+        my $perl_dll = "perl$1.dll";
+        $debug and $debug & 1024 and _debug "Perl DLL name is $perl_dll";
+        $win32_get_osfhandle = Win32::API::More->new($perl_dll, <<FSIGN)
+long WINAPIV win32_get_osfhandle(int fd);
+FSIGN
+            or croak "unable to wrap $perl_dll win32_get_osfhandle function";
+
+        $win32_set_named_pipe_handle_state = Win32::API::More->new("kernel32.dll", <<FSIGN)
+BOOL SetNamedPipeHandleState(HANDLE hNamedPipe,
+                             LPDWORD lpMode,
+                             int ignore1,
+                             int ignore2)
+FSIGN
+            or croak "unable to wrap kernel32.dll SetNamedPipeHandleState function";
+        $win32_set_handle_information = Win32::API::More->new("kernel32.dll", <<FSIGN)
+BOOL WINAPI SetHandleInformation(HANDLE hObject,
+                                 DWORD dwMask,
+                                 DWORD dwFlags);
+FSIGN
+            or croak "unable to wrap kernel32.dll SetHandleInformation function";
+
+    }
+}
+
+
 sub unset_pipe_inherit_flag {
     my ($os, $any, $pipe) = @_;
-    my $wh = Win32API::File::FdGetOsFHandle(fileno $pipe)
-        or croak "Win32API::File::FdGetOsFHandle failed unexpectedly";
-    Win32API::File::SetHandleInformation($wh, Win32API::File::HANDLE_FLAG_INHERIT, 0)
+    $os->_wrap_win32_functions($any);
+    my $fn = fileno $pipe;
+    my $wh = $win32_get_osfhandle->Call($fn)
+        or die "internal error: win32_get_osfhandle failed unexpectedly";
+    my $success = $win32_set_handle_information->Call($wh, $win32_handle_flag_inherit, 0);
+    $debug and $debug & 1024 and
+        _debug "Win32::SetHandleInformation($wh, $win32_handle_flag_inherit, 0) => $success",
+            ($success ? () : (" \$^E: $^E"));
 }
 
 sub pty {
@@ -56,9 +99,6 @@ sub open4 {
         and croak "STDIN, STDOUT or STDERR is tied";
     grep { defined $_ and (tied $_ or not defined fileno $_) } @$fhs
         and croak "At least one of the given file-handles is tied or is not backed by a real OS file handle";
-
-    use Data::Dumper;
-    print Dumper $fhs;
 
     for my $fd (0..2) {
         if (defined $fhs->[$fd]) {
@@ -112,44 +152,130 @@ sub wait_proc {
     waitpid($pid, 0);
 }
 
-my @retriable = (Errno::EINTR, Errno::EAGAIN);
+my @retriable = (Errno::EINTR, Errno::EAGAIN, Errno::ENOSPC, Errno::EINVAL);
 push @retriable, Errno::EWOULDBLOCK if Errno::EWOULDBLOCK != Errno::EAGAIN;
+
+
+sub _set_pipe_blocking {
+    my ($os, $any, $pipe, $blocking) = @_;
+    if (defined $pipe) {
+        $os->_wrap_win32_functions($any);
+        my $fileno = fileno $pipe;
+        #my $handle = Win32API::File::FdGetOsFHandle($fileno);
+        my $handle = $win32_get_osfhandle->Call($fileno);
+        $debug and $debug & 1024 and _debug("setting pipe (pipe: ", $pipe,
+                                            ", fileno: ", $fileno,
+                                            ", handle: ", $handle, ") to",
+                                            ($blocking ? " " : " non "), "blocking");
+        my $success = $win32_set_named_pipe_handle_state->Call($handle,
+                                                               ($blocking ? 0 : $win32_pipe_nowait),
+                                                               0, 0);
+        $debug and $debug & 1024 and _debug("Win32::SetNamedPipeHandleState => $success",
+                                            ($success ? () : " ($^E)"));
+    }
+}
 
 sub io3 {
     my ($os, $any, $proc, $timeout, $data, $in, $out, $err) = @_;
-    my @data = _array_or_scalar_to_list $data;
     $timeout = $any->{timeout} unless defined $timeout;
 
-    if (defined $in) {
-        for my $data (grep { defined and length } @data) {
-            #my $bytes = print $in $data; # FIXME: print may fail to send all the data
-            my $bytes = syswrite $in, $data;
-            $debug and $debug & 1024 and _debug "send $bytes bytes of data";
-        }
-        $debug and $debug & 1024 and _debug "closing slave stdin channel";
-    }
+    $debug and $debug & 1024 and _debug "io3 handles: ", $in, ", ", $out, ", ", $err;
+
+    my @data = _array_or_scalar_to_list $data;
+
+    $os->_set_pipe_blocking($any, $in,  0);
+    $os->_set_pipe_blocking($any, $out, 0);
+    $os->_set_pipe_blocking($any, $err, 0);
+
+    $debug and $debug & 1024 and _debug "data array has ".scalar(@data)." elements";
 
     my $bout = '';
-    if (defined $out) {
-        while (1) {
-            my $read = sysread($out, $bout, 20480, length($bout));
-            $read or grep($! == $_, @retriable) or last;
-        }
-        close $out;
-    }
-
     my $berr = '';
-    if (defined $err) {
-        while (1) {
-            my $read = sysread($err, $berr, 20480, length($berr));
-            $read or grep($! == $_, @retriable) or last;
+    while (defined $in or defined $out or defined $err) {
+        my $delay = 1;
+        if (defined $in) {
+            while (@data) {
+                unless (defined $data[0] and length $data[0]) {
+                    shift @data;
+                    next;
+                }
+                my $bytes = syswrite $in, $data[0];
+                if ($bytes) {
+                    $debug and $debug & 1024 and _debug "$bytes bytes of data sent";
+                    substr $data[0], 0, $bytes, '';
+                    undef $delay;
+                }
+                else {
+                    unless (grep $! == $_, @retriable) {
+                        $any->_set_error(SSHA_LOCAL_IO_ERROR, "failed to write to slave stdin channel: $!");
+                        close $in;
+                        undef $in;
+                        undef $delay;
+                    }
+                    last;
+                }
+            }
+            unless (@data) {
+                # $os->_set_pipe_blocking($any, $in, 1);
+                $debug and $debug & 1024 and _debug "closing slave stdin channel";
+                close $in;
+                undef $in;
+                undef $delay;
+            }
         }
-        close $err;
+
+        if (defined $out) {
+            my $bytes = sysread($out, $bout, 20480, length($bout));
+            if (defined $bytes) {
+                $debug and $debug & 1024 and _debug "received ", $bytes, " bytes of data over stdout";
+                undef $delay;
+                unless ($bytes) {
+                    $debug and $debug & 1024 and _debug "closing slave stdout channel at EOF";
+                    close $out;
+                    undef $out;
+                }
+            }
+            else {
+                unless (grep $! == $_, @retriable) {
+                    $any->_set_error(SSHA_LOCAL_IO_ERROR, "failed to read from slave stdout channel: $!");
+                    close $out;
+                    undef $out;
+                    undef $delay;
+                }
+            }
+        }
+
+        if (defined $err) {
+            my $bytes = sysread($err, $berr, 20480, length($berr));
+            if (defined $bytes) {
+                $debug and $debug & 1024 and _debug "received ", $bytes, " bytes of data over stderr";
+                undef $delay;
+                unless ($bytes) {
+                    $debug and $debug & 1024 and _debug "closing slave stderr channel at EOF";
+                    close $err;
+                    undef $err;
+                }
+            }
+            else {
+                unless (grep $! == $_, @retriable) {
+                    $any->_set_error(SSHA_LOCAL_IO_ERROR, "failed to read from slave stderr channel: $!");
+                    close $err;
+                    undef $err;
+                    undef $delay;
+                }
+            }
+        }
+        if ($delay) {
+            # $debug and $debug & 1024 and _debug "delaying...";
+            sleep 0.02; # experimentation has show the load introduced
+                        # with this delay is not noticeable!
+        }
     }
 
+    $debug and $debug & 1024 and _debug "waiting for child";
     $os->wait_proc($any, $proc, $timeout);
 
-    $debug and $debug & 1024 and _debug "leaving __io3()";
+    $debug and $debug & 1024 and _debug "leaving io3()";
     return ($bout, $berr);
 }
 
