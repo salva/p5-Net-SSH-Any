@@ -13,15 +13,15 @@ use Time::HiRes qw(sleep);
 require Net::SSH::Any::Backend::_Cmd::OS::_Base;
 our @ISA = qw(Net::SSH::Any::Backend::_Cmd::OS::_Base);
 
-sub socketpair {
-    my ($os, $any) = @_;
-    my ($a, $b);
-    unless (CORE::socketpair($a, $b, AF_UNIX, SOCK_STREAM, PF_UNSPEC)) {
-        $any->_set_error(SSHA_LOCAL_IO_ERROR, "socketpair failed: $!");
-        return;
-    }
-    ($a, $b);
-}
+# sub socketpair {
+#     my ($os, $any) = @_;
+#     my ($a, $b);
+#     unless (CORE::socketpair($a, $b, AF_UNIX, SOCK_STREAM, PF_UNSPEC)) {
+#         $any->_set_error(SSHA_LOCAL_IO_ERROR, "socketpair failed: $!");
+#         return;
+#     }
+#     ($a, $b);
+# }
 
 sub pipe {
     my ($os, $any) = @_;
@@ -31,6 +31,12 @@ sub pipe {
         return
     }
     ($r, $w);
+}
+
+sub make_dpipe {
+    my ($os, $any, $proc, $in, $out) = @_;
+    require Net::SSH::Any::Backend::_Cmd::OS::MSWin::Pipe;
+    Net::SSH::Any::Backend::_Cmd::OS::MSWin::Pipe->_upgrade_fh_to_pipe($out, $os, $any, $proc, $in);
 }
 
 my $win32_set_named_pipe_handle_state;

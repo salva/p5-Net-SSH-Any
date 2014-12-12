@@ -33,8 +33,20 @@ sub run_cmd {
     my $data = $opts->{stdin_data};
     $opts->{stdin_pipe} = 1 if defined $data;
 
-    my (@fhs, @pipes);
+    my $dpipe = delete $opts->{stdinout_pipe};
+    if ($dpipe) {
+        if ($os->can('socketpair')) {
+            $opts->{stdinout_socket} = 1;
+        }
+        else {
+            $opts->{stdin_pipe} = 1;
+            $opts->{stdout_pipe} = 1;
+        }
+    }
+
     my $socket = delete $opts->{stdinout_socket};
+
+    my (@fhs, @pipes);
     if ($socket) {
         ($fhs[0], $pipes[0]) = $os->socketpair($any, $fhs[0], $pipes[0]) or return;
         $fhs[1] = $fhs[0];
@@ -90,6 +102,12 @@ sub run_cmd {
         $os->interactive_login($any, $pty, $stderr_to_stdout, $proc) or return undef;
         $any->{be_pty} = $pty;
         $pty->close_slave;
+    }
+
+    if ($dpipe) {
+        $pipes[0] = $os->make_dpipe($any, $proc, @pipes[0, 1]) or return;
+        $pipes[1] = undef;
+        $debug and $debug & 1024 and _debug "fh upgraded to dpipe $pipes[0]";
     }
 
     return ($proc, @pipes);

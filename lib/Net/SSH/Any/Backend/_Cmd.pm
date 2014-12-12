@@ -84,10 +84,9 @@ sub _capture2 {
 sub _pipe {
     my ($any, $opts, $cmd) = @_;
     require Net::SSH::Any::Backend::_Cmd::Pipe;
-    $opts->{stdinout_socket} = 1;
-    my ($proc, $socket) = __run_cmd($any, $opts, $cmd) or return;
-    my $pid = __export_proc($any, $proc) or return;
-    Net::SSH::Any::Backend::_Cmd::Pipe->_upgrade_socket($socket, $pid, $any);
+    $opts->{stdinout_pipe} = 1;
+    my ($proc, $pipe) = __run_cmd($any, $opts, $cmd) or return;
+    $pipe;
 }
 
 sub _sftp {

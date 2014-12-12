@@ -11,50 +11,30 @@ our @ISA = qw(IO::Handle);
 
 use Data::Dumper;
 
-sub _upgrade_socket {
-    my ($class, $socket, $pid, $any) = @_;
-    bless $socket, $class;
-    ${*$socket}{_ssha_be_pid} = $pid;
-    ${*$socket}{_ssha_be_any} = $any;
-    $socket->autoflush(1);
-    $socket
+sub _os { ${*{shift()}}{_ssha_be_os} }
+sub _any { ${*{shift()}}{_ssha_be_any} }
+sub _proc { ${*{shift()}}{_ssha_be_proc} }
+
+sub _upgrade_fh_to_pipe {
+    my ($class, $pipe, $os, $any, $proc) = @_;
+    bless $pipe, $class;
+    ${*$pipe}{_ssha_be_os} = $os;
+    ${*$pipe}{_ssha_be_any} = $any;
+    ${*$pipe}{_ssha_be_proc} = $proc;
+    $pipe
 }
 
 sub close {
-    my $socket = shift;
-    my $any = ${*$socket}{_ssha_be_any};
-    my $pid = ${*$socket}{_ssha_be_pid};
+    my $pipe = shift;
     my $ok = 1;
-    unless ($socket->SUPER::close(@_)) {
-	$any->_or_set_error(Net::SSH::Any::Constants::SSHA_CHANNEL_ERROR,
-			    "Socket close failed", $!);
-	undef $ok;
-    }
-    if (defined $pid) {
-	$any->_waitpid($pid) or undef $ok;
-	delete ${*$socket}{_ssha_be_pid};
-    }
+    $pipe->_close_fhs or undef $ok;
+
+    my $os = delete ${*$pipe}{_ssha_be_os};
+    my $proc = delete ${*$pipe}{_ssha_be_proc};
+    $os->wait_proc($pipe->_any, $proc) or undef $ok;
     return $ok;
 }
 
-sub syswrite {
-    my $socket = shift;
-    my (undef, $len, $offset) = @_;
-    $len ||= "<undef>";
-    $offset ||= "<undef>";
-    $debug and $debug & 8192 and
-	_debug_hexdump("$socket->syswrite(..., $len, $offset)", $_[0]);
-    $socket->SUPER::syswrite(@_);
-}
-
-sub send_eof {
-    my $socket = shift;
-    shutdown $socket, 1;
-}
-
-sub error {
-    my $socket = shift;
-    ${*$socket}{_ssha_be_any}->error;
-}
+sub error { shift->_any->error }
 
 1;
