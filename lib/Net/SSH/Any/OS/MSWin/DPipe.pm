@@ -10,10 +10,10 @@ use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or
 use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR);
 use Time::HiRes qw(sleep);
 
-require Net::SSH::Any::Backend::_Cmd::DPipe;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::DPipe);
+require Net::SSH::Any::OS::_Base::DPipe;
+our @ISA = qw(Net::SSH::Any::OS::_Base::DPipe);
 
-sub _in { ${*{shift()}}{_ssha_be_in} }
+sub _in { ${*{shift()}}{_ssha_os_in} }
 
 for my $method (qw(syswrite print printf say)) {
     my $m = $method;
@@ -22,10 +22,10 @@ for my $method (qw(syswrite print printf say)) {
 }
 
 sub _upgrade_fh_to_dpipe {
-    my ($class, $dpipe, $os, $any, $proc, $in) = @_;
-    $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
+    my ($class, $dpipe, $any, $proc, $in) = @_;
+    $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $any, $proc);
     bless $in, 'IO::Handle';
-    ${*$dpipe}{_ssha_be_in} = $in;
+    ${*$dpipe}{_ssha_os_in} = $in;
     $dpipe;
 }
 
@@ -41,7 +41,7 @@ sub _close_fhs {
 
 sub send_eof {
     my $dpipe = shift;
-    if (defined (my $in = delete ${*$dpipe}{_ssha_be_in})) {
+    if (defined (my $in = delete ${*$dpipe}{_ssha_os_in})) {
         unless (close $in) {
             $dpipe->_any->_set_error(SSHA_CHANNEL_ERROR, "unable to close dpipe writing side: $!");
             return undef

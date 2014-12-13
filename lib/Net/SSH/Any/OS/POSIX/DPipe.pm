@@ -10,8 +10,8 @@ require Net::SSH::Any::Backend::_Cmd::DPipe;
 our @ISA = qw(Net::SSH::Any::Backend::_Cmd::DPipe);
 
 sub _upgrade_fh_to_dpipe {
-    my ($class, $dpipe, $os, $any, $proc) = @_;
-    $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
+    my ($class, $dpipe, $any, $proc) = @_;
+    $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $any, $proc);
     $dpipe->autoflush(1);
     $dpipe;
 }
