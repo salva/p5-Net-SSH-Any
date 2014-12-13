@@ -427,14 +427,14 @@ sub system {
     $any->_check_child_error;
 }
 
-_sub_options pipe => qw(stderr_to_stdout stderr_discard subsystem);
-sub pipe {
+_sub_options dpipe => qw(stderr_to_stdout stderr_discard subsystem);
+sub dpipe {
     my $any = shift;
     $any->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     my $cmd = $any->_quote_args(\%opts, @_);
     _croak_bad_options %opts;
-    $any->_pipe(\%opts, $cmd);
+    $any->_dpipe(\%opts, $cmd);
 }
 
 _sub_options sftp => qw(fs_encoding timeout block_size queue_size autoflush write_delay

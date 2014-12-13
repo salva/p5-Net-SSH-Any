@@ -33,7 +33,7 @@ sub run_cmd {
     my $data = $opts->{stdin_data};
     $opts->{stdin_pipe} = 1 if defined $data;
 
-    my $dpipe = delete $opts->{stdinout_pipe};
+    my $dpipe = delete $opts->{stdinout_dpipe};
     if ($dpipe) {
         if ($os->can('socketpair')) {
             $opts->{stdinout_socket} = 1;

@@ -599,7 +599,7 @@ sub _channel_read {
     }
 }
 
-sub _pipe {
+sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     my ($channel) = __open_channel_and_exec($any, $opts, $cmd) or return;
     # TODO: do something with the parsed options?
@@ -610,9 +610,9 @@ sub _pipe {
 sub _sftp {
     my ($any, $opts) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
-    my $pipe = $any->pipe({subsystem => 1}, 'sftp');
+    my $dpipe = $any->dpipe({subsystem => 1}, 'sftp');
     require Net::SSH::Any::Backend::Net_SSH2::SFTP;
-    my $sftp_backend = Net::SSH::Any::Backend::Net_SSH2::SFTP->_new($any, $pipe);
+    my $sftp_backend = Net::SSH::Any::Backend::Net_SSH2::SFTP->_new($any, $dpipe);
     my $sftp = Net::SFTP::Foreign->new(backend => $sftp_backend,
                                        autodisconnect => 2,
                                        %$opts);

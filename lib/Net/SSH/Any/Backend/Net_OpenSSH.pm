@@ -100,7 +100,7 @@ sub __ssh {
     undef;
 }
 
-sub _pipe {
+sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     my $ssh = __ssh($any) or return undef;
     my ($socket, $pid) = $ssh->open2socket($opts, $cmd);

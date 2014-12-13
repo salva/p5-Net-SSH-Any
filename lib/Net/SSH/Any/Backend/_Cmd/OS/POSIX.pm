@@ -39,11 +39,11 @@ sub socketpair {
 }
 
 sub make_dpipe {
-    my ($os, $any, $proc, $pipe, $out) = @_;
+    my ($os, $any, $proc, $dpipe, $out) = @_;
     defined $out and die "internal error: out should be undefined but is $out";
     require Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe;
-    Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe->_upgrade_fh_to_dpipe($pipe, $os, $any, $proc);
-    $pipe;
+    Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe->_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
+    $dpipe;
 }
 
 sub pipe {

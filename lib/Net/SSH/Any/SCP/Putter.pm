@@ -62,12 +62,12 @@ sub _read_file {
 }
 
 sub _send_line_and_get_response {
-    my ($p, $pipe, $action, $line) = @_;
+    my ($p, $dpipe, $action, $line) = @_;
     $debug and $debug & 4096 and
         _debug_hexdump("writting line", $line);
-    my ($fatal, $error) = ( $pipe->print($line)
-                            ? $p->_read_response($pipe)
-                            : (2, "broken pipe"));
+    my ($fatal, $error) = ( $dpipe->print($line)
+                            ? $p->_read_response($dpipe)
+                            : (2, "broken dpipe"));
     if ($fatal) {
         $p->set_remote_error($action, $error);
         $fatal > 1 and $p->abort;
@@ -77,7 +77,7 @@ sub _send_line_and_get_response {
 }
 
 sub _remote_open {
-    my ($p, $pipe, $action) = @_;
+    my ($p, $dpipe, $action) = @_;
     my ($type, $perm, $size, $name) = @{$action}{qw(type perm size name)};
     my $cmd = ($type eq 'dir'  ? 'D' :
                $type eq 'file' ? 'C' :
@@ -86,13 +86,13 @@ sub _remote_open {
     $debug and $debug & 4096 and
         _debugf("remote_open type: %s, perm: 0%o, size: %d, name: %s", $type, $perm, $size, $name);
     _scp_escape_name($name);
-    $p->_send_line_and_get_response($pipe, $action, sprintf("%s%04o %d %s\x0A", $cmd, $perm, $size, $name));
+    $p->_send_line_and_get_response($dpipe, $action, sprintf("%s%04o %d %s\x0A", $cmd, $perm, $size, $name));
 }
 
 sub _clean_actions {
     my $p = shift;
     while (my $action = $p->_pop_action(undef, 1)) {
-        $p->_close($action, 2, "broken pipe");
+        $p->_close($action, 2, "broken dpipe");
     }
 }
 
@@ -129,15 +129,15 @@ sub _dir_check {
 sub on_end_of_put { 1 }
 
 sub _send_time {
-    my ($p, $pipe, $action) = @_;
+    my ($p, $dpipe, $action) = @_;
     return 1 unless $p->{send_time};
     my ($mtime, $atime) = @{$action}{'mtime', 'atime'};
-    $p->_send_line_and_get_response($pipe, $action,
+    $p->_send_line_and_get_response($dpipe, $action,
                                     sprintf("T%d %d %d %d\x0A", $mtime, 0, $atime, 0));
 }
 
 sub _send_file {
-    my ($p, $pipe, $action) = @_;
+    my ($p, $dpipe, $action) = @_;
     my $failed = 0;
     my $remaining = $action->{size} || 0;
     while ($remaining > 0) {
@@ -160,29 +160,29 @@ sub _send_file {
             }
         }
         $debug and $debug & 4096 and _debug_hexdump("sending data (failed: $failed)", $data);
-        $pipe->print($data) or last OUT;
+        $dpipe->print($data) or last OUT;
         $remaining -= length $data;
     }
     $p->_close($action) or $failed = 1;
-    $p->_send_line_and_get_response($pipe, $action, ($failed ? "\x01failed\x0A" : "\x00"));
+    $p->_send_line_and_get_response($dpipe, $action, ($failed ? "\x01failed\x0A" : "\x00"));
 }
 
 sub run {
     my ($p, $opts) = @_;
     my $any = $p->{any};
-    my $pipe = $any->pipe({ %$opts, quote_args => 1 },
-                          # 'strace', '-fo', '/tmp/scp.strace',
-                          $p->{scp_cmd},
-                          '-t',
-                          ($p->{send_time}   ? '-p' : ()),
-			  ($p->{recursive}   ? '-r' : ()),
-                          ($p->{double_dash} ? '--' : ()),
-                          $p->{target} );
+    my $dpipe = $any->dpipe({ %$opts, quote_args => 1 },
+                            # 'strace', '-fo', '/tmp/scp.strace',
+                            $p->{scp_cmd},
+                            '-t',
+                            ($p->{send_time}   ? '-p' : ()),
+                            ($p->{recursive}   ? '-r' : ()),
+                            ($p->{double_dash} ? '--' : ()),
+                            $p->{target} );
     $any->error and return;
 
     local $SIG{PIPE} = 'IGNORE';
 
-    my ($error_level, $error_msg) = $p->_read_response($pipe);
+    my ($error_level, $error_msg) = $p->_read_response($dpipe);
     if ($error_level) {
 	$any->_or_set_error(SSHA_SCP_ERROR, "remote SCP refused transfer", $error_msg);
 	return;
@@ -207,14 +207,14 @@ sub run {
                     }
                     else {
                         if ($p->_open($action)) {
-                            if ($p->_send_time($pipe, $action)) {
-                                if ($p->_remote_open($pipe, $action)) {
+                            if ($p->_send_time($dpipe, $action)) {
+                                if ($p->_remote_open($dpipe, $action)) {
                                     if ($type eq 'dir') {
                                         # do not pop the action from the actions stack;
                                         next;
                                     }
                                     elsif ($type eq 'file') {
-                                        $p->_send_file($pipe, $action);
+                                        $p->_send_file($dpipe, $action);
                                     }
                                 }
                             }
@@ -230,11 +230,11 @@ sub run {
         else { # close dir
             my $action = $p->_pop_action('dir', 1) or last;
             $p->_close($action);
-            $p->_send_line_and_get_response($pipe, $action, "E\x0A");
+            $p->_send_line_and_get_response($dpipe, $action, "E\x0A");
         }
     }
 
-    $pipe->close;
+    $dpipe->close;
 
     $p->_clean_actions;
 

@@ -42,25 +42,25 @@ our @ISA = qw(Tie::Handle);
 
 sub TIEHANDLE {
     my ($class, $any, $channel) = @_;
-    my $pipe = { any => $any,
+    my $dpipe = { any => $any,
                  channel => $channel,
                  blocking => 1,
                  error => 0 };
-    bless $pipe, $class;
+    bless $dpipe, $class;
 }
 
 sub EOF {
-    my $pipe = shift;
-    my $any = $pipe->{any};
-    my $channel = $pipe->{channel};
-    $channel->eof or ($pipe->error and $pipe->error != SSHA_EAGAIN);
+    my $dpipe = shift;
+    my $any = $dpipe->{any};
+    my $channel = $dpipe->{channel};
+    $channel->eof or ($dpipe->error and $dpipe->error != SSHA_EAGAIN);
 }
 
 sub READ {
-    my ($pipe, undef, $len, $off, $ext) = @_;
-    my $any = $pipe->{any};
-    my $channel = $pipe->{channel};
-    my $blocking = $pipe->{blocking};
+    my ($dpipe, undef, $len, $off, $ext) = @_;
+    my $any = $dpipe->{any};
+    my $channel = $dpipe->{channel};
+    my $blocking = $dpipe->{blocking};
     $any->_clear_error or return;
 
     if (defined $len) {
@@ -91,14 +91,14 @@ sub READ {
     else {
         $bytes = $any->_channel_read($channel, $blocking, $_[1], $len, $ext);
     }
-    $bytes || $pipe->_check_error($bytes);
+    $bytes || $dpipe->_check_error($bytes);
 }
 
 sub WRITE {
-    my ($pipe, undef, $len, $off) = @_;
-    my $any = $pipe->{any};
-    my $channel = $pipe->{channel};
-    my $blocking = $pipe->{blocking};
+    my ($dpipe, undef, $len, $off) = @_;
+    my $any = $dpipe->{any};
+    my $channel = $dpipe->{channel};
+    my $blocking = $dpipe->{blocking};
     $any->_clear_error or return;
     my $bytes;
     if ($off or defined $len) {
@@ -116,22 +116,22 @@ sub WRITE {
         }
 
         $len = length $_[1] - $off unless defined $len;
-        return $pipe->_check_error unless $len > 0;
+        return $dpipe->_check_error unless $len > 0;
         $bytes = $any->_channel_do($channel, $blocking, 'write', substr($_[1], $off, $len));
     }
     else {
         $bytes = $any->_channel_do($channel, $blocking, 'write', $_[1]);
     }
-    $bytes || $pipe->_check_error($bytes);
+    $bytes || $dpipe->_check_error($bytes);
 }
 
 sub PRINT {
-    my $pipe = shift;
-    my $any = $pipe->{any};
-    my $channel = $pipe->{channel};
+    my $dpipe = shift;
+    my $any = $dpipe->{any};
+    my $channel = $dpipe->{channel};
     my $buf = '';
     my $total = 0;
-    $debug and $debug & 8192 and _debug ("$pipe->PRINT(...)");
+    $debug and $debug & 8192 and _debug ("$dpipe->PRINT(...)");
 
     while (1) {
         while (length $buf < 34000 and @_) {
@@ -143,36 +143,36 @@ sub PRINT {
         return $total unless length $buf;
 
         my $bytes = $any->_channel_do($channel, 1, 'write', $buf)
-            or return $pipe->_check_error;
+            or return $dpipe->_check_error;
         $total += $bytes;
         substr($buf, 0, $bytes, '');
     }
 }
 
 sub PRINTF {
-    my $pipe = shift;
+    my $dpipe = shift;
     my $str = sprintf(@_);
     local $\;
-    $pipe->PRINT($str);
+    $dpipe->PRINT($str);
 }
 
 sub GETC {
-    my $pipe = shift;
-    $pipe->READ(my ($buf), 1);
+    my $dpipe = shift;
+    $dpipe->READ(my ($buf), 1);
     return $buf;
 }
 
 sub READLINE {
-    my $pipe = shift;
-    my $any = $pipe->{any};
-    my $channel = $pipe->{channel};
+    my $dpipe = shift;
+    my $any = $dpipe->{any};
+    my $channel = $dpipe->{channel};
     $any->_clear_error or return;
     my $line = '';
     # TODO: optimize the case where $/ is undef reading in chunks
     my $off = (defined $/ ? -length $/ : undef);
     while (1) {
         unless ($any->_channel_read($channel, 1, my ($char), 1)) {
-            $pipe->_check_error;
+            $dpipe->_check_error;
             return (length($line) ? $line : undef);
         }
         if ( defined $off) {
@@ -182,32 +182,32 @@ sub READLINE {
 }
 
 sub CLOSE {
-    my $pipe = shift;
-    my $any = $pipe->{any};
-    my $channel = $pipe->{channel};
-    $any->_channel_close($pipe->{channel});
-    $any->_check_child_error or $pipe->_check_error;
+    my $dpipe = shift;
+    my $any = $dpipe->{any};
+    my $channel = $dpipe->{channel};
+    $any->_channel_close($dpipe->{channel});
+    $any->_check_child_error or $dpipe->_check_error;
 }
 
 sub FILENO { shift->{any}{be_fileno} }
 
 sub blocking {
-    my $pipe = shift;
-    $pipe->{blocking} = !!shift if @_;
-    $pipe->{blocking};
+    my $dpipe = shift;
+    $dpipe->{blocking} = !!shift if @_;
+    $dpipe->{blocking};
 }
 
 # Net_SSH2 backend uses 0 to indicate that everything went well but
 # that nothing was actually done. Perl uses 0 to indicate EOF. The
 # following subroutine converts between both.
 sub _check_error {
-    my ($pipe, $bytes) = @_;
+    my ($dpipe, $bytes) = @_;
     if (defined $bytes) {
         return $bytes if $bytes;
         $! = Errno::EAGAIN();
     }
     else {
-        $pipe->{error} = $pipe->{any}->error or return 0; # EOF!
+        $dpipe->{error} = $dpipe->{any}->error or return 0; # EOF!
         $! = Errno::EIO();
     }
     return

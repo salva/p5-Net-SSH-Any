@@ -81,12 +81,12 @@ sub _capture2 {
     __io3($any, $proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
 }
 
-sub _pipe {
+sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     require Net::SSH::Any::Backend::_Cmd::DPipe;
-    $opts->{stdinout_pipe} = 1;
-    my ($proc, $pipe) = __run_cmd($any, $opts, $cmd) or return;
-    $pipe;
+    $opts->{stdinout_dpipe} = 1;
+    my ($proc, $dpipe) = __run_cmd($any, $opts, $cmd) or return;
+    $dpipe;
 }
 
 sub _sftp {

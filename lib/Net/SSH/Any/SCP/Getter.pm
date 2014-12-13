@@ -77,7 +77,7 @@ sub _remote_error {
 sub _clean_actions {
     my $g = shift;
     while (my $action = $g->_pop_action(undef, 1)) {
-        $g->_close($action, 2, "broken pipe");
+        $g->_close($action, 2, "broken dpipe");
     }
 }
 
@@ -103,16 +103,16 @@ sub run {
                                    glob_quoting => $g->{glob}},
                                   @{$g->{srcs}});
 
-    my $pipe = $any->pipe({ %$opts, quote_args => 0 },
+    my $dpipe = $any->dpipe({ %$opts, quote_args => 0 },
                           @cmd, @files);
     $any->error and return;
 
     local $SIG{PIPE} = 'IGNORE';
     my $buf;
 
-    $pipe->syswrite("\x00"); # tell remote side to start transfer
+    $dpipe->syswrite("\x00"); # tell remote side to start transfer
     while (1) {
-        $g->_read_line($pipe, $buf, 0) or last;
+        $g->_read_line($dpipe, $buf, 0) or last;
         $debug and $debug & 4096 and _debug "cmd line: $buf";
 
         my $ok = 1;
@@ -125,20 +125,20 @@ sub run {
             if ($type eq 'C') {
 		if ($ok = $g->_open(file => $perm, $size, $name)) {
 		    $debug and $debug & 4096 and _debug "transferring file of size $size";
-		    $pipe->syswrite("\x00");
+		    $dpipe->syswrite("\x00");
 		    $buf = '';
 		    while ($size) {
-			my $read = $pipe->sysread($buf, ($size > 64000 ? 64000 : $size));
+			my $read = $dpipe->sysread($buf, ($size > 64000 ? 64000 : $size));
 			unless ($read) {
-			    $g->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
-			    $g->_close($g->_pop_action('file'), 2, "broken pipe");
+			    $g->_or_set_error(SSHA_SCP_ERROR, "broken dpipe");
+			    $g->_close($g->_pop_action('file'), 2, "broken dpipe");
 			    $debug and $debug & 4096 and _debug "read failed: " . $any->error;
 			    last;
 			}
 			$g->_write($buf) or last;
 			$size -= $read;
 		    }
-		    my ($error_level, $error_msg) = $g->_read_response($pipe);
+		    my ($error_level, $error_msg) = $g->_read_response($dpipe);
 		    $ok = $g->_close($g->_pop_action('file'), $error_level, $error_msg);
 		    last if $error_level == 2;
 		}
@@ -170,13 +170,13 @@ sub run {
 	    last;
 	}
 
-	$pipe->syswrite( $ok 
+	$dpipe->syswrite( $ok 
 			 ? "\x00" 
 			 : ( $g->{aborted} ? "\x02" : "\x01") . $g->last_error . "\x0A" )
 	    or last;
     }
 
-    $pipe->close;
+    $dpipe->close;
 
     $g->_clean_actions;
 

@@ -28,15 +28,15 @@ sub _or_set_error { shift->{any}->_or_set_error(@_) }
 
 sub _read_line {
     my $self = shift;
-    my $pipe = shift;
-    $debug and $debug & 4096 and _debug("$self->_read_line($pipe)...");
+    my $dpipe = shift;
+    $debug and $debug & 4096 and _debug("$self->_read_line($dpipe)...");
     for ($_[0]) {
         $_ = '';
-        $pipe->sysread($_, 1) or return;
+        $dpipe->sysread($_, 1) or return;
         if ($_ ne "\x00") {
             while (1) {
-                unless ($pipe->sysread($_, 1, length $_)) {
-                    $self->_or_set_error(SSHA_SCP_ERROR, 'broken pipe');
+                unless ($dpipe->sysread($_, 1, length $_)) {
+                    $self->_or_set_error(SSHA_SCP_ERROR, 'broken dpipe');
                     return;
                 }
                 last if /\x0A$/;
@@ -48,15 +48,15 @@ sub _read_line {
 }
 
 sub _read_response {
-    my ($self, $pipe) = @_;
-    if ($self->_read_line($pipe, my $buf)) {
+    my ($self, $dpipe) = @_;
+    if ($self->_read_line($dpipe, my $buf)) {
 	$buf eq "\x00" and return 0;
 	$buf =~ /^([\x01\x02])(.*)$/ and return(wantarray ? (ord($1), $2) : ord($1));
 	$debug and $debug & 4096 and _debug_hexdump "failed to read response", $buf;
         $self->_or_set_error(SSHA_SCP_ERROR, "SCP protocol error");
     }
     else {
-        $self->_or_set_error(SSHA_SCP_ERROR, "broken pipe");
+        $self->_or_set_error(SSHA_SCP_ERROR, "broken dpipe");
     }
     wantarray ? (2, $self->{any}->error) : 2
 }

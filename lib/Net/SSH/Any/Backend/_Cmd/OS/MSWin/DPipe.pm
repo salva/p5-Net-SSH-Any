@@ -22,28 +22,28 @@ for my $method (qw(syswrite print printf say)) {
 }
 
 sub _upgrade_fh_to_dpipe {
-    my ($class, $pipe, $os, $any, $proc, $in) = @_;
-    $class->SUPER::_upgrade_fh_to_dpipe($pipe, $os, $any, $proc);
+    my ($class, $dpipe, $os, $any, $proc, $in) = @_;
+    $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
     bless $in, 'IO::Handle';
-    ${*$pipe}{_ssha_be_in} = $in;
-    $pipe;
+    ${*$dpipe}{_ssha_be_in} = $in;
+    $dpipe;
 }
 
 sub _close_fhs {
-    my $pipe = shift;
-    my $ok = $pipe->send_eof;
-    unless (close $pipe) {
-        $pipe->_any->_set_error(SSHA_CHANNEL_ERROR, "unable to close dpipe reading side: $!");
+    my $dpipe = shift;
+    my $ok = $dpipe->send_eof;
+    unless (close $dpipe) {
+        $dpipe->_any->_set_error(SSHA_CHANNEL_ERROR, "unable to close dpipe reading side: $!");
         undef $ok;
     }
     return $ok;
 }
 
 sub send_eof {
-    my $pipe = shift;
-    if (defined (my $in = delete ${*$pipe}{_ssha_be_in})) {
+    my $dpipe = shift;
+    if (defined (my $in = delete ${*$dpipe}{_ssha_be_in})) {
         unless (close $in) {
-            $pipe->_any->_set_error(SSHA_CHANNEL_ERROR, "unable to close dpipe writing side: $!");
+            $dpipe->_any->_set_error(SSHA_CHANNEL_ERROR, "unable to close dpipe writing side: $!");
             return undef
         }
     }

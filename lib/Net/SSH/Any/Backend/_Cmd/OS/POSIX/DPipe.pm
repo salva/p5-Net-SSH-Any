@@ -10,32 +10,32 @@ require Net::SSH::Any::Backend::_Cmd::DPipe;
 our @ISA = qw(Net::SSH::Any::Backend::_Cmd::DPipe);
 
 sub _upgrade_fh_to_dpipe {
-    my ($class, $pipe, $os, $any, $proc) = @_;
-    $class->SUPER::_upgrade_fh_to_dpipe($pipe, $os, $any, $proc);
-    $pipe->autoflush(1);
-    $pipe;
+    my ($class, $dpipe, $os, $any, $proc) = @_;
+    $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
+    $dpipe->autoflush(1);
+    $dpipe;
 }
 
 sub _close_fhs {
-    my $pipe = shift;
-    close $pipe and return 1;
-    $pipe->_any->_set_error(SSHA_CHANNEL_ERROR, "Unable to close socket: $!");
+    my $dpipe = shift;
+    close $dpipe and return 1;
+    $dpipe->_any->_set_error(SSHA_CHANNEL_ERROR, "Unable to close socket: $!");
     undef
 }
 
 sub syswrite {
-    my $pipe = shift;
+    my $dpipe = shift;
     my (undef, $len, $offset) = @_;
     $len ||= "<undef>";
     $offset ||= "<undef>";
     $debug and $debug & 8192 and
-	_debug_hexdump("$pipe->syswrite(..., $len, $offset)", $_[0]);
-    $pipe->SUPER::syswrite(@_);
+	_debug_hexdump("$dpipe->syswrite(..., $len, $offset)", $_[0]);
+    $dpipe->SUPER::syswrite(@_);
 }
 
 sub send_eof {
-    my $pipe = shift;
-    shutdown $pipe, 1;
+    my $dpipe = shift;
+    shutdown $dpipe, 1;
 }
 
 1;
