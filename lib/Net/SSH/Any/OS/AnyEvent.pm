@@ -1,12 +1,12 @@
-package Net::SSH::Any::Backend::_Cmd::OS::AnyEvent;
+package Net::SSH::Any::OS::AnyEvent;
 
 use strict;
 use warnings;
 
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump);
 use Net::SSH::Any::Constants qw(SSHA_LOCAL_IO_ERROR);
-require Net::SSH::Any::Backend::_Cmd::OS::_Base;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::OS::_Base);
+require Net::SSH::Any::OS::_Base;
+our @ISA = qw(Net::SSH::Any::OS::_Base);
 
 use AnyEvent::Util qw(portable_pipe portable_socketpair);
 

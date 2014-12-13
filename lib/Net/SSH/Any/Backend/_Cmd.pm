@@ -19,7 +19,7 @@ sub _connect {
         @opts{keys %$extra} = values %$extra;
     }
 
-    my $module = "Net::SSH::Any::Backend::_Cmd::OS::" .
+    my $module = "Net::SSH::Any::OS::" .
         _first_defined(delete($opts{cmd_os_backend}),
                        ($^O =~ /^mswin/i ? 'MSWin' : 'POSIX'));
 

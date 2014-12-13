@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::OS::POSIX;
+package Net::SSH::Any::OS::POSIX;
 
 use strict;
 use warnings;
@@ -12,8 +12,8 @@ use File::Spec;
 use Time::HiRes ();
 use Errno;
 
-require Net::SSH::Any::Backend::_Cmd::OS::_Base;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::OS::_Base);
+require Net::SSH::Any::OS::_Base;
+our @ISA = qw(Net::SSH::Any::OS::_Base);
 
 sub _fileno_dup_over {
     my ($good_fn, $fh) = @_;
@@ -41,8 +41,8 @@ sub socketpair {
 sub make_dpipe {
     my ($os, $any, $proc, $dpipe, $out) = @_;
     defined $out and die "internal error: out should be undefined but is $out";
-    require Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe;
-    Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe->_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
+    require Net::SSH::Any::OS::POSIX::DPipe;
+    Net::SSH::Any::OS::POSIX::DPipe->_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
     $dpipe;
 }
 

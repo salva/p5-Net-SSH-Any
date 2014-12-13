@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::OS::MSWin::DPipe;
+package Net::SSH::Any::OS::MSWin::DPipe;
 
 use strict;
 use warnings;

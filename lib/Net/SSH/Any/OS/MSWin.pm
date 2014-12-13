@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::OS::MSWin;
+package Net::SSH::Any::OS::MSWin;
 
 use strict;
 use warnings;
@@ -10,8 +10,8 @@ use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or
 use Net::SSH::Any::Constants qw(:error);
 use Time::HiRes qw(sleep);
 
-require Net::SSH::Any::Backend::_Cmd::OS::_Base;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::OS::_Base);
+require Net::SSH::Any::OS::_Base;
+our @ISA = qw(Net::SSH::Any::OS::_Base);
 
 # sub socketpair {
 #     my ($os, $any) = @_;
@@ -35,8 +35,8 @@ sub pipe {
 
 sub make_dpipe {
     my ($os, $any, $proc, $in, $out) = @_;
-    require Net::SSH::Any::Backend::_Cmd::OS::MSWin::DPipe;
-    Net::SSH::Any::Backend::_Cmd::OS::MSWin::DPipe->_upgrade_fh_to_dpipe($out, $os, $any, $proc, $in);
+    require Net::SSH::Any::OS::MSWin::DPipe;
+    Net::SSH::Any::OS::MSWin::DPipe->_upgrade_fh_to_dpipe($out, $os, $any, $proc, $in);
 }
 
 my $win32_set_named_pipe_handle_state;

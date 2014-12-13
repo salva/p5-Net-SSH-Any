@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe;
+package Net::SSH::Any::OS::POSIX::DPipe;
 
 use strict;
 use warnings;
