@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::OS::MSWin::Pipe;
+package Net::SSH::Any::Backend::_Cmd::OS::MSWin::DPipe;
 
 use strict;
 use warnings;
@@ -10,8 +10,8 @@ use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or
 use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR);
 use Time::HiRes qw(sleep);
 
-require Net::SSH::Any::Backend::_Cmd::Pipe;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::Pipe);
+require Net::SSH::Any::Backend::_Cmd::DPipe;
+our @ISA = qw(Net::SSH::Any::Backend::_Cmd::DPipe);
 
 sub _in { ${*{shift()}}{_ssha_be_in} }
 
@@ -21,9 +21,9 @@ for my $method (qw(syswrite print printf say)) {
     *{$m} = sub { shift->_in->$m(@_) }
 }
 
-sub _upgrade_fh_to_pipe {
+sub _upgrade_fh_to_dpipe {
     my ($class, $pipe, $os, $any, $proc, $in) = @_;
-    $class->SUPER::_upgrade_fh_to_pipe($pipe, $os, $any, $proc);
+    $class->SUPER::_upgrade_fh_to_dpipe($pipe, $os, $any, $proc);
     bless $in, 'IO::Handle';
     ${*$pipe}{_ssha_be_in} = $in;
     $pipe;

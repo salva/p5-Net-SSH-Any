@@ -35,8 +35,8 @@ sub pipe {
 
 sub make_dpipe {
     my ($os, $any, $proc, $in, $out) = @_;
-    require Net::SSH::Any::Backend::_Cmd::OS::MSWin::Pipe;
-    Net::SSH::Any::Backend::_Cmd::OS::MSWin::Pipe->_upgrade_fh_to_pipe($out, $os, $any, $proc, $in);
+    require Net::SSH::Any::Backend::_Cmd::OS::MSWin::DPipe;
+    Net::SSH::Any::Backend::_Cmd::OS::MSWin::DPipe->_upgrade_fh_to_dpipe($out, $os, $any, $proc, $in);
 }
 
 my $win32_set_named_pipe_handle_state;

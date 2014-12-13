@@ -83,7 +83,7 @@ sub _capture2 {
 
 sub _pipe {
     my ($any, $opts, $cmd) = @_;
-    require Net::SSH::Any::Backend::_Cmd::Pipe;
+    require Net::SSH::Any::Backend::_Cmd::DPipe;
     $opts->{stdinout_pipe} = 1;
     my ($proc, $pipe) = __run_cmd($any, $opts, $cmd) or return;
     $pipe;

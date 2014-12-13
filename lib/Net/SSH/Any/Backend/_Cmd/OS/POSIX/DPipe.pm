@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::OS::POSIX::Pipe;
+package Net::SSH::Any::Backend::_Cmd::OS::POSIX::DPipe;
 
 use strict;
 use warnings;
@@ -6,12 +6,12 @@ use warnings;
 use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR);
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump);
 
-require Net::SSH::Any::Backend::_Cmd::Pipe;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::Pipe);
+require Net::SSH::Any::Backend::_Cmd::DPipe;
+our @ISA = qw(Net::SSH::Any::Backend::_Cmd::DPipe);
 
-sub _upgrade_fh_to_pipe {
+sub _upgrade_fh_to_dpipe {
     my ($class, $pipe, $os, $any, $proc) = @_;
-    $class->SUPER::_upgrade_fh_to_pipe($pipe, $os, $any, $proc);
+    $class->SUPER::_upgrade_fh_to_dpipe($pipe, $os, $any, $proc);
     $pipe->autoflush(1);
     $pipe;
 }

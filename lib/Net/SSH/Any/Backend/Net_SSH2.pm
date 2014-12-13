@@ -603,8 +603,8 @@ sub _pipe {
     my ($any, $opts, $cmd) = @_;
     my ($channel) = __open_channel_and_exec($any, $opts, $cmd) or return;
     # TODO: do something with the parsed options?
-    require Net::SSH::Any::Backend::Net_SSH2::Pipe;
-    Net::SSH::Any::Backend::Net_SSH2::Pipe->_make($any, $channel);
+    require Net::SSH::Any::Backend::Net_SSH2::DPipe;
+    Net::SSH::Any::Backend::Net_SSH2::DPipe->_make($any, $channel);
 }
 
 sub _sftp {

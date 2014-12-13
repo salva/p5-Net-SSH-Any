@@ -105,8 +105,8 @@ sub _pipe {
     my $ssh = __ssh($any) or return undef;
     my ($socket, $pid) = $ssh->open2socket($opts, $cmd);
     __check_error($any) or return;
-    require Net::SSH::Any::Backend::_Cmd::Pipe;
-    Net::SSH::Any::Backend::_Cmd::Pipe->_upgrade_socket($socket, $pid, $any);
+    require Net::SSH::Any::Backend::_Cmd::DPipe;
+    Net::SSH::Any::Backend::_Cmd::DPipe->_upgrade_fh_to_dpipe($socket, undef, $any, $pid);
 }
 
 sub _sftp {

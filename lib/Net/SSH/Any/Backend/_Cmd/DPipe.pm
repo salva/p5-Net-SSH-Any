@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::Pipe;
+package Net::SSH::Any::Backend::_Cmd::DPipe;
 
 use strict;
 use warnings;
@@ -15,7 +15,7 @@ sub _os { ${*{shift()}}{_ssha_be_os} }
 sub _any { ${*{shift()}}{_ssha_be_any} }
 sub _proc { ${*{shift()}}{_ssha_be_proc} }
 
-sub _upgrade_fh_to_pipe {
+sub _upgrade_fh_to_dpipe {
     my ($class, $pipe, $os, $any, $proc) = @_;
     bless $pipe, $class;
     ${*$pipe}{_ssha_be_os} = $os;

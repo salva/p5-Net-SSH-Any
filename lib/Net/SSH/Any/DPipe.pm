@@ -1,4 +1,4 @@
-package Net::SSH::Any::Pipe;
+package Net::SSH::Any::DPipe;
 
 use strict;
 use warnings;
@@ -12,6 +12,6 @@ __END__
 
 =head1 NAME
 
-Net::SSH::Any::Pipe - bidirectional comunication with remote process
+Net::SSH::Any::DPipe - bidirectional comunication with remote process
 
 

@@ -1,10 +1,10 @@
-package Net::SSH::Any::Backend::Net_SSH2::Pipe;
+package Net::SSH::Any::Backend::Net_SSH2::DPipe;
 
 use strict;
 use warnings;
 
-require Net::SSH::Any::Pipe;
-our @ISA = qw(Net::SSH::Any::Pipe);
+require Net::SSH::Any::DPipe;
+our @ISA = qw(Net::SSH::Any::DPipe);
 
 sub _make {
     my $class = shift;
@@ -25,7 +25,7 @@ sub AUTOLOAD {
     goto &$sub;
 }
 
-package Net::SSH::Any::Backend::Net_SSH2::Pipe::Tie;
+package Net::SSH::Any::Backend::Net_SSH2::DPipe::Tie;
 
 use strict;
 use warnings;
