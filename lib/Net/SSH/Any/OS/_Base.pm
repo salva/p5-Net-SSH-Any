@@ -17,7 +17,7 @@ sub pty {
     IO::Pty->new;
 }
 
-sub unset_pipe_inherit_flag { 1 }
+sub set_file_inherit_flag { 1 }
 
 sub has_working_socketpair { }
 
@@ -35,16 +35,21 @@ sub export_proc {
     $proc->{pid}
 }
 
+my @stream_names = qw(stdin stdout stderr);
+
 sub run_cmd {
     my ($any, $opts, $cmd) = @_;
+    my (@fhs, @pipes);
 
     my $data = $opts->{stdin_data};
     $opts->{stdin_pipe} = 1 if defined $data;
 
     my $dpipe = delete $opts->{stdinout_dpipe};
     if ($dpipe) {
-        if ($any->_os_has_working_socketpair('socketpair')) {
-            $opts->{stdinout_socket} = 1;
+        if ($any->_os_has_working_socketpair) {
+            ($fhs[0], $pipes[0]) = $any->_os_socketpair($fhs[0], $pipes[0]) or return;
+            $fhs[1] = $fhs[0];
+            $pipes[1] = undef;
         }
         else {
             $opts->{stdin_pipe} = 1;
@@ -52,16 +57,7 @@ sub run_cmd {
         }
     }
 
-    my $socket = delete $opts->{stdinout_socket};
-
-    my (@fhs, @pipes);
-    if ($socket) {
-        ($fhs[0], $pipes[0]) = $any->_os_socketpair($fhs[0], $pipes[0]) or return;
-        $fhs[1] = $fhs[0];
-        $pipes[1] = undef;
-    }
-
-    for my $stream (($socket ? () : ('stdin', 'stdout')), 'stderr') {
+    for my $stream (@stream_names[@fhs .. 2]) {
         my ($fh, $pipe);
         if (delete $opts->{"${stream}_pipe"}) {
             ($pipe, $fh) = $any->_os_pipe($any) or return;
@@ -83,12 +79,11 @@ sub run_cmd {
                 }
             }
         }
-
         push @fhs, $fh;
         push @pipes, $pipe;
     }
 
-    $any->_os_unset_pipe_inherit_flag($_)
+    $any->_os_set_file_inherit_flag($_, 0)
         for grep defined, @pipes;
 
     my $stderr_to_stdout = (defined $fhs[2] ? 0 : delete $opts->{stderr_to_stdout});

@@ -75,26 +75,25 @@ FSIGN
     }
 }
 
-
-sub unset_pipe_inherit_flag {
-    my ($any, $pipe) = @_;
+sub set_file_inherit_flag {
+    my ($any, $file, $value) = @_;
     __wrap_win32_functions($any);
-    my $fn = fileno $pipe;
+    my $fn = fileno $file;
     my $wh = $win32_get_osfhandle->Call($fn)
         or die "internal error: win32_get_osfhandle failed unexpectedly";
-    my $success = $win32_set_handle_information->Call($wh, $win32_handle_flag_inherit, 0);
+    my $flag = ($value ? $win32_handle_flag_inherit : 0);
+    my $success = $win32_set_handle_information->Call($wh, $win32_handle_flag_inherit, $flag);
     $debug and $debug & 1024 and
-        _debug "Win32::SetHandleInformation($wh, $win32_handle_flag_inherit, 0) => $success",
+        _debug "Win32::SetHandleInformation($wh, $win32_handle_flag_inherit, $flag) => $success",
             ($success ? () : (" \$^E: $^E"));
+    $success;
 }
 
 sub pty { croak "PTYs are not supported on Windows" }
 
 sub open4 {
     my ($any, $fhs, $close, $pty, $stderr_to_stdout, @cmd) = @_;
-    my ($pid, $error);
-
-    my (@old, @new);
+    my (@old, @new, $pid, $error);
 
     $pty and croak "PTYs are not supported on Windows";
     grep tied $_, *STDIN, *STDOUT, *STDERR
