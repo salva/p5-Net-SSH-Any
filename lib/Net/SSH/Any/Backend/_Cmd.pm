@@ -19,73 +19,36 @@ sub _connect {
         @opts{keys %$extra} = values %$extra;
     }
 
-    my $module = "Net::SSH::Any::OS::" .
-        _first_defined(delete($opts{cmd_os_backend}),
-                       ($^O =~ /^mswin/i ? 'MSWin' : 'POSIX'));
-
-    $any->_load_module($module) or return;
-    $any->{be_cmd_os} = $module->new or return;
-
+    $any->_os_loaded or return; # ensure the OS module is loaded
     $any->_validate_connect_opts(%opts);
-}
-
-sub __cmd_os {
-    my $any = shift;
-    my $os = $any->{be_cmd_os};
-    unless ($os) {
-        $any->_or_set_error(SSHA_BACKEND_ERROR, "Internal error: _Cmd OS module not initialized");
-        return;
-    }
-    $os;
-}
-
-sub __run_cmd {
-    my $os = __cmd_os($_[0]) or return;
-    $os->run_cmd(@_);
-}
-
-sub __export_proc {
-    my ($any, $proc) = @_;
-    my $os = __cmd_os($_[0]) or return;
-    $os->export_proc(@_);
-}
-
-sub __io3 {
-    my ($any, $proc, $timeout, $data, $in, $out, $err) = @_;
-    my @data = grep { defined and length } _array_or_scalar_to_list $data;
-    if (@data and not $in) {
-        croak "remote input channel is not defined but data is available for sending"
-    }
-    my $os = __cmd_os($any) or return;
-    $os->io3($any, $proc, $timeout, \@data, $in, $out, $err);
 }
 
 sub _system {
     my ($any, $opts, $cmd) = @_;
-    my ($proc, @pipes) = __run_cmd($any, $opts, $cmd) or return;
-    __io3($any, $proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
+    my ($proc, @pipes) = $any->_os_run_cmd($opts, $cmd) or return;
+    $any->_os_io3($proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
 }
 
 sub _capture {
     my ($any, $opts, $cmd) = @_;
     $opts->{stdout_pipe} = 1;
-    my ($proc, @pipes) = __run_cmd($any, $opts, $cmd) or return;
-    __io3($any, $proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
+    my ($proc, @pipes) = $any->_os_run_cmd($opts, $cmd) or return;
+    $any->_os_io3($proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
 }
 
 sub _capture2 {
     my ($any, $opts, $cmd) = @_;
     $opts->{stdout_pipe} = 1;
     $opts->{stderr_pipe} = 1;
-    my ($proc, @pipes) = __run_cmd($any, $opts, $cmd) or return;
-    __io3($any, $proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
+    my ($proc, @pipes) = $any->_os_run_cmd($opts, $cmd) or return;
+    $any->_os_io3($proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
 }
 
 sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     require Net::SSH::Any::Backend::_Cmd::DPipe;
     $opts->{stdinout_dpipe} = 1;
-    my ($proc, $dpipe) = __run_cmd($any, $opts, $cmd) or return;
+    my (undef, $dpipe) = $any->_os_run_cmd($opts, $cmd) or return;
     $dpipe;
 }
 
@@ -94,8 +57,8 @@ sub _sftp {
     $opts->{subsystem} = 1;
     $opts->{stdin_pipe} = 1;
     $opts->{stdout_pipe} = 1;
-    my ($proc, $in, $out) = __run_cmd($any, $opts, 'sftp') or return;
-    my $pid = __export_proc($any, $proc) or return;
+    my ($proc, $in, $out) = $any->_os_run_cmd($opts, 'sftp') or return;
+    my $pid = $any->_os_export_proc($proc) or return;
     Net::SFTP::Foreign->new(transport => [$in, $out, $pid], %$opts);
 }
 

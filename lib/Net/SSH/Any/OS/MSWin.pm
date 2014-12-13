@@ -24,7 +24,7 @@ our @ISA = qw(Net::SSH::Any::OS::_Base);
 # }
 
 sub pipe {
-    my ($os, $any) = @_;
+    my $any = shift;
     my ($r, $w);
     unless (CORE::pipe $r, $w) {
         $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create pipe: $!");
@@ -34,9 +34,9 @@ sub pipe {
 }
 
 sub make_dpipe {
-    my ($os, $any, $proc, $in, $out) = @_;
+    my ($any, $proc, $in, $out) = @_;
     require Net::SSH::Any::OS::MSWin::DPipe;
-    Net::SSH::Any::OS::MSWin::DPipe->_upgrade_fh_to_dpipe($out, $os, $any, $proc, $in);
+    Net::SSH::Any::OS::MSWin::DPipe->_upgrade_fh_to_dpipe($out, $any, $proc, $in);
 }
 
 my $win32_set_named_pipe_handle_state;
@@ -45,7 +45,7 @@ my $win32_set_handle_information;
 my $win32_handle_flag_inherit = 0x1;
 my $win32_pipe_nowait = 0x1;
 
-sub _wrap_win32_functions {
+sub __wrap_win32_functions {
     unless (defined $win32_set_named_pipe_handle_state) {
         require Config;
         require Win32::API;
@@ -77,8 +77,8 @@ FSIGN
 
 
 sub unset_pipe_inherit_flag {
-    my ($os, $any, $pipe) = @_;
-    $os->_wrap_win32_functions($any);
+    my ($any, $pipe) = @_;
+    __wrap_win32_functions($any);
     my $fn = fileno $pipe;
     my $wh = $win32_get_osfhandle->Call($fn)
         or die "internal error: win32_get_osfhandle failed unexpectedly";
@@ -88,13 +88,10 @@ sub unset_pipe_inherit_flag {
             ($success ? () : (" \$^E: $^E"));
 }
 
-sub pty {
-    my ($os, $any) = @_;
-    croak "PTYs are not supported on Windows";
-}
+sub pty { croak "PTYs are not supported on Windows" }
 
 sub open4 {
-    my ($os, $any, $fhs, $close, $pty, $stderr_to_stdout, @cmd) = @_;
+    my ($any, $fhs, $close, $pty, $stderr_to_stdout, @cmd) = @_;
     my ($pid, $error);
 
     my (@old, @new);
@@ -149,7 +146,7 @@ sub open4 {
 }
 
 sub wait_proc {
-    my ($os, $any, $proc, $timeout, $force_kill) = @_;
+    my ($any, $proc, $timeout, $force_kill) = @_;
     my $pid = $proc->{pid};
     $? = 0;
 
@@ -164,9 +161,8 @@ push @retriable, Errno::EWOULDBLOCK if Errno::EWOULDBLOCK != Errno::EAGAIN;
 sub _set_pipe_blocking {
     my ($os, $any, $pipe, $blocking) = @_;
     if (defined $pipe) {
-        $os->_wrap_win32_functions($any);
+        __wrap_win32_functions($any);
         my $fileno = fileno $pipe;
-        #my $handle = Win32API::File::FdGetOsFHandle($fileno);
         my $handle = $win32_get_osfhandle->Call($fileno);
         $debug and $debug & 1024 and _debug("setting pipe (pipe: ", $pipe,
                                             ", fileno: ", $fileno,
@@ -181,33 +177,33 @@ sub _set_pipe_blocking {
 }
 
 sub io3 {
-    my ($os, $any, $proc, $timeout, $data, $in, $out, $err) = @_;
+    my ($any, $proc, $timeout, $data, $in, $out, $err) = @_;
     $timeout = $any->{timeout} unless defined $timeout;
 
     $debug and $debug & 1024 and _debug "io3 handles: ", $in, ", ", $out, ", ", $err;
 
-    my @data = _array_or_scalar_to_list $data;
+    $data = $any->_os_io3_check_and_clean_data($data, $in);
 
     $os->_set_pipe_blocking($any, $in,  0);
     $os->_set_pipe_blocking($any, $out, 0);
     $os->_set_pipe_blocking($any, $err, 0);
 
-    $debug and $debug & 1024 and _debug "data array has ".scalar(@data)." elements";
+    $debug and $debug & 1024 and _debug "data array has ".scalar(@$data)." elements";
 
     my $bout = '';
     my $berr = '';
     while (defined $in or defined $out or defined $err) {
         my $delay = 1;
         if (defined $in) {
-            while (@data) {
-                unless (defined $data[0] and length $data[0]) {
-                    shift @data;
+            while (@$data) {
+                unless (defined $data->[0] and length $data->[0]) {
+                    shift @$data;
                     next;
                 }
-                my $bytes = syswrite $in, $data[0];
+                my $bytes = syswrite $in, $data->[0];
                 if ($bytes) {
                     $debug and $debug & 1024 and _debug "$bytes bytes of data sent";
-                    substr $data[0], 0, $bytes, '';
+                    substr $data->[0], 0, $bytes, '';
                     undef $delay;
                 }
                 else {
@@ -220,8 +216,7 @@ sub io3 {
                     last;
                 }
             }
-            unless (@data) {
-                # $os->_set_pipe_blocking($any, $in, 1);
+            unless (@$data) {
                 $debug and $debug & 1024 and _debug "closing slave stdin channel";
                 close $in;
                 undef $in;
@@ -278,7 +273,7 @@ sub io3 {
     }
 
     $debug and $debug & 1024 and _debug "waiting for child";
-    $os->wait_proc($any, $proc, $timeout);
+    $any->_os_wait_proc($proc, $timeout);
 
     $debug and $debug & 1024 and _debug "leaving io3()";
     return ($bout, $berr);

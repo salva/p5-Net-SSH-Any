@@ -6,8 +6,10 @@ use warnings;
 use Carp;
 our @CARP_NOT = ('Net::SSH::Any::Backend::_Cmd');
 
-use Net::SSH::Any::Util qw($debug _debug);
+use Net::SSH::Any::Util qw($debug _debug _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
+
+sub loaded { 1 } # helper method to ensure the module has been correctly loaded
 
 sub new {
     my $class = shift;
@@ -25,17 +27,33 @@ sub pty {
     IO::Pty->new;
 }
 
-sub unset_pipe_inherit_flag {}
+sub unset_pipe_inherit_flag { 1 }
+
+sub has_working_socketpair { }
+
+sub io3_check_and_clean_data {
+    my ($any, $in, $data) = @_;
+    my @data = grep { defined and length } _array_or_scalar_to_list $data;
+    if (@data and not $in) {
+        croak "remote input channel is not defined but data is available for sending"
+    }
+    \@data
+}
+
+sub export_proc {
+    my ($any, $proc) = @_;
+    $proc->{pid}
+}
 
 sub run_cmd {
-    my ($os, $any, $opts, $cmd) = @_;
+    my ($any, $opts, $cmd) = @_;
 
     my $data = $opts->{stdin_data};
     $opts->{stdin_pipe} = 1 if defined $data;
 
     my $dpipe = delete $opts->{stdinout_dpipe};
     if ($dpipe) {
-        if ($os->can('socketpair')) {
+        if ($any->_os_has_working_socketpair('socketpair')) {
             $opts->{stdinout_socket} = 1;
         }
         else {
@@ -48,7 +66,7 @@ sub run_cmd {
 
     my (@fhs, @pipes);
     if ($socket) {
-        ($fhs[0], $pipes[0]) = $os->socketpair($any, $fhs[0], $pipes[0]) or return;
+        ($fhs[0], $pipes[0]) = $any->_os_socketpair($fhs[0], $pipes[0]) or return;
         $fhs[1] = $fhs[0];
         $pipes[1] = undef;
     }
@@ -56,7 +74,7 @@ sub run_cmd {
     for my $stream (($socket ? () : ('stdin', 'stdout')), 'stderr') {
         my ($fh, $pipe);
         if (delete $opts->{"${stream}_pipe"}) {
-            ($pipe, $fh) = $os->pipe($any) or return;
+            ($pipe, $fh) = $any->_os_pipe($any) or return;
             ($pipe, $fh) = ($fh, $pipe) if $stream eq 'stdin';
         }
         else {
@@ -80,7 +98,7 @@ sub run_cmd {
         push @pipes, $pipe;
     }
 
-    $os->unset_pipe_inherit_flag($any, $_)
+    $any->_os_unset_pipe_inherit_flag($_)
         for grep defined, @pipes;
 
     my $stderr_to_stdout = (defined $fhs[2] ? 0 : delete $opts->{stderr_to_stdout});
@@ -93,19 +111,19 @@ sub run_cmd {
     my @cmd = $any->_make_cmd($opts, $cmd) or return;
 
     $debug and $debug & 1024 and _debug("launching cmd: '", join("', '", @cmd), "'");
-    my $pty = ($any->{be_interactive_login} ? $os->pty($any) : undef);
-    my $proc = $os->open4($any, \@fhs, \@pipes, $pty, $stderr_to_stdout, @cmd) or return;
+    my $pty = ($any->{be_interactive_login} ? $any->_os_pty($any) : undef);
+    my $proc = $any->_os_open4(\@fhs, \@pipes, $pty, $stderr_to_stdout, @cmd) or return;
 
     $debug and $debug & 1024 and _debug("pid: $proc->{pid}");
 
     if ($pty) {
-        $os->interactive_login($any, $pty, $stderr_to_stdout, $proc) or return undef;
+        $any->_os_interactive_login($pty, $stderr_to_stdout, $proc) or return undef;
         $any->{be_pty} = $pty;
         $pty->close_slave;
     }
 
     if ($dpipe) {
-        $pipes[0] = $os->make_dpipe($any, $proc, @pipes[0, 1]) or return;
+        $pipes[0] = $any->_os_make_dpipe($proc, @pipes[0, 1]) or return;
         $pipes[1] = undef;
         $debug and $debug & 1024 and _debug "fh upgraded to dpipe $pipes[0]";
     }
@@ -148,12 +166,12 @@ sub interactive_login {
             $debug and $debug & 1024 and _debug "checking timeout, max: $any->{_timeout}, ellapsed: " . (time - $start_time);
             if (time - $start_time > $any->{_timeout}) {
                 $any->_set_error(SSHA_TIMEOUT_ERROR, "timed out while login");
-                $os->wait_proc($any, $proc, 0, 1);
+                $any->_os_wait_proc($proc, 0, 1);
                 return;
             }
         }
 
-        unless ($os->check_proc($any, $proc)) {
+        unless ($any->_os_check_proc($proc)) {
             my $err = ($? >> 8);
             $any->_set_error(SSHA_CONNECTION_ERROR,
                              "slave process exited unexpectedly with error code $err");
@@ -173,7 +191,7 @@ sub interactive_login {
                                   "the authenticity of the target host can't be established, " .
                                   "the remote host public key is probably not present on the " .
                                   "'~/.ssh/known_hosts' file");
-                $os->wait_proc($any, $proc, 0, 1);
+                $any->_os_wait_proc($proc, 0, 1);
                 return;
             }
             if ($password_sent) {
@@ -206,7 +224,7 @@ sub interactive_login {
         }
         else {
             $debug and $debug & 1024 and _debug "no data available from pty, delaying until next read";
-            sleep 0.1;
+            sleep 0.02;
         }
 
     }

@@ -28,8 +28,10 @@ sub _fileno_dup_over {
     undef;
 }
 
+sub has_working_socketpair { 1 }
+
 sub socketpair {
-    my ($os, $any) = @_;
+    my $any = shift;
     my ($a, $b);
     unless (CORE::socketpair($a, $b, AF_UNIX, SOCK_STREAM, PF_UNSPEC)) {
         $any->_set_error(SSHA_LOCAL_IO_ERROR, "socketpair failed: $!");
@@ -39,15 +41,15 @@ sub socketpair {
 }
 
 sub make_dpipe {
-    my ($os, $any, $proc, $dpipe, $out) = @_;
+    my ($any, $proc, $dpipe, $out) = @_;
     defined $out and die "internal error: out should be undefined but is $out";
     require Net::SSH::Any::OS::POSIX::DPipe;
-    Net::SSH::Any::OS::POSIX::DPipe->_upgrade_fh_to_dpipe($dpipe, $os, $any, $proc);
+    Net::SSH::Any::OS::POSIX::DPipe->_upgrade_fh_to_dpipe($dpipe, $any, $proc);
     $dpipe;
 }
 
 sub pipe {
-    my ($os, $any) = @_;
+    my $any = shift;
     my ($r, $w);
     unless (CORE::pipe $r, $w) {
         $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create pipe: $!");
@@ -57,8 +59,7 @@ sub pipe {
 }
 
 sub open4 {
-    my ($os, $any, $fhs, $close, $pty, $stderr_to_stdout, @cmd) = @_;
-
+    my ($any, $fhs, $close, $pty, $stderr_to_stdout, @cmd) = @_;
     my $pid = fork;
     unless ($pid) {
         unless (defined $pid) {
@@ -84,12 +85,10 @@ sub open4 {
     return { pid => $pid};
 }
 
-# $os->check_proc($any, $proc, $wait, $unexpected)
+# __check_proc($any, $proc, $wait)
 # wait: waits until the process exits
-# unexpected: we does not expect the program to finish
-
-sub check_proc {
-    my ($os, $any, $proc, $wait) = @_;
+sub __check_proc {
+    my ($any, $proc, $wait) = @_;
     my $pid = $proc->{pid};
     $? = 0;
 
@@ -125,7 +124,7 @@ sub check_proc {
 }
 
 sub wait_proc {
-    my ($os, $any, $proc, $timeout, $force_kill) = @_;
+    my ($any, $proc, $timeout, $force_kill) = @_;
 
     my $wait = 1;
     my $delay = 1.0;
@@ -144,7 +143,7 @@ sub wait_proc {
     local $SIG{CHLD} = sub {};
     while (1) {
         unless ($wait) {
-            $os->check_proc($any, $proc) or last;
+            __check_proc($any, $proc) or last;
             my $remaining = $time_limit - time;
             if ($remaining <= 0) {
                 $debug and $debug & 1024 and _debug "killing SSH slave, pid: $pid";
@@ -159,7 +158,7 @@ sub wait_proc {
         # There is a (harmless) race condition here. We try to
         # minimize it by keeping the 'waitpid' and 'select' calls
         # together and limiting the sleep time to 1s max:
-        $os->check_proc($any, $proc, $wait) or last;
+        __check_proc($any, $proc, $wait) or last;
         select(undef, undef, undef, $delay);
     }
 
@@ -170,12 +169,13 @@ my @retriable = (Errno::EINTR, Errno::EAGAIN);
 push @retriable, Errno::EWOULDBLOCK if Errno::EWOULDBLOCK != Errno::EAGAIN;
 
 sub io3 {
-    my ($os, $any, $proc, $timeout, $data, $in, $out, $err) = @_;
+    my ($any, $proc, $timeout, $data, $in, $out, $err) = @_;
     my ($cin, $cout, $cerr) = map defined, $in, $out, $err;
     $timeout = $any->{timeout} unless defined $timeout;
 
-    # @data is guaranteed to not contain undef or zero length strings
-    # by the Net::SSH::Any::Backend::_Cmd::__io3 wrapper
+    # removes undefs and zero length strings and copies the data
+    # string so that we can modify them in place
+    $data = $any->_os_io3_check_and_clean_data($data, $in);
     if ($cin and not @$data) {
         close $in;
         undef $cin;
@@ -269,7 +269,7 @@ sub io3 {
     close $err if $cerr;
     close $in if $cin;
 
-    $os->wait_proc($any, $proc, $timeout);
+    $any->_os_wait_proc($proc, $timeout);
 
     $debug and $debug & 1024 and _debug "leaving io3()";
     return ($bout, $berr);

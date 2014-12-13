@@ -72,6 +72,8 @@ sub new {
     my $compress = _first_defined delete $opts{compress}, 1;
     my $backend_opts = delete $opts{backend_opts};
 
+    my $os = delete $opts{os};
+
     my (%remote_cmd, %local_cmd);
     for (keys %opts) {
         /^remote_(.*)_cmd$/ and $remote_cmd{$1} = $opts{$_};
@@ -96,6 +98,7 @@ sub new {
                 error_prefix => [],
                 remote_cmd => \%remote_cmd,
                 local_cmd => \%local_cmd,
+                os => $os,
                };
     bless $any, $class;
 
@@ -471,17 +474,37 @@ sub scp_mkdir       { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker
 sub scp_put         { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
 sub scp_put_content { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
 
-# transparently delegate method calls to backend packages:
+
+sub _load_os {
+    my $any = shift;
+    my $os = $any->{os} //= ($^O =~ /^mswin/i ? 'MSWin' : 'POSIX');
+    my $os_module = "Net::SSH::Any::OS::$os";
+    $any->_load_module($os_module) or return;
+    $any->{os_module} = $os_module;
+}
+
+# transparently delegate method calls to backend and os packages:
 sub AUTOLOAD {
     our $AUTOLOAD;
     my ($name) = $AUTOLOAD =~ /([^:]*)$/;
+    my $sub;
     no strict 'refs';
-    my $sub = sub {
-        my $backend = $_[0]->{backend_module} or return;
-        my $method = $backend->can($name)
-            or croak "method '$name' not defined in backend '$backend'";
-        goto &$method;
-    };
+    if (my ($os_name) = $name =~ /^_os_(.*)/) {
+        $sub = sub {
+            my $os = $_[0]->{os_module} //= $_[0]->_load_os or return;
+            my $method = $os->can($os_name)
+                or croak "method '$os_name' not defined in OS '$os'";
+            goto &$method;
+        };
+    }
+    else {
+        $sub = sub {
+            my $backend = $_[0]->{backend_module} or return;
+            my $method = $backend->can($name)
+                or croak "method '$name' not defined in backend '$backend'";
+            goto &$method;
+        };
+    }
     *{$AUTOLOAD} = $sub;
     goto &$sub;
 }
