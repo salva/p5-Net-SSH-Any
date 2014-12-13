@@ -6,6 +6,8 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
+# This module is just a marker inheretid by the other classes really implementing dpipes
+
 1;
 
 __END__
