@@ -6,8 +6,8 @@ use warnings;
 use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR);
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump);
 
-require Net::SSH::Any::Backend::_Cmd::DPipe;
-our @ISA = qw(Net::SSH::Any::Backend::_Cmd::DPipe);
+require Net::SSH::Any::OS::_Base::DPipe;
+our @ISA = qw(Net::SSH::Any::OS::_Base::DPipe);
 
 sub _upgrade_fh_to_dpipe {
     my ($class, $dpipe, $any, $proc) = @_;

@@ -158,8 +158,8 @@ my @retriable = (Errno::EINTR, Errno::EAGAIN, Errno::ENOSPC, Errno::EINVAL);
 push @retriable, Errno::EWOULDBLOCK if Errno::EWOULDBLOCK != Errno::EAGAIN;
 
 
-sub _set_pipe_blocking {
-    my ($os, $any, $pipe, $blocking) = @_;
+sub __set_pipe_blocking {
+    my ($any, $pipe, $blocking) = @_;
     if (defined $pipe) {
         __wrap_win32_functions($any);
         my $fileno = fileno $pipe;
@@ -184,9 +184,9 @@ sub io3 {
 
     $data = $any->_os_io3_check_and_clean_data($data, $in);
 
-    $os->_set_pipe_blocking($any, $in,  0);
-    $os->_set_pipe_blocking($any, $out, 0);
-    $os->_set_pipe_blocking($any, $err, 0);
+    __set_pipe_blocking($any, $in,  0);
+    __set_pipe_blocking($any, $out, 0);
+    __set_pipe_blocking($any, $err, 0);
 
     $debug and $debug & 1024 and _debug "data array has ".scalar(@$data)." elements";
 

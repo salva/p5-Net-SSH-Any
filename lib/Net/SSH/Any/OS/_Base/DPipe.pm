@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::_Cmd::DPipe;
+package Net::SSH::Any::OS::_Base::DPipe;
 
 use strict;
 use warnings;
@@ -6,9 +6,9 @@ use warnings;
 use Net::SSH::Any::Constants ();
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump);
 
-require Net::SSH::Any::Backend::DPipe;
+require Net::SSH::Any::DPipe;
 require IO::Handle;
-our @ISA = qw(Net::SSH::Any::Backend::DPipe
+our @ISA = qw(Net::SSH::Any::DPipe
               IO::Handle);
 
 sub _any { ${*{shift()}}{_ssha_os_any} }
@@ -28,7 +28,7 @@ sub close {
     $dpipe->_close_fhs or undef $ok;
 
     my $proc = delete ${*$dpipe}{_ssha_os_proc};
-    $dpipe->_any->wait_proc($proc) or undef $ok;
+    $dpipe->_any->_os_wait_proc($proc) or undef $ok;
     return $ok;
 }
 

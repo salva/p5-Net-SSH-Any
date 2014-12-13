@@ -11,16 +11,6 @@ use Net::SSH::Any::Constants qw(:error);
 
 sub loaded { 1 } # helper method to ensure the module has been correctly loaded
 
-sub new {
-    my $class = shift;
-    $class
-}
-
-sub export_proc {
-    my ($os, $any, $proc) = @_;
-    $proc->{pid};
-}
-
 sub pty {
     my ($os, $any) = @_;
     $any->_load_module('IO::Pty') or return;

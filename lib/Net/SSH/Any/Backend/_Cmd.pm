@@ -46,7 +46,6 @@ sub _capture2 {
 
 sub _dpipe {
     my ($any, $opts, $cmd) = @_;
-    require Net::SSH::Any::Backend::_Cmd::DPipe;
     $opts->{stdinout_dpipe} = 1;
     my (undef, $dpipe) = $any->_os_run_cmd($opts, $cmd) or return;
     $dpipe;
