@@ -14,7 +14,7 @@ sub _backend_api_version { 1 }
 sub _connect {
     my $any = shift;
     my %opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout
-                                           strict_host_key_checking known_host_path);
+                                           strict_host_key_checking known_hosts_path);
     if (my $extra = $any->{backend_opts}{$any->{backend}}) {
         @opts{keys %$extra} = values %$extra;
     }
