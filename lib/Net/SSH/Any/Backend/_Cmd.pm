@@ -23,12 +23,12 @@ sub _connect {
     $any->_validate_connect_opts(%opts);
 }
 
+sub _check_connection { 1 }
+
 sub _export_proc {
     my ($any, $proc) = @_;
     $proc->{pid}
 }
-
-sub _check_connection { 1 }
 
 my @stream_names = qw(stdin stdout stderr);
 
