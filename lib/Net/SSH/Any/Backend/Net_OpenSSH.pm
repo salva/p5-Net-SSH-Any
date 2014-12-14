@@ -8,6 +8,9 @@ BEGIN { die "Net::OpenSSH does not work on Windows" if $^O =~ /Win32|Win64|Cygwi
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
+require Net::SSH::Any::Backend::_Cmd;
+our @ISA = qw(Net::SSH::Any::Backend::_Cmd);
+
 use Net::SSH::Any::Util;
 use Net::SSH::Any::Constants qw(:error);
 use Net::OpenSSH;
@@ -36,91 +39,26 @@ sub __check_and_copy_error {
     return;
 }
 
-sub _connect {
+sub _validate_connect_opts {
+    my ($any, %opts) = @_;
+    my @master_opts = _array_or_scalar_to_list delete $opts{master_opts};
+    my $strict_host_key_checking = delete $opts{strict_host_key_checking};
+    push @master_opts, -o => 'StrictHostKeyChecking='.($strict_host_key_checking ? 'yes' : 'no');
+    my $known_host_path = delete $opts{known_host_path};
+    push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
+        if defined $known_hosts_path;
+    $any->{be_ssh} = Net::OpenSSH->new(%opts, master_opts => \@master_opts);
+    __check_and_copy_error($any);
+}
+
+sub _make_cmd { shift->{be_ssh}->make_command(@_) }
+
+sub _check_connection {
     my $any = shift;
-    my %opts;
-    for (qw(host port user password passphrase key_path timeout)) {
-        if (defined(my $v = $any->{$_})) {
-            $opts{$_} = $v;
-        }
-    }
-    $opts{default_stdin_discard} = 1;
-    # $opts{default_stdout_discard} = 1;
-    # $opts{default_stderr_discard} = 1;
-    if (my $extra = $any->{backend_opts}{$any->{backend}}) {
-        @opts{keys %$extra} = values %$extra;
-    }
-    my $master_opts = [_array_or_scalar_to_list delete $opts{master_opts}];
-    push @$master_opts, ('-o', 'StrictHostKeyChecking='.($any->{strict_host_key_checking} ? 'yes' : 'no'));
-    push @$master_opts, ('-o', "UserKnownHostsFile=$any->{known_hosts_path}")
-        if defined $any->{known_hosts_path};
-    $opts{master_opts} = $master_opts;
-
-    $any->{be_ssh} = Net::OpenSSH->new(%opts);
+    $any->{be_ssh}->wait_for_master;
     __check_and_copy_error($any);
 }
 
-sub __make_proxy_method {
-    my $name = shift;
-    my $sub = sub {
-        my ($any, $opts, $cmd) = @_;
-        my $ssh = __ssh($any) or return;
-        if (wantarray) {
-            my @r = $ssh->$name($opts, $cmd);
-            __check_and_copy_error($any);
-            return @r;
-        }
-        else {
-            my $r = $ssh->$name($opts, $cmd);
-            __check_and_copy_error($any);
-            return $r;
-        }
-    };
-    no strict 'refs';
-    *{"_$name"} = $sub;
-}
 
-sub _capture {
-    my ($any, $opts, $cmd) = @_;
-    my $ssh = __ssh($any) or return;
-    # Net::OpenSSH capture has to be called in scalar context
-    my $out = $ssh->capture($opts, $cmd);
-    __check_and_copy_error($any);
-    return $out;
-}
-
-__make_proxy_method 'capture2';
-__make_proxy_method 'system';
-
-sub __ssh {
-    my $any = shift;
-    my $ssh = $any->{be_ssh};
-    $ssh and $ssh->wait_for_master and return $ssh;
-    __check_and_copy_error($any);
-    undef;
-}
-
-sub _dpipe {
-    my ($any, $opts, $cmd) = @_;
-    my $ssh = __ssh($any) or return undef;
-    my ($socket, $pid) = $ssh->open2socket($opts, $cmd);
-    __check_and_copy_error($any) or return;
-    require Net::SSH::Any::Backend::_Cmd::DPipe;
-    Net::SSH::Any::Backend::_Cmd::DPipe->_upgrade_fh_to_dpipe($socket, undef, $any, $pid);
-}
-
-sub _sftp {
-    my ($any, $opts) = @_;
-    my $ssh = __ssh($any) or return undef;
-    my $sftp = $ssh->sftp(%$opts);
-    __check_and_copy_error($any);
-    return $sftp;
-}
-
-sub _waitpid {
-    my ($any, $pid) = @_;
-    $any->{be_ssh}->_waitpid($pid);
-    __check_and_copy_error($any);
-}
 
 1;

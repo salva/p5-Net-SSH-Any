@@ -11,7 +11,6 @@ use parent 'Net::SSH::Any::Backend::_Cmd';
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
 
-
     defined $opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
 
