@@ -25,7 +25,7 @@ sub _validate_connect_opts {
     if (defined $opts{password}) {
         croak "password authentication is not supported yet by the dropbear backend";
     }
-    elsif (defined (my $key_path = $opts{key_path})) {
+    elsif (defined (my $key = $opts{key_path})) {
         $auth_type = 'publickey';
         my $dbk = "$key.dbk";
         $opts{dbk_path} = $dbk;
@@ -33,16 +33,20 @@ sub _validate_connect_opts {
             local $?;
             my @cmd = ($opts{local_dropbearconvert_cmd},
                        'openssh', 'dropbear',
-                       $key_path, $dbk);
+                       $key, $dbk);
             $debug and $debug & 1024 and _debug "generating dbk file with command '".join("', '", @cmd)."'";
             if (system @cmd) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'dropbearconvert failed, rc: ' . ($? >> 8));
                 return
             }
-            unless (-e $ppk) {
+            unless (-e $dbk) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'dropbearconvert failed to convert key to dropbear format');
                 return
             }
+        }
+    }
+    else {
+        $auth_type = 'default';
     }
 
     $any->{be_connect_opts} = \%opts;
