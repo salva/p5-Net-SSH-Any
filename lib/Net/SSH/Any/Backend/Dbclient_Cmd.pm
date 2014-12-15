@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::Dropbear_Cmd;
+package Net::SSH::Any::Backend::Dbclient_Cmd;
 
 use strict;
 use warnings;
@@ -7,7 +7,8 @@ use Carp;
 use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug);
 use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR);
 
-use parent 'Net::SSH::Any::Backend::_Cmd';
+require Net::SSH::Any::Backend::_Cmd;
+our @ISA = qw(Net::SSH::Any::Backend::_Cmd);
 
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
@@ -15,9 +16,9 @@ sub _validate_connect_opts {
     defined $opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
 
-    $opts{local_dbclient_cmd} = _fist_defined($opts{local_dbclient_cmd},
-                                              $any->{local_cmd}{dbclient},
-                                              'dbclient');
+    $opts{local_dbclient_cmd} = _first_defined($opts{local_dbclient_cmd},
+                                               $any->{local_cmd}{dbclient},
+                                               'dbclient');
     $opts{local_dropbearconvert_cmd} = _first_defined($opts{local_dropbearconvert_cmd},
                                                       $any->{local_cmd}{dropbearconvert},
                                                       '/usr/lib/dropbear/dropbearconvert');
