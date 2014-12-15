@@ -15,7 +15,7 @@ our @ISA = qw(Net::SSH::Any::OS::_Base::DPipe);
 
 sub _in { ${*{shift()}}{_ssha_os_in} }
 
-for my $method (qw(syswrite print printf say)) {
+for my $method (qw(syswrite print printf say autoflush)) {
     my $m = $method;
     no strict 'refs';
     *{$m} = sub { shift->_in->$m(@_) }
@@ -26,6 +26,7 @@ sub _upgrade_fh_to_dpipe {
     $class->SUPER::_upgrade_fh_to_dpipe($dpipe, $any, $proc);
     bless $in, 'IO::Handle';
     ${*$dpipe}{_ssha_os_in} = $in;
+    $in->autoflush(1);
     $dpipe;
 }
 

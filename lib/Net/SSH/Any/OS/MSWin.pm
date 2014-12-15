@@ -30,6 +30,8 @@ sub pipe {
         $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create pipe: $!");
         return
     }
+    binmode $r;
+    binmode $w;
     ($r, $w);
 }
 
