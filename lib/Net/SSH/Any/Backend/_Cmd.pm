@@ -99,7 +99,7 @@ sub _run_cmd {
     $debug and $debug & 1024 and _debug("pid: $proc->{pid}");
 
     if ($pty) {
-        $any->_os_interactive_login($pty, $stderr_to_stdout, $proc) or return undef;
+        $any->_os_interactive_login($pty, $proc) or return undef;
         $any->{be_pty} = $pty;
         $pty->close_slave;
     }

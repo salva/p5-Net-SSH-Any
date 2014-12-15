@@ -31,8 +31,7 @@ sub io3_check_and_clean_data {
 }
 
 sub interactive_login {
-    my ($os, $any, $pty, $proc) = @_;
-
+    my ($any, $pty, $proc) = @_;
     my $opts = $any->{be_connect_opts};
     my $user = $opts->{user};
     my $password = $opts->{password};

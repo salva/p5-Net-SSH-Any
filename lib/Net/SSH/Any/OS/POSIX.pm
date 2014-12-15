@@ -85,9 +85,9 @@ sub open4 {
     return { pid => $pid};
 }
 
-# __check_proc($any, $proc, $wait)
+# $any->_os_check_proc($proc, $wait)
 # wait: waits until the process exits
-sub __check_proc {
+sub check_proc {
     my ($any, $proc, $wait) = @_;
     my $pid = $proc->{pid};
     $? = 0;
@@ -143,7 +143,7 @@ sub wait_proc {
     local $SIG{CHLD} = sub {};
     while (1) {
         unless ($wait) {
-            __check_proc($any, $proc) or last;
+            $any->_os_check_proc($proc) or last;
             my $remaining = $time_limit - time;
             if ($remaining <= 0) {
                 $debug and $debug & 1024 and _debug "killing SSH slave, pid: $pid";
@@ -158,7 +158,7 @@ sub wait_proc {
         # There is a (harmless) race condition here. We try to
         # minimize it by keeping the 'waitpid' and 'select' calls
         # together and limiting the sleep time to 1s max:
-        __check_proc($any, $proc, $wait) or last;
+        $any->_os_check_proc($proc, $wait) or last;
         select(undef, undef, undef, $delay);
     }
 
