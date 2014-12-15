@@ -112,7 +112,7 @@ sub run {
 
     $dpipe->syswrite("\x00"); # tell remote side to start transfer
     while (1) {
-        $g->_read_line($dpipe, $buf, 0) or last;
+        $g->_read_line($dpipe, $buf) or last;
         $debug and $debug & 4096 and _debug "cmd line: $buf";
 
         my $ok = 1;
