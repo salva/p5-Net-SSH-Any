@@ -5,7 +5,7 @@ use warnings;
 use Carp;
 
 use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug);
-use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR);
+use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_UNIMPLEMENTED_ERROR);
 
 require Net::SSH::Any::Backend::_Cmd;
 our @ISA = qw(Net::SSH::Any::Backend::_Cmd);
@@ -24,7 +24,14 @@ sub _validate_connect_opts {
                                                       '/usr/lib/dropbear/dropbearconvert');
 
     if (defined $opts{password}) {
-        croak "password authentication is not supported yet by the dropbear backend";
+        # $auth_type = 'password';
+        # $interactive_login = 1;
+        # if (my @too_more = grep defined($opts{$_}), qw(key_path passphrase)) {
+        #    croak "option(s) '".join("', '", @too_more)."' can not be used together with 'password'"
+        # }
+        $any->_set_error(SSHA_UNIMPLEMENTED_ERROR,
+                         "password authentication is not supported by the Dbclient_Cmd backend");
+        return
     }
     elsif (defined (my $key = $opts{key_path})) {
         $auth_type = 'publickey';
@@ -52,7 +59,7 @@ sub _validate_connect_opts {
 
     $any->{be_connect_opts} = \%opts;
     $any->{be_auth_type} = $auth_type;
-    $any->{be_interactive_login} = 0;
+    $any->{be_interactive_login} = $interactive_login;
     1;
 }
 
@@ -73,7 +80,7 @@ sub _make_cmd {
     push @args, $connect_opts->{host};
 
     if ($any->{be_auth_type} eq 'password') {
-        croak "password authentication is not supported yet by the dropbear backend";
+        # croak "password authentication is not supported yet by the dropbear backend";
     }
 
     return (@args, $cmd);
