@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Carp;
 use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list);
-
+use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR);
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_connect_opts {
@@ -69,5 +69,28 @@ sub _make_cmd {
 
     return (@args, '--', $cmd);
 }
+
+sub _check_rc {
+    my ($any, $proc) = @_;
+    if (defined (my $rc = $proc->{rc})) {
+        return 1 if $rc == 0;
+        my $real_rc = $rc >> 8;
+        my $signal = $rc & 255;
+        my $errstr = "child exited with code $real_rc";
+        $errstr .= ", signal $signal" if $signal;
+        # A remote command may actually exit with code 255, but it
+        # is quite uncommon.
+        # SSHA_CONNECTION_ERROR is not recoverable so we use
+        # SSHA_CHANNEL_ERROR instead.
+        $any->_or_set_error(($real_rc == 255 ? SSHA_CHANNEL_ERROR : SSHA_REMOTE_CMD_ERROR),
+                            $errstr);
+    }
+    ()
+}
+
+
+
+
+
 
 1;
