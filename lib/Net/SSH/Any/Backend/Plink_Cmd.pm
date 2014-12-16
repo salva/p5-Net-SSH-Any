@@ -107,7 +107,7 @@ Also, a new connection is established for every command run, so this
 backend is not particularly efficient when running several commands
 in the target host.
 
-=head2 Public key aithentication
+=head2 Public key authentication
 
 When public key authentication is requested, the module looks first for
 the key in a file with the extension C<ppk>.
