@@ -16,8 +16,8 @@ sub _validate_connect_opts {
 
     if (defined $opts{password}) {
         $auth_type = 'password';
-        if (my @too_more = grep defined($opts{$_}), qw(key_path passphrase)) {
-            croak "option(s) '".join("', '", @too_more)."' can not be used together with 'password'"
+        if (my @too_much = grep defined($opts{$_}), qw(key_path passphrase)) {
+            croak "option(s) '".join("', '", @too_much)."' can not be used together with 'password'"
         }
     }
     elsif (defined (my $key = $opts{key_path})) {

@@ -44,8 +44,13 @@ sub make_dpipe {
 my $win32_set_named_pipe_handle_state;
 my $win32_get_osfhandle;
 my $win32_set_handle_information;
+my $win32_open_process;
+my $win32_get_exit_code_process;
+my $win32_close_handle;
+
 my $win32_handle_flag_inherit = 0x1;
 my $win32_pipe_nowait = 0x1;
+my $win32_process_query_information = 0x0400;
 
 sub __wrap_win32_functions {
     unless (defined $win32_set_named_pipe_handle_state) {
@@ -74,7 +79,26 @@ BOOL WINAPI SetHandleInformation(HANDLE hObject,
 FSIGN
             or croak "unable to wrap kernel32.dll SetHandleInformation function";
 
+
+        $win32_get_exit_code_process = Win32::API::More->new("kernel32.dll", <<FSIGN)
+BOOL WINAPI GetExitCodeProcess(HANDLE hProcess,
+                               LPDWORD lpExitCode)
+FSIGN
+            or croak "unable to wrap kernel32.dll GetExitCodeProcess";
+
+        $win32_open_process = Win32::API::More->new("kernel32.dll", <<FSIGN)
+HANDLE WINAPI OpenProcess(DWORD dwDesiredAccess,
+                          BOOL bInheritHandle,
+                          DWORD dwProcessId)
+FSIGN
+            or croak "unable to wrap kernel32.dll OpenProcess";
+
+        $win32_close_handle = Win32::API::More->new("kernel32.dll", <<FSIGN)
+BOOL WINAPI CloseHandle(HANDLE hObject)
+FSIGN
+            or croak "unable to wrap kernel32.dll CloseHandle";
     }
+    1;
 }
 
 sub set_file_inherit_flag {
@@ -143,7 +167,13 @@ sub open4 {
     if (defined $error) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "unable to start slave process: $error");
     }
-    return { pid => $pid };
+
+    my $proc = { pid => $pid };
+    bless $proc, 'Net::SSH::Any::OS::MSWin::Process';
+    __wrap_win32_functions($any);
+    $proc->{handle} = $win32_open_process->Call($win32_process_query_information, 0, $pid);
+    $debug and $debug & 1024 and _debug "process $pid forked, process handle: $proc->{handle}";
+    return $proc;
 }
 
 sub wait_proc {
@@ -156,7 +186,10 @@ sub wait_proc {
         my $r = waitpid($pid, 0);
         if ($r == $pid) {
             $proc->{rc} = $?;
-            $debug and $debug & 1024 and _debug "process $pid exited with code $?";
+            my $native_rc = 0;
+            $win32_get_exit_code_process->Call($proc->{handle}, $native_rc);
+            $proc->{native_rc} = $native_rc;
+            $debug and $debug & 1024 and _debug "process $pid exited with code $?, native: $proc->{native_rc}";
             return 1;
         }
         elsif ($r < 0) {
@@ -295,6 +328,15 @@ sub io3 {
 
     $debug and $debug & 1024 and _debug "leaving io3()";
     return ($bout, $berr);
+}
+
+package Net::SSH::Any::OS::MSWin::Process;
+
+sub DESTROY {
+    my $proc = shift;
+    if (defined(my $handle = delete $proc->{handle})) {
+        $win32_close_handle->Call($handle);
+    }
 }
 
 1;

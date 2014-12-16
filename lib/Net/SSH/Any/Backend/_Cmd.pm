@@ -113,23 +113,13 @@ sub _run_cmd {
     return ($proc, @pipes);
 }
 
-sub _check_rc {
-    my ($any, $proc) = @_;
-    if (defined (my $rc = $proc->{rc})) {
-        return 1 if $rc == 0;
-        my $signal = $rc & 255;
-        my $real_rc = $rc >> 8;
-        my $errstr = "child exited with code $real_rc";
-        $errstr .= ", signal $signal" if $signal;
-        $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, $errstr);
-    }
-    ()
-}
+sub _remap_child_error { 1 }
 
 sub _io3 {
     my ($any, $opts, $proc, @pipes) = @_;
     my @r = $any->_os_io3($proc, $opts->{timeout}, $opts->{stdin_data}, @pipes);
-    $any->_check_rc($proc);
+    $any->_remap_child_error($proc);
+    $? = $proc->{rc};
     @r;
 }
 

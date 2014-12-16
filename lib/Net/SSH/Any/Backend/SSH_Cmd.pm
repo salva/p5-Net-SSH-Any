@@ -70,27 +70,18 @@ sub _make_cmd {
     return (@args, '--', $cmd);
 }
 
-sub _check_rc {
+sub _remap_child_error {
     my ($any, $proc) = @_;
-    if (defined (my $rc = $proc->{rc})) {
-        return 1 if $rc == 0;
-        my $real_rc = $rc >> 8;
-        my $signal = $rc & 255;
-        my $errstr = "child exited with code $real_rc";
-        $errstr .= ", signal $signal" if $signal;
+    my $rc = $proc->{rc} // 0;
+    if ($rc == (255 << 8)) {
         # A remote command may actually exit with code 255, but it
         # is quite uncommon.
         # SSHA_CONNECTION_ERROR is not recoverable so we use
         # SSHA_CHANNEL_ERROR instead.
-        $any->_or_set_error(($real_rc == 255 ? SSHA_CHANNEL_ERROR : SSHA_REMOTE_CMD_ERROR),
-                            $errstr);
+        $any->_or_set_error(SSHA_CHANNEL_ERROR, "child command exited with code 255");
+        return
     }
-    ()
+    1;
 }
-
-
-
-
-
 
 1;

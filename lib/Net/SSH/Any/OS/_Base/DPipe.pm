@@ -26,9 +26,12 @@ sub close {
     my $dpipe = shift;
     my $ok = 1;
     $dpipe->_close_fhs or undef $ok;
-
+    my $any = $dpipe->_any;
     my $proc = delete ${*$dpipe}{_ssha_os_proc};
-    $dpipe->_any->_os_wait_proc($proc) or undef $ok;
+    $any->_os_wait_proc($proc) or undef $ok;
+    $any->_remap_child_error($proc);
+    $? = $proc->{rc};
+    $any->_check_child_error or undef $ok;
     return $ok;
 }
 
