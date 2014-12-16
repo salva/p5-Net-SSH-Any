@@ -86,7 +86,9 @@ sub open4 {
 }
 
 # $any->_os_check_proc($proc, $wait)
-# wait: waits until the process exits
+# Checks wether some process is still running.
+# Args:
+#   $wait: waits until the process exits
 sub check_proc {
     my ($any, $proc, $wait) = @_;
     my $pid = $proc->{pid};
@@ -96,14 +98,9 @@ sub check_proc {
     # process is still running, that may be false!
     my $r = CORE::waitpid($pid, ($wait ? 0 : POSIX::WNOHANG()));
     if ($r == $pid) {
-        if ($?) {
-            my $signal = ($? & 255);
-            my $errstr = "child exited with code " . ($? >> 8);
-            $errstr .= ", signal $signal" if $signal;
-            $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, $errstr);
-            return;
-        }
-        return 0;
+        $debug and $debug & 1024 and _debug "process $pid exited with code $?";
+        $proc->{rc} = $?;
+        return;
     }
     elsif ($r <= 0) {
         if ($r < 0) {

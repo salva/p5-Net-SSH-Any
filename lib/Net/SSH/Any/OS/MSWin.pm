@@ -148,11 +148,28 @@ sub open4 {
 
 sub wait_proc {
     my ($any, $proc, $timeout, $force_kill) = @_;
+    # FIXME: implement timeout handling
     my $pid = $proc->{pid};
     $? = 0;
-
-    $debug and $debug & 1024 and _debug "waiting for slave process $pid to exit";
-    waitpid($pid, 0);
+    while (1) {
+        $debug and $debug & 1024 and _debug "waiting for slave process $pid to exit";
+        my $r = waitpid($pid, 0);
+        if ($r == $pid) {
+            $proc->{rc} = $?;
+            $debug and $debug & 1024 and _debug "process $pid exited with code $?";
+            return 1;
+        }
+        elsif ($r < 0) {
+            if ($! != Errno::EINTR()) {
+                if ($! == Errno::ECHILD()) {
+                    $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, "child process $pid does not exist", $!);
+                    return;
+                }
+                warn "Internal error: unexpected error (" . ($!+0) .
+                    ": $!) from waitpid($pid) = $r. Report it, please!";
+            }
+        }
+    }
 }
 
 my @retriable = (Errno::EINTR, Errno::EAGAIN, Errno::ENOSPC, Errno::EINVAL);
