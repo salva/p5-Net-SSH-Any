@@ -10,6 +10,7 @@ use parent 'Net::SSH::Any::Backend::_Cmd';
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
 
+    $opts{local_ssh_cmd} //= $any->_find_cmd(ssh => undef, { MSWin => 'Cygwin' });
 
     defined $opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
@@ -32,7 +33,6 @@ sub _validate_connect_opts {
         $auth_type = 'default';
     }
 
-    $opts{local_ssh_cmd} = _first_defined $opts{local_ssh_cmd}, $any->{local_cmd}{ssh}, 'ssh';
     $any->{be_connect_opts} = \%opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = $interactive_login;
