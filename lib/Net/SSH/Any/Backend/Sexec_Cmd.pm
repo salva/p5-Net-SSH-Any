@@ -11,7 +11,7 @@ use parent 'Net::SSH::Any::Backend::_Cmd';
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
 
-    grep defined $opts{$_}, qw(profile host)
+    grep defined $opts{$_}, qw(profile_path host)
         or croak "host argument missing";
 
     my @auth_type;
@@ -58,12 +58,12 @@ sub _make_cmd {
     my ($any, $opts, $cmd) = @_;
     my $connect_opts = $any->{be_connect_opts};
 
-    my ($sexec, $host, $profile, $user, $password, $port) =
-        @{$connect_opts}{qw(local_sexec_cmd host profile user password port)};
+    my ($sexec, $host, $profile_path, $user, $password, $port) =
+        @{$connect_opts}{qw(local_sexec_cmd host profile_path user password port)};
 
     my @args = ($sexec, "-unat=y");
-    if (defined $profile) {
-        push @args, "-profile=$profile";
+    if (defined $profile_path) {
+        push @args, "-profile=$profile_path";
         push @args, "-host=$host" if defined $host;
     }
     else {
@@ -127,11 +127,11 @@ Net::SSH::Any::Backend::Sexec_Cmd - Backend for Bitwise's Tunnelier sexec tool
 
   use Net::SSH::Any;
 
-  my $profile = "C:\\Documents and Settings\\JSmith\\My Documents\\$host.bscp";
+  my $profile_path = "C:\\Documents and Settings\\JSmith\\My Documents\\$host.bscp";
 
   my $ssh = Net::SSH::Any->new($host, backends => 'Sexec_Cmd',
                                backend_opts => {
-                                   Sexec_Cmd => { profile => $profile }
+                                   Sexec_Cmd => { profile_path => $profile_path }
                                });
   my $output = $ssh->capture("echo hello world");
 
@@ -151,6 +151,19 @@ One very nice feature of this backend is that you can use the host
 profiles created with the Tunnelier application to define conection
 parameters, specially authentication items as passwords or kerberos
 configurations.
+
+=head2 BACKEND OPTIONS
+
+The backend accepts the following custom options:
+
+=over 4
+
+=item profile_path => $path
+
+Uses the profile defined in the given file to set the connection
+options.
+
+=back
 
 =head1 COPYRIGHT AND LICENSE
 
