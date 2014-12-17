@@ -16,13 +16,9 @@ sub _validate_connect_opts {
     defined $opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
 
-    $opts{local_dbclient_cmd} = _first_defined($opts{local_dbclient_cmd},
-                                               $any->{local_cmd}{dbclient},
-                                               'dbclient');
-    $opts{local_dropbearconvert_cmd} = _first_defined($opts{local_dropbearconvert_cmd},
-                                                      $any->{local_cmd}{dropbearconvert},
-                                                      '/usr/lib/dropbear/dropbearconvert');
-
+    $opts{local_dbclient_cmd} //= $any->_find_cmd('dbclient');
+    $opts{local_dropbearconvert_cmd} //= $any->_find_cmd(dropbearconvert => defined $opts{host}, undef,
+                                                         '/usr/lib/dropbear/dropbearconvert');
     if (defined $opts{password}) {
         # $auth_type = 'password';
         # $interactive_login = 1;

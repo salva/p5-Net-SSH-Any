@@ -11,6 +11,9 @@ use parent 'Net::SSH::Any::Backend::_Cmd';
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
 
+    $opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, { MSWin => 'PuTTY' });
+    $opts{local_puttygen_cmd} //= $any->_find_cmd(puttygen => $opts{local_pink_cmd}, { MSWin => 'PuTTY' });
+
     defined $opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
 
@@ -26,8 +29,7 @@ sub _validate_connect_opts {
         $opts{ppk_path} = $ppk;
         unless (-e $ppk) {
             local $?;
-            my $cmd = _first_defined $opts{local_puttygen_cmd},
-                $any->{local_cmd}{puttygen}, 'puttygen';
+            my $cmd = $opts{local_puttygen_cmd};
             my @cmd = ($cmd, -O => 'private', -o => $ppk, $key);
             $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
             if (system @cmd) {
@@ -44,7 +46,6 @@ sub _validate_connect_opts {
         $auth_type = 'default';
     }
 
-    $opts{local_plink_cmd} = _first_defined $opts{local_plink_cmd}, $any->{local_cmd}{plink}, 'plink';
     $any->{be_connect_opts} = \%opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = 0;
