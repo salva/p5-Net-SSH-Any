@@ -15,7 +15,6 @@ sub _validate_connect_opts {
         or croak "host argument missing";
 
     my @auth_type;
-    my ($auth_type, $interactive_login);
     if (defined $opts{password}) {
         push @auth_type, 'password';
         #if (my @too_much = grep defined($opts{$_}), qw(key_path passphrase)) {
