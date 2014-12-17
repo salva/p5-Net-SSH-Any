@@ -92,6 +92,8 @@ sub run {
     my ($g, $opts) = @_;
     my $any = $g->{any};
 
+    $debug and $debug & 4096 and _debug "starting SCP Getter run...";
+
     my @cmd   = $any->_quote_args({quote_args => 1},
                                   # 'strace', '-o', '/tmp/out',
                                   $g->{scp_cmd},
@@ -103,8 +105,13 @@ sub run {
                                    glob_quoting => $g->{glob}},
                                   @{$g->{srcs}});
 
+
+    # $debug and $debug & 4096 and _debug "wait...";
+    # sleep 5;
+    # $debug and $debug & 4096 and _debug "welcome to the party!";
+    # $DB::trace=1;
     my $dpipe = $any->dpipe({ %$opts, quote_args => 0 },
-                          @cmd, @files);
+                            @cmd, @files);
     $any->error and return;
 
     local $SIG{PIPE} = 'IGNORE';
