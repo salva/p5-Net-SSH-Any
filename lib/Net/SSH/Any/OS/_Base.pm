@@ -130,4 +130,11 @@ sub interactive_login {
     return 1;
 }
 
+sub validate_cmd {
+    my ($any, $cmd) = @_;
+    return ((defined $cmd and -x $cmd) ? $cmd : ())
+}
+
+sub find_cmd_by_app {}
+
 1;

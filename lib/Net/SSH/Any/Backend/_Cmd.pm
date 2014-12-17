@@ -30,8 +30,29 @@ sub _export_proc {
     $proc->{pid}
 }
 
-my @stream_names = qw(stdin stdout stderr);
+sub _find_cmd_by_friend {
+    my ($any, $name, $friend) = @_;
+    if (defined $friend) {
+        require File::Spec;
+        my ($drive, $dir) = File::Spec->splitpath($friend);
+        my $cmd = File::Spec->join($drive, $dir, $name);
+        return $any->_os_validate_cmd($cmd);
+    }
+    ()
+}
 
+sub _find_cmd {
+    my ($any, $name, $friend, $app, $default) = @_;
+    my $safe_name = $name;
+    $safe_name =~ s/\W/_/g;
+    return ( $any->{local_cmd}{$safe_name}             //
+             $any->_find_cmd_by_friend($name, $friend) //
+             $any->_os_find_cmd_by_app($name, $app)    //
+             $any->_os_validate_cmd($default)          //
+             $name );
+}
+
+my @stream_names = qw(stdin stdout stderr);
 sub _run_cmd {
     my ($any, $opts, $cmd) = @_;
     my (@fhs, @pipes);

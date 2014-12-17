@@ -330,11 +330,46 @@ sub io3 {
     return ($bout, $berr);
 }
 
+sub validate_cmd {
+    my ($any, $cmd) = @_;
+    return unless defined $cmd;
+    $any->SUPER::validate_cmd($cmd) //
+        $any->SUPER::validate_cmd("$cmd.EXE");
+}
+
+sub find_cmd_by_app {
+    my ($any, $name, $app) = @_;
+    $app = $app->{MSWin} if ref $app;
+    if (defined $app) {
+        if (lc($app) eq 'cygwin') {
+            if (defined (my $drive = $ENV{SystemDrive})) {
+                for my $bin (qw(bin sbin)) {
+                    for my $path (qw(Cygwin MinGW MinGW\\MSYS\\1.0)) {
+                        my $cmd = $any->_os_validate_cmd(join('\\', $drive, $path, $bin, $name));
+                        return $cmd if defined $cmd;
+                    }
+                }
+            }
+        }
+        else {
+            for my $env (qw{ProgramFiles ProgramFiles(x86)}) {
+                if (defined (my $pf = $ENV{$env})) {
+                    my $cmd = $any->_os_validate_cmd(join('\\', $pf, $app, $name));
+                    return $cmd if defined $cmd;
+                }
+            }
+        }
+    }
+    ()
+}
+
+our $debug; # make debug visible below
 package Net::SSH::Any::OS::MSWin::Process;
 
 sub DESTROY {
     my $proc = shift;
     if (defined(my $handle = delete $proc->{handle})) {
+        $debug and $debug & 1024 and Net::SSH::Any::Util::_debug("closing process handle $handle");
         $win32_close_handle->Call($handle);
     }
 }

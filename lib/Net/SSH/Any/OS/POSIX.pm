@@ -272,4 +272,17 @@ sub io3 {
     return ($bout, $berr);
 }
 
+sub find_cmd_by_app {
+    my ($any, $name, $app) = @_;
+    $app = $app->{POSIX} if ref $app;
+    if (defined $app) {
+        my $app_dir = "/opt/$app";
+        if (-d $app_dir) {
+            $any->_os_validate_cmd("$app_dir/bin/$name") //
+                $any->_os_validate_cmd("$app_dir/sbin/$name");
+        }
+    }
+    ()
+}
+
 1;
