@@ -47,6 +47,7 @@ my $win32_set_handle_information;
 my $win32_open_process;
 my $win32_get_exit_code_process;
 my $win32_close_handle;
+my $win32_get_version;
 
 my $win32_handle_flag_inherit = 0x1;
 my $win32_pipe_nowait = 0x1;
@@ -97,9 +98,16 @@ FSIGN
 BOOL WINAPI CloseHandle(HANDLE hObject)
 FSIGN
             or croak "unable to wrap kernel32.dll CloseHandle";
+
+        $win32_get_version = Win32::API::More->new("kernel32.dll", <<FSIGN)
+DWORD WINAPI GetVersion()
+FSIGN
+            or croak "unable to wrap kernel32.dll GetVersion";
     }
     1;
 }
+
+__wrap_win32_functions();
 
 sub set_file_inherit_flag {
     my ($any, $file, $value) = @_;
@@ -361,6 +369,16 @@ sub find_cmd_by_app {
         }
     }
     ()
+}
+
+sub version {
+    my $any = shift;
+    my $v = $win32_get_version->Call();
+    $v & 0x80000000 and croak "This OS is a joke!";
+    my $mayor = $v & 0xff;
+    my $minor = ($v >> 8) & 0xff;
+    my $build = ($v >> 16);
+    wantarray ? ('MSWin', $mayor, $minor, $build) : "MSWin-$mayor.$minor.$build";
 }
 
 our $debug; # make debug visible below

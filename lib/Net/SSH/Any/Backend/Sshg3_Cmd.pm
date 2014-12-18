@@ -32,8 +32,21 @@ sub _validate_connect_opts {
         croak "pubkey authentication not support yet by Sshg3_Cmd backend";
     }
 
-    # running in non-exclusive mode is unreliable :-(
-    $opts{exclusive} //= 1;
+    # Work around bug on Tectia/Windows affecting only old Windows versions, apparently.
+    my ($os, $mayor, $minor) = $any->_os_version;
+    if ($os eq 'MSWin' and not $opts{exclusive}) {
+        $debug and $debug & 1024 and _debug "OS version is $os $mayor.$minor";
+        if ($mayor < 6 or ($mayor == 6 and $minor < 1)) { # < Win7
+            $opts{exclusive} //= 1;
+            $debug and $debug & 1024 and _debug($opts{exclusive}
+                                                ? "Exclusive mode enabled"
+                                                : "Exclusive mode disabled by user explicitly");
+        }
+        else {
+            $debug and $debug & 1024 and _debug "Leaving exclusive mode disabled";
+        }
+    }
+
     $opts{run_broker} //= 0;
 
     $any->{be_connect_opts} = \%opts;

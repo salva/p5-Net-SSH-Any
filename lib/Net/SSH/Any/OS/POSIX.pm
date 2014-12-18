@@ -285,4 +285,6 @@ sub find_cmd_by_app {
     ()
 }
 
+sub version { 'POSIX' }
+
 1;
