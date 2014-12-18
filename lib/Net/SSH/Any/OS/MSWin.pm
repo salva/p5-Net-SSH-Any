@@ -48,6 +48,8 @@ my $win32_open_process;
 my $win32_get_exit_code_process;
 my $win32_close_handle;
 my $win32_get_version;
+my $win32_get_final_path_name_by_handle;
+my $win32_get_file_information_by_handle_ex;
 
 my $win32_handle_flag_inherit = 0x1;
 my $win32_pipe_nowait = 0x1;
@@ -103,6 +105,23 @@ FSIGN
 DWORD WINAPI GetVersion()
 FSIGN
             or croak "unable to wrap kernel32.dll GetVersion";
+
+#         $win32_get_final_path_name_by_handle = Win32::API::More->new("kernel32.dll", <<FSIGN)
+# DWORD WINAPI GetFinalPathNameByHandle(HANDLE hFile,
+#                                       LPTSTR lpszFilePath,
+#                                       DWORD cchFilePath,
+#                                       DWORD dwFlags)
+# FSIGN
+#             or croak "unable to wrap kernel32.dll GetFinalPathNameByHandle";
+
+
+#         $win32_get_file_information_by_handle_ex = Win32::API::More->new("kernel32.dll", <<FSIGN)
+# BOOL WINAPI GetFileInformationByHandleEx(HANDLE hFile,
+#                                          DWORD FileInformationClass,
+#                                          LPVOID lpFileInformation,
+#                                          DWORD dwBufferSize)
+# FSIGN
+#             or croak "unable to wrap kernel32.dll GetFileInformationByHandleEx";
     }
     1;
 }
@@ -121,6 +140,18 @@ sub set_file_inherit_flag {
         _debug "Win32::SetHandleInformation($wh, $win32_handle_flag_inherit, $flag) => $success",
             ($success ? () : (" \$^E: $^E"));
     $success;
+}
+
+sub get_file_name_from_handle {
+    my ($any, $file) = @_;
+    my $fn = fileno $file;
+    my $wh = $win32_get_osfhandle->Call($fn);
+    Net::SSH::Any::Util::_debugf("fileno: %d, handle: 0x%x", $fn, $wh);
+
+    my $buffer = "1" x 256;
+    my $ok = $win32_get_file_information_by_handle_ex->Call($wh, 0x2, $buffer, length($buffer) - 1);
+    _debug_hexdump "name (ok: $ok)" => $buffer;
+    ""
 }
 
 sub pty { croak "PTYs are not supported on Windows" }

@@ -5,6 +5,7 @@ use warnings;
 
 use Carp;
 use POSIX ();
+use Fcntl ();
 use Socket;
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined);
 use Net::SSH::Any::Constants qw(:error);
@@ -283,6 +284,21 @@ sub find_cmd_by_app {
         }
     }
     ()
+}
+
+sub set_file_inherit_flag {
+    my ($any, $file, $value) = @_;
+
+    my $fn = fileno $file;
+    my $flags = Fcntl::fcntl($fn, F_GETFD);
+    if ($value) {
+        $flags &= ~Fcntl::FD_CLOEXEC();
+    }
+    else {
+        $flags |= Fcntl::FD_CLOEXEC();
+    }
+    Fcntl::fcntl($fn, F_SETFD, $flags);
+    1;
 }
 
 sub version { 'POSIX' }
