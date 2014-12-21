@@ -47,9 +47,23 @@ sub _find_cmd {
     $safe_name =~ s/\W/_/g;
     return ( $any->{local_cmd}{$safe_name}             //
              $any->_find_cmd_by_friend($name, $friend) //
+             $any->_find_helper_cmd($name)             //
              $any->_os_find_cmd_by_app($name, $app)    //
              $any->_os_validate_cmd($default)          //
              $name );
+}
+
+sub _find_helper_cmd {
+    my ($any, $name) = @_;
+    $debug and $debug & 1024 and _debug "looking for helper $name";
+    my $module = my $last = $any->{backend_module} // return;
+    $last =~ s/.*::// or return;
+    $module =~ s{::}{/}g;
+    $debug and $debug & 1024 and _debug "module as \$INC key is ", $module, ".pm";
+    my $file_pm = $INC{"$module.pm"} // return;
+    my ($drive, $dir) = File::Spec->splitpath(File::Spec->rel2abs($file_pm));
+    my $path = File::Spec->join($drive, $dir, $last, 'Helpers', $name);
+    $any->_os_validate_cmd($path);
 }
 
 my @stream_names = qw(stdin stdout stderr);
@@ -78,7 +92,7 @@ sub _run_cmd {
     for my $stream (@stream_names[@fhs .. 2]) {
         my ($fh, $pipe);
         if (delete $opts->{"${stream}_pipe"}) {
-            ($pipe, $fh) = $any->_os_pipe($any) or return;
+            ($pipe, $fh) = $any->_os_pipe or return;
             ($pipe, $fh) = ($fh, $pipe) if $stream eq 'stdin';
         }
         else {

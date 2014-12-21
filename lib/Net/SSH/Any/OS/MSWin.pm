@@ -50,6 +50,7 @@ my $win32_close_handle;
 my $win32_get_version;
 my $win32_get_final_path_name_by_handle;
 my $win32_get_file_information_by_handle_ex;
+my $win32_get_current_process_id;
 
 my $win32_handle_flag_inherit = 0x1;
 my $win32_pipe_nowait = 0x1;
@@ -106,6 +107,12 @@ DWORD WINAPI GetVersion()
 FSIGN
             or croak "unable to wrap kernel32.dll GetVersion";
 
+
+        $win32_get_current_process_id = Win32::API::More->new("kernel32.dll", <<FSIGN)
+DWORD WINAPI GetCurrentProcessId();
+FSIGN
+            or croak "unable to wrap GetCurrentProcessId";
+
 #         $win32_get_final_path_name_by_handle = Win32::API::More->new("kernel32.dll", <<FSIGN)
 # DWORD WINAPI GetFinalPathNameByHandle(HANDLE hFile,
 #                                       LPTSTR lpszFilePath,
@@ -140,6 +147,18 @@ sub set_file_inherit_flag {
         _debug "Win32::SetHandleInformation($wh, $win32_handle_flag_inherit, $flag) => $success",
             ($success ? () : (" \$^E: $^E"));
     $success;
+}
+
+sub export_handle {
+    my ($any, $file) = @_;
+    my $fn = fileno $file;
+    return $win32_get_osfhandle->Call($fn) if $fn >= 0;
+    ()
+}
+
+sub export_current_process {
+    my $any = shift;
+    $win32_get_current_process_id->Call()
 }
 
 sub get_file_name_from_handle {

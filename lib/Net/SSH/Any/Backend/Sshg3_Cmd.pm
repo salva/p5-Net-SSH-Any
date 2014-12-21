@@ -3,7 +3,7 @@ package Net::SSH::Any::Backend::Sshg3_Cmd;
 use strict;
 use warnings;
 use Carp;
-use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug);
+use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug _debugf);
 use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR);
 
 use parent 'Net::SSH::Any::Backend::_Cmd';
@@ -11,6 +11,7 @@ use parent 'Net::SSH::Any::Backend::_Cmd';
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
 
+    defined $opts{host} or croak "host argument missing";
 
     $opts{local_sshg3_cmd} //=
         $any->_find_cmd(sshg3 => undef,
@@ -21,10 +22,11 @@ sub _validate_connect_opts {
                         { POSIX => 'tectia',
                           MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Broker' });
 
-    defined $opts{host} or croak "host argument missing";
-
     my @auth_type;
     if (defined $opts{password}) {
+        $opts{local_sshg3_pwd_helper_cmd} //=
+            $any->_find_cmd('sshg3-pwd-helper');
+
         push @auth_type, 'password';
     }
     elsif (defined (my $key = $opts{key_path})) {
@@ -53,8 +55,14 @@ sub _validate_connect_opts {
     $any->{be_auth_type} = join(',', @auth_type);
     $any->{be_interactive_login} = 0;
 
-    system qq("$opts{local_ssh_broker_g3_cmd}") if $opts{run_broker};
-
+    if ($opts{run_broker}) {
+        my $broker = $opts{local_ssh_broker_g3_cmd} //=
+            $any->_find_cmd('ssh-broker-g3', $opts{local_sshg3_cmd},
+                            { POSIX => 'tectia',
+                              MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Broker' });
+        # FIXME: quote broker properly.
+        system qq("$broker");
+    }
     1;
 }
 
@@ -70,15 +78,23 @@ sub _make_cmd {
     push @args, "-l$connect_opts->{user}" if defined $connect_opts->{user};
     push @args, "-p$connect_opts->{port}" if defined $connect_opts->{port};
     if (defined $connect_opts->{password}) {
-        # push @args, "-P$connect_opts->{password}";
-        # push @args, "-Pfile://$opts->{password_path}";
-        
-        #push @args, qq|-Pextprog://$^X -MNet::SSH::Any::Backend::Ssshg3_Cmd::Helper=|;
-        push @args, qq{-Pextprog://$^X -eprint(q{$connect_opts->{password}})};
+        my ($r, $w) = $any->_os_pipe;
+        $any->_os_set_file_inherit_flag($r, 0);
+        $any->_os_set_file_inherit_flag($w, 0);
+        my $os_handle = $any->_os_export_handle($r);
+        my $os_pid = $any->_os_export_current_process;
+        push @args, "-Pextprog://$connect_opts->{local_sshg3_pwd_helper_cmd} $os_pid:$os_handle";
+        $debug and $debug & 1024 and
+            _debugf("Writting password to pipe. OS handle for reading side is 0x%x in process %d (pid: %d)",
+                    $os_handle, $os_pid, $$);
+        print {$w} "$connect_opts->{password}\n";
+        close $w;
+        #system "$connect_opts->{local_sshg3_pwd_helper_cmd} $os_pid:$os_handle";
+        #_debug "\$?: $?";
+        $opts->{saved_read_pipe} = $r; # this is an easy way to keep
+                                       # the read side open until the
+                                       # help runs... and a hack!
     }
-    #if (defined $connect_opts->{password}) {
-    #    push @args, "-Pextprog://echo $connect_opts->{password}"
-    #}
 
     push @args, _array_or_scalar_to_list($connect_opts->{sshg3_opts})
         if defined $connect_opts->{sshg3_opts};

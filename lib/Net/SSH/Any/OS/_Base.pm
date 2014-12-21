@@ -17,6 +17,13 @@ sub pty {
     IO::Pty->new;
 }
 
+sub export_handler {
+    my ($any, $file) = @_;
+    my $fn = fileno $file;
+    return $fn if $fn >= 0;
+    ()
+}
+
 sub set_file_inherit_flag { 1 }
 
 sub has_working_socketpair { }
@@ -132,7 +139,12 @@ sub interactive_login {
 
 sub validate_cmd {
     my ($any, $cmd) = @_;
-    return ((defined $cmd and -x $cmd) ? $cmd : ())
+    if (defined $cmd and -x $cmd) {
+        $debug and $debug & 1024 and _debug "file $cmd found to be executable";
+        return $cmd;
+    }
+    $debug and $debug & 1024 and _debug "file ", $cmd, " is not executable or not found";
+    ()
 }
 
 sub find_cmd_by_app {}
