@@ -9,19 +9,12 @@ use Errno;
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
 use Time::HiRes qw(sleep);
+use Config ();
+use Win32::API ();
+use File::Spec ();
 
 require Net::SSH::Any::OS::_Base;
 our @ISA = qw(Net::SSH::Any::OS::_Base);
-
-# sub socketpair {
-#     my ($os, $any) = @_;
-#     my ($a, $b);
-#     unless (CORE::socketpair($a, $b, AF_UNIX, SOCK_STREAM, PF_UNSPEC)) {
-#         $any->_set_error(SSHA_LOCAL_IO_ERROR, "socketpair failed: $!");
-#         return;
-#     }
-#     ($a, $b);
-# }
 
 sub pipe {
     my $any = shift;
@@ -58,8 +51,6 @@ my $win32_process_query_information = 0x0400;
 
 sub __wrap_win32_functions {
     unless (defined $win32_set_named_pipe_handle_state) {
-        require Config;
-        require Win32::API;
         $Config::Config{libperl} =~ /libperl(\d+)/
             or croak "unable to infer Perl DLL version";
         my $perl_dll = "perl$1.dll";
@@ -419,6 +410,20 @@ sub find_cmd_by_app {
         }
     }
     ()
+}
+
+sub create_secret_file {
+    my ($any, $name, $data) = @_;
+    $any->_load_module('Win32::SecretFile') or return;
+    my $path = Win32::SecretFile::create_secret_file(File::Spec->join('libnet-ssh-any-perl', $name),
+                                                     $data,
+                                                     local_appdata => 1,
+                                                     short_path => 1,
+                                                     unique => 1);
+    defined $path or
+        $any->_or_set_error(SSHA_LOCAL_IO_ERROR,
+                            "Unable to create secret file: $^E [". ($^E+0) . "]");
+    $path;
 }
 
 sub version {

@@ -301,6 +301,47 @@ sub set_file_inherit_flag {
     1;
 }
 
+my $unique_ix = 0;
+
+sub create_secret_file {
+    my ($any, $name, $data) = @_;
+    my $home = (getpwent $<)[2];
+    unless (defined $home) {
+        $any->_os_set_error(SSHA_LOCAL_IO_ERROR, "Unable to determine user home directory: $!");
+        return;
+    }
+    my $base = File::Spec->rel2abs('.libssh-net-any-perl', $home);
+    mkdir $base, 0700 unless -d $base;
+    unless (do { local $!; -d $base }) {
+        $any->_or_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create private directory $base: $!");
+        return;
+    }
+
+    $name = File::Spec->rel2abs($name, $base);
+
+    my $ext = '';
+    if ($name =~ m|(.*)(\.[^/]*)$|) {
+        $name = $1;
+        $ext = $2;
+    }
+
+    while (1) {
+        my $final = join("-", $name, $$, $unique_ix++, int rand 1000).$ext;
+        sysopen my $fh, $final, O_RDWR|O_CREAT|O_EXCL, S_IRUSR|S_IWUSR;
+        if (defined $fh) {
+            print {$fh} $data;
+            return $final if close $fh;
+            $any->_or_set_error(SSHA_LOCAL_IO_ERROR, "Unable to write secret file $final: $!");
+            unlink $final;
+            return;
+        }
+        unless ($! == Errno::EEXIST()) {
+            $any->_or_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create secret file $file: $!");
+            return;
+        }
+    }
+}
+
 sub version { 'POSIX' }
 
 1;
