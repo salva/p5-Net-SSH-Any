@@ -14,7 +14,7 @@ use Encode ();
 our @CARP_NOT = qw(Net::SSH::Any::Util);
 
 my $REQUIRED_BACKEND_VERSION = '1';
-our @BACKENDS = qw(Net::OpenSSH Net::SSH2 Net::SSH::Perl SSH_Cmd);
+our @BACKENDS = qw(Net::OpenSSH Net::SSH2 Net::SSH::Perl SSH_Cmd Plink_Cmd);
 
 # regexp from Regexp::IPv6
 my $IPv6_re = qr((?-xism::(?::[0-9a-fA-F]{1,4}){0,5}(?:(?::[0-9a-fA-F]{1,4}){1,2}|:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})))|[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}|:)|(?::(?:[0-9a-fA-F]{1,4})?|(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))))|:(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})?|))|(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|:[0-9a-fA-F]{1,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){0,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,2}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,3}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))));
@@ -103,8 +103,7 @@ sub new {
     bless $any, $class;
 
     my $backends = delete $opts{backends};
-    $backends = [@BACKENDS] unless defined $backends;
-    $backends = [$backends] unless ref $backends;
+    $backends = [_array_or_scalar_to_list($backends \\ \@BACKENDS)]
 
     $any->_load_backend(@$backends)
         and $any->_connect;
@@ -524,7 +523,7 @@ __END__
 
 =head1 NAME
 
-Net::SSH::Any - Use any SSH module
+Net::SSH::Any - SSH client module
 
 =head1 SYNOPSIS
 
@@ -548,25 +547,89 @@ Net::SSH::Any - Use any SSH module
   ***                                                        ***
   **************************************************************
 
-Currently, there are several SSH client modules available from CPAN,
-but no one can be used on all the situations.
+C<Net::SSH::Any> is a SSH client module providing a high level and
+powerful API to the programmer.
 
-L<Net::SSH::Any> is an adapter module offering an unified API with a
-plugin architecture that allows to use the other modules as
-backends.
+The main features of Net::SSH::Any is being able to run remote
+commands capturing its output and to perform file transfers using SCP
+or SFTP.
 
-It will work in the same way across most operating systems and
-installations as far as any of the supported backend modules is also
-installed.
+Net::SSH::Any does not implement the SSH protocol itself. Instead, it
+has a plugable architecture that allows to delegate that task to other
+SSH client modules or external binaries.
 
-The currently supported backend modules are L<Net::OpenSSH> and
-L<Net::SSH2> and I plan to write a backend module on top of the ssh
-binary and maybe another one for L<Net::SSH::Perl>.
+=head1 BACKENDS
 
-The API is mostly a subset of the one from L<Net::OpenSSH>, though
-there are some minor deviations in some methods.
+Currently the available backends (modules that interface with other
+Perl SSH client modules or external binaries) are as follows:
+
+=over 4
+
+=item Net_OpenSSH
+
+Uses L<Net::OpenSSH> under the hood.
+
+If you are going to run your program in a Linux/Unix box with a recent
+version of the OpenSSH client installed, this is probably your
+best option: fast and reliable.
+
+On the other hand, Net::OpenSSH does not support Windows.
+
+=item Net_SSH2
+
+Uses L<Net::SSH2> under the hood.
+
+That was intended to be main backend for Net::SSH::Any when used on
+Windows. Unfortunatelly, the current stable version of libssh2 is
+still somewhat buggy, causing this backend to be unreliable.
+
+=item Ssh_Cmd
+
+This backend uses any binary <c>ssh</c> client available on the box
+that accepts the same command line arguments as the OpenSSH one. In
+practice that means ssh clients forked from old versions of OpenSSH as
+for instance, the one bundled in Solaris.
+
+Password authentication is only supported on Linux/UNIX and it
+requires the additional module IO::Pty. It may work under Cygwin too.
+
+This backend establishes a new SSH connection every time a new remote
+command is run and so it is reliable but slow.
+
+=item Plink_Cmd
+
+This backend uses the C<plink> utility, part of the
+L<PuTTY|http://www.chiark.greenend.org.uk/~sgtatham/putty/> package.
+
+It supports password authentication, but in a not completely secure
+manner.
+
+This backend establishes a new SSH connection every time a new remote
+command is run and so it is reliable but slow.
+
+=item Sexec_Cmd
+
+This backend uses the C<sexec> utility that is bundled with the
+non-free Bitwise SSH client.
+
+This backend establishes a new SSH connection every time a new remote
+command is run and so it is also reliable but slow.
+
+=item Sshg3_Cmd
+
+This backend uses the C<sshg3> utility that is bundled with the
+non-free Tectia SSH client.
+
+This module supports password authentication in a secure manner and is
+also quite fast as the Tectia client reuses connections.
+
+=back
 
 =head1 API
+
+The API of Net::SSH::Any is heavily based on that of Net::OpenSSH.
+Basic usage of both modules is mostly identical and it should be very
+easy to port scripts between the two.
 
 =head2 Optional parameters
 
@@ -574,11 +637,15 @@ Almost all methods in this package accept as first argument a
 reference to a hash containing optional parameters. In example:
 
   $ssh->scp_get({recursive => 1}, $remote_src, $local_target);
+  my @out = $ssh->capture({stderr_to_stdout => 1}, "ls ~/");
 
 The hash reference can be omitted when optional parameters are not
 required. In example:
 
-  @out = $ssh->capture("ls ~/");
+  $ssh->scp_get($remote_src, $local_target);
+  my @out = $ssh->capture("ls ~/");
+
+
 
 =head2 Error handling
 
@@ -598,24 +665,26 @@ errors. For instance:
 By default when calling remote commands, this module tries to mimic
 perl C<system> builtin in regard to argument processing.
 
-When calling some method as, for instance, <c>capture</c>:
+When calling some method as <c>capture</c>:
 
    $out = $ssh->capture($cmd)
 
-The command line in C<$cmd> is first processed by the remote shell
-honoring shell metacharacters, redirections, etc.
+the given command (C<$cmd>) is first processed by the remote shell who
+performs interpolation of environment variables, globs expansion,
+redirections, etc.
 
 If more than one argument is passed, as in the following example:
 
    $out = $ssh->capture($cmd, $arg1, $arg2)
 
 The module will escape any shell metacharacter so that effectively the
-remote call is equivalent to executing the remote command without going
-through a shell (the SSH protocol does not allow to do that directly).
+remote call is equivalent to executing the remote command without
+going through a shell (the SSH protocol does not provides a way to
+just avoid the shell by not calling it).
 
 All the methods that invoke a remote command (system, capture, etc.)
-accept the option C<quote_args> that allows one to force/disable shell
-quoting.
+accept the option C<quote_args> that allows one to force or disable
+shell quoting.
 
 For instance, spaces in the command path will be correctly handled in
 the following case:
@@ -627,9 +696,11 @@ useful, for instance:
 
   $ssh->system({quote_args => 0}, 'ls', '-l', "/tmp/files_*.dat");
 
-When the C<glob> option is set in SCP file transfer methods, it is
-used an alternative quoting mechanism which leaves file wildcards
-unquoted.
+In that case, the argument are joined with spaces interleaved.
+
+When the C<glob> option is set in SCP file transfer methods, an
+alternative quoting mechanism which leaves file wildcards
+unquoted is used instead.
 
 Another way to selectively use quote globing or fully disable quoting
 for some specific arguments is to pass them as scalar references or
@@ -1096,7 +1167,8 @@ system.
 
 =head2 Backends
 
-Currently the available backends are as follows:
+Currently the available backends (modules that interface with other
+Perl SSH client modules or external binaries) are as follows:
 
 =over 4
 
@@ -1143,7 +1215,7 @@ See also L<Net::SSH::Any::Backend::Plink_Cmd>.
 
 Frequent questions about this module:
 
-over 4
+=over 4
 
 =item Disabling host key checking
 
@@ -1237,7 +1309,7 @@ upon: L<http://www.openssh.org/donations.html>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2014 by Salvador Fandiño, E<lt>sfandino@yahoo.comE<gt>
+Copyright (C) 2011-2014 by Salvador FandiE<ntilde>o, E<lt>sfandino@yahoo.comE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.12.4 or,
