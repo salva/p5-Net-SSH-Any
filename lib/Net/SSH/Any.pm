@@ -548,80 +548,104 @@ Net::SSH::Any - SSH client module
   **************************************************************
 
 C<Net::SSH::Any> is a SSH client module providing a high level and
-powerful API to the programmer.
+powerful API.
 
-The main features of Net::SSH::Any is being able to run remote
-commands capturing its output and to perform file transfers using SCP
-or SFTP.
+It can run remote commands and redirect its output or capture it, and
+perform file transfers using SCP or SFTP easyly.
 
 Net::SSH::Any does not implement the SSH protocol itself. Instead, it
-has a plugable architecture that allows to delegate that task to other
-SSH client modules or external binaries.
+has a plugable architecture allowing it to delegate that task to
+other SSH client modules or external binaries.
 
 =head1 BACKENDS
 
-Currently the available backends (modules that interface with other
-Perl SSH client modules or external binaries) are as follows:
+The backends (modules that interface with other Perl SSH client
+modules or external binaries) currently available are as follows:
 
 =over 4
 
 =item Net_OpenSSH
 
-Uses L<Net::OpenSSH> under the hood.
+Uses the perl module L<Net::OpenSSH> which relies itself on the
+OpenSSH C<ssh> binary to connect to the remote hosts. As it uses the
+multiplexing feature of OpenSSH, it can run several commands (or other
+operations) over one single SSH connection and so it is quite fast and
+reliable.
+
+Using the OpenSSH client also ensures maximum interoperability and a
+mature an secure protocol implementation.
 
 If you are going to run your program in a Linux/Unix box with a recent
 version of the OpenSSH client installed, this is probably your
-best option: fast and reliable.
+best option. On the other hand, Net::OpenSSH does not support Windows.
 
-On the other hand, Net::OpenSSH does not support Windows.
+See L<Net::SSH::Any::Backend::Net_OpenSSH>.
 
 =item Net_SSH2
 
-Uses L<Net::SSH2> under the hood.
+Uses the perl module Net::SSH2 which is a wrapper for the libssh2 C
+library, a fast and portable implementation of the client side
+of the SSH version 2 protocol.
+
+L<Net::SSH2> is an actively maintaned module that works on both
+Unix/Linux an Windows systems (don't known about VMS). Compiling it
+may be a hard task, specially on Windows, but PPM packages are
+available from the Internet.
 
 That was intended to be main backend for Net::SSH::Any when used on
 Windows. Unfortunatelly, the current stable version of libssh2 is
 still somewhat buggy, causing this backend to be unreliable.
 
+See L<Net::SSH::Any::Backend::Net_SSH2>.
+
 =item Ssh_Cmd
 
 This backend uses any binary <c>ssh</c> client available on the box
 that accepts the same command line arguments as the OpenSSH one. In
-practice that means ssh clients forked from old versions of OpenSSH as
-for instance, the one bundled in Solaris.
+practice that means SSH clients forked from old versions of OpenSSH as
+for instance, the one bundled in Solaris and other comercial unixen.
 
 Password authentication is only supported on Linux/UNIX and it
 requires the additional module IO::Pty. It may work under Cygwin too.
 
-This backend establishes a new SSH connection every time a new remote
-command is run and so it is reliable but slow.
+This backend establishes a new SSH connection for every remote
+command run and so it is quite slow, although reliable.
+
+See L<Net::SSH::Any::Backend::Ssh_Cmd>.
 
 =item Plink_Cmd
 
 This backend uses the C<plink> utility, part of the
 L<PuTTY|http://www.chiark.greenend.org.uk/~sgtatham/putty/> package.
 
-It supports password authentication, but in a not completely secure
-manner.
+It supports password authentication, but in a somwaht insecure manner,
+as passwords are given to putty as a command line argument. Anybody
+(user or program) logged on the machine would be able to see them.
 
-This backend establishes a new SSH connection every time a new remote
-command is run and so it is reliable but slow.
+This backend also establishes a new SSH connection for every remote
+command run and so it is reliable but slow.
+
+See L<Net::SSH::Any::Backend::Plink_Cmd>.
 
 =item Sexec_Cmd
 
 This backend uses the C<sexec> utility that is bundled with the
 non-free Bitwise SSH client.
 
-This backend establishes a new SSH connection every time a new remote
-command is run and so it is also reliable but slow.
+This backend also establishes a new SSH connection for every remote
+command run and so it is reliable but slow.
+
+See L<Net::SSH::Any::Backend::Sexec_Cmd>.
 
 =item Sshg3_Cmd
 
 This backend uses the C<sshg3> utility that is bundled with the
 non-free Tectia SSH client.
 
-This module supports password authentication in a secure manner and is
-also quite fast as the Tectia client reuses connections.
+This module supports password authentication in a secure manner and it
+is also quite fast as the Tectia client reuses connections.
+
+See L<Net::SSH::Any::Backend::Sshg3_Cmd>.
 
 =back
 
@@ -644,8 +668,6 @@ required. In example:
 
   $ssh->scp_get($remote_src, $local_target);
   my @out = $ssh->capture("ls ~/");
-
-
 
 =head2 Error handling
 
@@ -677,13 +699,13 @@ If more than one argument is passed, as in the following example:
 
    $out = $ssh->capture($cmd, $arg1, $arg2)
 
-The module will escape any shell metacharacter so that effectively the
-remote call is equivalent to executing the remote command without
+The module will escape any shell metacharacter so that, effectively,
+the remote call is equivalent to executing the remote command without
 going through a shell (the SSH protocol does not provides a way to
 just avoid the shell by not calling it).
 
 All the methods that invoke a remote command (system, capture, etc.)
-accept the option C<quote_args> that allows one to force or disable
+accept the option C<quote_args> allowing one to force or disable
 shell quoting.
 
 For instance, spaces in the command path will be correctly handled in
@@ -700,7 +722,7 @@ In that case, the argument are joined with spaces interleaved.
 
 When the C<glob> option is set in SCP file transfer methods, an
 alternative quoting mechanism which leaves file wildcards
-unquoted is used instead.
+unquoted is used.
 
 Another way to selectively use quote globing or fully disable quoting
 for some specific arguments is to pass them as scalar references or
@@ -728,7 +750,6 @@ instance:
   # for VMS
   $ssh->system('DIR/SIZE NFOO::USERS:[JSMITH.DOCS]*.TXT;0');
 
-
 =head2 Timeouts
 
 Several of the methods described below support a C<timeout> argument
@@ -737,18 +758,18 @@ data arriving via SSH.
 
 In order to stop some remote process when it times out, the ideal
 aproach would be to send appropriate signals through the SSH
-connection. Unfortunatelly, neither Net::SSH2/libssh2, nor
-Net::OpenSSH/OpenSSH ssh support sending arbitrary signals, even if
-the SSH standard provides support for it.
+connection , but unfortunatelly, this is a feature of the standard
+that most SSH implementations do not support.
 
-As a less than perfect alternative solution, the module closes the
-stdio streams of the remote process. That would deliver a SIGPIPE on
-the remote process next time it tries to write something.
+As a less than perfect alternative solution, in order to force
+finishing a remote process on timeout, the module closes its stdio
+streams. That would deliver a SIGPIPE on the remote process next time
+it tries to write something.
 
-On the other hand timeouts due to broken connections can be detected
-by other means. For instance, enabling C<SO_KEEPALIVE> on the TCP
-socket, or using the protocol internal keep alive (currently, only
-supported by the Net::OpenSSH backend).
+Most backends are able to detect broken connections due to network
+problems by other means, as for instance, enabling C<SO_KEEPALIVE> on
+the TCP socket, or using the protocol internal keep alive (currently,
+only supported by the Net::OpenSSH backend).
 
 =head2 Net::SSH::Any methods
 
@@ -1165,52 +1186,6 @@ system.
 
 =back
 
-=head2 Backends
-
-Currently the available backends (modules that interface with other
-Perl SSH client modules or external binaries) are as follows:
-
-=over 4
-
-=item Net_OpenSSH
-
-Uses the perl module Net::OpenSSH which relies on OpenSSH C<ssh>
-binary to connect to the remote hosts. As it uses the multiplexing
-feature of OpenSSH, it can run several commands (or other operations)
-over one single connection, so it is quite fast.
-
-Using OpenSSH client ensures maximum interoperability and a mature an
-secure protocol implementation.
-
-The downside is that Net::OpenSSH doesn't work on Windows because OpenSSH
-multiplexing feature has not been ported there.
-
-=item Net_SSH2
-
-Uses the perl module Net::SSH2 which is a wrapper for the libssh2 C
-library which is a fast and portable implementation of the client side
-of the SSH version 2 protocol.
-
-L<Net::SSH2> is an actively maintaned module that works on both
-Unix/Linux an Windows systems (don't known about VMS). Compiling it
-may be a hard task, specially on Windows, but prepackaged versions are
-available from the Internet.
-
-=item SSH_Cmd
-
-Uses the system C<ssh> binary to connect to the remote host.
-
-=item Plink_Cmd
-
-Uses the C<plink> utility from the
-L<http://www.chiark.greenend.org.uk/~sgtatham/putty/|PuTTY> project.
-
-It is probably the easiest way to get something working on Windows.
-
-See also L<Net::SSH::Any::Backend::Plink_Cmd>.
-
-=back
-
 =head1 FAQ
 
 Frequent questions about this module:
@@ -1309,7 +1284,7 @@ upon: L<http://www.openssh.org/donations.html>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2014 by Salvador FandiE<ntilde>o, E<lt>sfandino@yahoo.comE<gt>
+Copyright (C) 2011-2015 by Salvador FandiE<ntilde>o, E<lt>sfandino@yahoo.comE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.12.4 or,
