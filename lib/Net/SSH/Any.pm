@@ -67,6 +67,8 @@ sub new {
     my $argument_encoding =
         _first_defined delete $opts{argument_encoding}, $encoding, 'utf8';
 
+    my $remote_shell = _first_defined delete $opts{remote_shell}, 'POSIX';
+
     my $known_hosts_path = delete $opts{known_hosts_path};
     my $strict_host_key_checking = _first_defined delete $opts{strict_host_key_checking}, 1;
     my $compress = _first_defined delete $opts{compress}, 1;
@@ -96,6 +98,7 @@ sub new {
                 compress => $compress,
                 backend_opts => $backend_opts,
                 error_prefix => [],
+		remote_shell => $remote_shell,
                 remote_cmd => \%remote_cmd,
                 local_cmd => \%local_cmd,
                 os => $os,
@@ -103,7 +106,7 @@ sub new {
     bless $any, $class;
 
     my $backends = delete $opts{backends};
-    $backends = [_array_or_scalar_to_list($backends \\ \@BACKENDS)]
+    $backends = [_array_or_scalar_to_list($backends // \@BACKENDS)];
 
     $any->_load_backend(@$backends)
         and $any->_connect;
@@ -231,55 +234,6 @@ sub _decode_data {
     }
     1;
 }
-my $noquote_class = '\\w/\\-=@';
-my $glob_class    = '*?\\[\\],{}:!.^~';
-
-sub _arg_quoter {
-    sub {
-        my $quoted = join '',
-            map { ( m|^'$|                  ? "\\'"  :
-                    m|^[$noquote_class]*$|o ? $_     :
-                                              "'$_'" ) } split /(')/, $_[0];
-        length $quoted ? $quoted : "''";
-    }
-}
-
-sub _arg_quoter_glob {
-    sub {
-	my $arg = shift;
-        my @parts;
-        while ((pos $arg ||0) < length $arg) {
-            if ($arg =~ m|\G'|gc) {
-                push @parts, "\\'";
-            }
-            elsif ($arg =~ m|\G([$noquote_class$glob_class]+)|gco) {
-                push @parts, $1;
-            }
-            elsif ($arg =~ m|\G(\\[$glob_class\\])|gco) {
-                push @parts, $1;
-            }
-            elsif ($arg =~ m|\G\\|gc) {
-                push @parts, '\\\\'
-            }
-            elsif ($arg =~ m|\G([^$glob_class\\']+)|gco) {
-                push @parts, "'$1'";
-            }
-            else {
-                require Data::Dumper;
-                $arg =~ m|\G(.+)|gc;
-                die "Internal error: unquotable string:\n". Data::Dumper::Dumper($1) ."\n";
-            }
-        }
-        my $quoted = join('', @parts);
-        length $quoted ? $quoted : "''";
-
-	# my $arg = shift;
-        # return $arg if $arg =~ m|^[\w/\-+=?\[\],{}\@!.^~]+$|;
-	# return "''" if $arg eq '';
-        # $arg =~ s|(?<!\\)([^\w/\-+=*?\[\],{}:\@!.^\\~])|ord($1) > 127 ? $1 : $1 eq "\n" ? "'\n'" : "\\$1"|ge;
-	# $arg;
-    }
-}
 
 sub _encode_args {
     if (@_ > 2) {
@@ -294,6 +248,26 @@ sub _encode_args {
     1;
 }
 
+sub _new_remote_quoter {
+    my ($any, $remote_shell) = @_;
+    if ($remote_shell eq 'POSIX') {
+	$any->_load_module('Net::SSH::Any::POSIXShellQuoter') or return;
+	return 'Net::SSH::Any::POSIXShellQuoter';
+    }
+    else {
+	$any->_load_module('Net::OpenSSH::ShellQuoter') or return;
+	return Net::OpenSSH::ShellQuoter->quoter($remote_shell);
+    }
+}
+
+sub _remote_quoter {
+    my ($any, $remote_shell) = @_;
+    if (defined $remote_shell and $remote_shell ne $any->{remote_shell}) {
+	return $any->_new_remote_quoter($remote_shell);
+    }
+    $any->{remote_quoter} //= $any->_new_remote_quoter($any->{remote_shell});
+}
+
 sub _quote_args {
     my $any = shift;
     my $opts = shift;
@@ -305,10 +279,9 @@ sub _quote_args {
 
     my @quoted;
     if ($quote) {
-        my $quoter_glob = $any->_arg_quoter_glob;
-        my $quoter = ($glob_quoting
-                      ? $quoter_glob
-                      : $any->_arg_quoter);
+	my $remote_shell = delete $opts->{remote_shell};
+	my $quoter = $any->_remote_quoter($remote_shell) or return;
+	my $quote_method = ($glob_quoting ? 'quote_glob' : 'quote');
 
         # foo   => $quoter
         # \foo  => $quoter_glob
@@ -316,7 +289,7 @@ sub _quote_args {
         for (@_) {
             if (ref $_) {
                 if (ref $_ eq 'SCALAR') {
-                    push @quoted, $quoter_glob->($$_);
+                    push @quoted, $quoter->quote_glob($$_);
                 }
                 elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
                     push @quoted, $$$_;
@@ -326,7 +299,7 @@ sub _quote_args {
                 }
             }
             else {
-                push @quoted, $quoter->($_);
+                push @quoted, $quoter->$quote_method($_);
             }
         }
     }
@@ -383,7 +356,7 @@ sub capture {
     $any->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     my $stream_encoding = $any->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
-    my $cmd = $any->_quote_args(\%opts, @_);
+    my $cmd = $any->_quote_args(\%opts, @_) // return;
     _croak_bad_options %opts;
     my ($out) = $any->_capture(\%opts, $cmd) or return;
     $any->_check_child_error;
@@ -403,7 +376,7 @@ sub capture2 {
     $any->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     my $stream_encoding = $any->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
-    my $cmd = $any->_quote_args(\%opts, @_);
+    my $cmd = $any->_quote_args(\%opts, @_) // return;
     _croak_bad_options %opts;
     my ($out, $err) = $any->_capture2(\%opts, $cmd) or return;
     $any->_check_child_error;
@@ -423,7 +396,7 @@ sub system {
     $any->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
     my $stream_encoding = $any->_delete_stream_encoding_and_encode_input_data(\%opts) or return;
-    my $cmd = $any->_quote_args(\%opts, @_);
+    my $cmd = $any->_quote_args(\%opts, @_) // return;
     _croak_bad_options %opts;
     $any->_system(\%opts, $cmd);
     $any->_check_child_error;
@@ -434,7 +407,7 @@ sub dpipe {
     my $any = shift;
     $any->_clear_error or return undef;
     my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
-    my $cmd = $any->_quote_args(\%opts, @_);
+    my $cmd = $any->_quote_args(\%opts, @_) // return;
     _croak_bad_options %opts;
     $any->_dpipe(\%opts, $cmd);
 }
