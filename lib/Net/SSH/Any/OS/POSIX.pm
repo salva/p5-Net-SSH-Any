@@ -290,14 +290,14 @@ sub set_file_inherit_flag {
     my ($any, $file, $value) = @_;
 
     my $fn = fileno $file;
-    my $flags = Fcntl::fcntl($fn, F_GETFD);
+    my $flags = Fcntl::fcntl($fn, Fcntl::F_GETFD());
     if ($value) {
         $flags &= ~Fcntl::FD_CLOEXEC();
     }
     else {
         $flags |= Fcntl::FD_CLOEXEC();
     }
-    Fcntl::fcntl($fn, F_SETFD, $flags);
+    Fcntl::fcntl($fn, Fcntl::F_SETFD(), $flags);
     1;
 }
 
@@ -305,7 +305,7 @@ my $unique_ix = 0;
 
 sub create_secret_file {
     my ($any, $name, $data) = @_;
-    my $home = (getpwent $<)[2];
+    my $home = (getpwuid $<)[2];
     unless (defined $home) {
         $any->_os_set_error(SSHA_LOCAL_IO_ERROR, "Unable to determine user home directory: $!");
         return;
@@ -327,8 +327,9 @@ sub create_secret_file {
 
     while (1) {
         my $final = join("-", $name, $$, $unique_ix++, int rand 1000).$ext;
-        sysopen my $fh, $final, O_RDWR|O_CREAT|O_EXCL, S_IRUSR|S_IWUSR;
-        if (defined $fh) {
+        if (sysopen(my $fh, $final,
+		    Fcntl::O_RDWR()|Fcntl::O_CREAT()|Fcntl::O_EXCL(),
+		    Fcntl::S_IRUSR()|Fcntl::S_IWUSR())) {
             print {$fh} $data;
             return $final if close $fh;
             $any->_or_set_error(SSHA_LOCAL_IO_ERROR, "Unable to write secret file $final: $!");
@@ -336,7 +337,7 @@ sub create_secret_file {
             return;
         }
         unless ($! == Errno::EEXIST()) {
-            $any->_or_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create secret file $file: $!");
+            $any->_or_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create secret file $final: $!");
             return;
         }
     }
