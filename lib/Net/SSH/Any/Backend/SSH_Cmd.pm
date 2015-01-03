@@ -3,7 +3,7 @@ package Net::SSH::Any::Backend::SSH_Cmd;
 use strict;
 use warnings;
 use Carp;
-use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list);
+use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug);
 use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR);
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
@@ -78,7 +78,8 @@ sub _remap_child_error {
         # is quite uncommon.
         # SSHA_CONNECTION_ERROR is not recoverable so we use
         # SSHA_CHANNEL_ERROR instead.
-        $any->_or_set_error(SSHA_CHANNEL_ERROR, "child command exited with code 255");
+	$debug and $debug & 1024 and _debug "child error remaped to channel error";
+        $any->_or_set_error(SSHA_CHANNEL_ERROR, "child command exited with code 255, ssh was probably unable to connect to the remote server");
         return
     }
     1;
