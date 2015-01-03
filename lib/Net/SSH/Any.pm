@@ -637,13 +637,25 @@ required:
 
 =item IO::Pty
 
+Used for password authentication with the C<Net_OpenSSH> and
+C<Ssh_Cmd> backends.
+
 =item Net::OpenSSH
+
+Used by the C<Net_OpenSSH> backend and also when a non-POSIX shell
+quoter is required.
 
 =item Net::SSH2
 
+Used by the C<Net_SSH2> backend.
+
 =item Net::SFTP::Foreign
 
+Required for SFTP support.
+
 =item Win32::SecretFile
+
+Used by the C<Sshg3_Cmd> backend on Windows.
 
 =back
 
