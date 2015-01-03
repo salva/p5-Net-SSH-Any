@@ -41,17 +41,14 @@ sub __check_and_copy_error {
 
 sub _validate_connect_opts {
     my ($any, %opts) = @_;
-
-    use Data::Dumper;
-    print Dumper \%opts;
-
     my @master_opts = _array_or_scalar_to_list delete $opts{master_opts};
     my $strict_host_key_checking = delete $opts{strict_host_key_checking};
     push @master_opts, -o => 'StrictHostKeyChecking='.($strict_host_key_checking ? 'yes' : 'no');
     my $known_hosts_path = delete $opts{known_hosts_path};
     push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
         if defined $known_hosts_path;
-    $any->{be_ssh} = Net::OpenSSH->new(%opts, master_opts => \@master_opts);
+    $any->{be_ssh} = Net::OpenSSH->new(map({ defined $opts{$_} ? ( $_ => $opts{$_}) : () } keys %opts),
+				       master_opts => \@master_opts);
     __check_and_copy_error($any);
 }
 
