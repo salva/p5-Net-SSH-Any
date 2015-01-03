@@ -1,4 +1,4 @@
-package Net::SSH::Any::ShellQuoter;
+package Net::SSH::Any::POSIXShellQuoter;
 
 my $noquote_class = '\\w/\\-=@';
 my $glob_class    = '*?\\[\\],{}:!.^~';

@@ -249,9 +249,11 @@ sub _encode_args {
     1;
 }
 
+my %posix_shell = map { $_ => 1} qw(POSIX bash sh ksh ash dash pdksh mksh lksh zsh fizsh posh);
+
 sub _new_remote_quoter {
     my ($any, $remote_shell) = @_;
-    if ($remote_shell eq 'POSIX') {
+    if ($posix_shell{$remote_shell}) {
 	$any->_load_module('Net::SSH::Any::POSIXShellQuoter') or return;
 	return 'Net::SSH::Any::POSIXShellQuoter';
     }
