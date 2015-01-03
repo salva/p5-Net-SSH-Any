@@ -106,6 +106,7 @@ sub new {
     bless $any, $class;
 
     my $backends = delete $opts{backends};
+    $backends = delete $opts{backend} unless defined $backends;
     $backends = [_array_or_scalar_to_list($backends // \@BACKENDS)];
 
     $any->_load_backend(@$backends)
