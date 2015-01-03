@@ -843,6 +843,11 @@ file system) the encoding to be used.
 This option is equivalent to setting C<argument_encoding> and
 C<stream_encoding>.
 
+=item remote_shell => $shell
+
+Name of the remote shell. This argument lets the module pick the right
+shell quoter.
+
 =item known_hosts_path => $path
 
 Location of the C<known_hosts> file where host keys are saved.
