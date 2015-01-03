@@ -9,7 +9,8 @@ lib/Net/SSH/Any/Backend/Net_SSH2/DPipe.pm
 lib/Net/SSH/Any/Backend/Net_SSH2/SFTP.pm
 lib/Net/SSH/Any/Backend/Plink_Cmd.pm
 lib/Net/SSH/Any/Backend/Sexec_Cmd.pm
-lib/Net/SSH/Any/Backend/SSH_Cmd.pm
+lib/Net/SSH/Any/Backend/Ssh_Cmd.pm
+lib/Net/SSH/Any/Backend/Sshg3_Cmd.pm
 lib/Net/SSH/Any/Constants.pm
 lib/Net/SSH/Any/DPipe.pm
 lib/Net/SSH/Any/OS/_Base.pm
@@ -27,6 +28,7 @@ lib/Net/SSH/Any/SCP/Putter/Content.pm
 lib/Net/SSH/Any/SCP/Putter/DirMaker.pm
 lib/Net/SSH/Any/SCP/Putter/Standard.pm
 lib/Net/SSH/Any/Util.pm
+lib/Net/SSH/Any/POSIXShellQuoter.pm
 Makefile.PL
 MANIFEST
 README

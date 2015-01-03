@@ -1,4 +1,4 @@
-package Net::SSH::Any::Backend::SSH_Cmd;
+package Net::SSH::Any::Backend::Ssh_Cmd;
 
 use strict;
 use warnings;
