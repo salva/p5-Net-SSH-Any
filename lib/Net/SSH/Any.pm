@@ -625,6 +625,28 @@ See L<Net::SSH::Any::Backend::Sshg3_Cmd>.
 
 =back
 
+=head1 DEPENDENCIES
+
+Depending on the backend selected and on the feature set used, you may
+need to install additional Perl modules.
+
+What follows is a summary of the optional modules and when they are
+required:
+
+=over
+
+=item IO::Pty
+
+=item Net::OpenSSH
+
+=item Net::SSH2
+
+=item Net::SFTP::Foreign
+
+=item Win32::SecretFile
+
+=back
+
 =head1 API
 
 The API of Net::SSH::Any is heavily based on that of Net::OpenSSH.
@@ -714,14 +736,21 @@ prepending them with one or two backslashes. For instance:
   # expand remote shell variables and glob in the same command:
   $ssh->system('tar', 'czf', \\'$HOME/out.tgz', \'/var/log/server.*.log');
 
-The current shell quoting implementation expects a shell compatible
-with Unix C<sh> in the remote side. It will not work as expected if
-for instance, the remote machine runs Windows, VMS or if it is a
-router exposing an ad-hoc shell.
+The builtin quoting implementation expects a remote shell compatible
+with Unix C<sh> as defined by the POSIX standard. The module can also
+use the shell quoters available from L<Net::OpenSSH> when installed
+(that currently includes quoters for C<csh> and MS Windows).
 
-As a workaround, do any required quoting yourself and pass the quoted
-command as a string so that no further quoting is performed. For
+The C<remote_shell> option can be used to select which one to use both
+at construction time or when some remote command in invoked. For
 instance:
+
+  $ssh = Net::SSH::Any->new($host, remote_shell => 'csh');
+
+  $ssh->system({remote_shell => 'MSWin'}, dir => $directory);
+
+For unsuported shells or systems such as VMS, you will have to perform
+any quoting yourself:
 
   # for VMS
   $ssh->system('DIR/SIZE NFOO::USERS:[JSMITH.DOCS]*.TXT;0');
