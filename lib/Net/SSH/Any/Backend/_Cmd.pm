@@ -90,6 +90,7 @@ sub _run_cmd {
     }
 
     for my $stream (@stream_names[@fhs .. 2]) {
+        $debug and $debug & 1024 and _debug "seting up stream $stream";
         my ($fh, $pipe);
         if (delete $opts->{"${stream}_pipe"}) {
             ($pipe, $fh) = $any->_os_pipe or return;

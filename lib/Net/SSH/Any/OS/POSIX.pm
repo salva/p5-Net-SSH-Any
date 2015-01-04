@@ -38,6 +38,7 @@ sub socketpair {
         $any->_set_error(SSHA_LOCAL_IO_ERROR, "socketpair failed: $!");
         return;
     }
+    $debug and $debug & 1024 and _debug "socketpair => $a (", fileno($a), "), $b (", fileno($b), ")";
     ($a, $b);
 }
 
@@ -56,6 +57,7 @@ sub pipe {
         $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create pipe: $!");
         return
     }
+    $debug and $debug & 1024 and _debug "pipe => $r (", fileno($r), "), $w (", fileno($w), ")";
     ($r, $w);
 }
 
@@ -288,16 +290,15 @@ sub find_cmd_by_app {
 
 sub set_file_inherit_flag {
     my ($any, $file, $value) = @_;
-
-    my $fn = fileno $file;
-    my $flags = Fcntl::fcntl($fn, Fcntl::F_GETFD());
+    $debug and $debug & 1024 and _debug "setting inherit flag for file $file (",fileno($file),") to $value";
+    my $flags = fcntl($file, Fcntl::F_GETFL(), 0);
     if ($value) {
         $flags &= ~Fcntl::FD_CLOEXEC();
     }
     else {
         $flags |= Fcntl::FD_CLOEXEC();
     }
-    Fcntl::fcntl($fn, Fcntl::F_SETFD(), $flags);
+    fcntl($file, Fcntl::F_SETFL(), $flags);
     1;
 }
 
