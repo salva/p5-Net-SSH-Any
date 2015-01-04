@@ -65,3 +65,38 @@ sub _check_connection {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Net::SSH::Any::Backend::Net_OpenSSH
+
+=head1 DESCRIPTION
+
+Custom options supported by this backend:
+
+=over 4
+
+=item instance => $instance
+
+Instead of creating a new Net::OpenSSH reuses the one given.
+
+Example:
+
+  my $ssh = Net::OpenSSH->new($target, ...);
+
+  my $assh = Net::SSH::Any->new($target,
+                                backend => 'Net_OpenSSH',
+                                backend_opts => {
+                                    Net_OpenSSH => { instance => $ssh }
+                                } );
+
+
+=item master_opts => \@master_opts
+
+...
+
+=back
+
+=cut
