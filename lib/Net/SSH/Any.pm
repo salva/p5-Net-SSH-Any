@@ -13,7 +13,7 @@ use Encode ();
 
 our @CARP_NOT = qw(Net::SSH::Any::Util);
 
-my $REQUIRED_BACKEND_VERSION = '1';
+my $REQUIRED_BACKEND_VERSION = '2';
 our @BACKENDS = qw(Net::OpenSSH Net::SSH2 Net::SSH::Perl SSH_Cmd Plink_Cmd);
 
 # regexp from Regexp::IPv6
@@ -102,16 +102,29 @@ sub new {
                 remote_cmd => \%remote_cmd,
                 local_cmd => \%local_cmd,
                 os => $os,
+                error => 0,
                };
     bless $any, $class;
 
     my $backends = delete $opts{backends};
     $backends = delete $opts{backend} unless defined $backends;
-    $backends = [_array_or_scalar_to_list($backends // \@BACKENDS)];
 
-    $any->_load_backend(@$backends)
-        and $any->_connect;
-
+    my @backend_log;
+    $any->{_backend_log} = \@backend_log;
+    for my $backend (_array_or_scalar_to_list($backends // \@BACKENDS)) {
+        local $any->{error} = 0;
+        $any->{backend_module} = "Net::SSH::Any::Backend::$backend";
+        if ($any->_load_backend_module and
+            $any->_validate_backend_opts) {
+            $any->{backend} = $backend;
+            $any->_connect;
+            last;
+        }
+        push @backend_log, "$backend: [".($any->{error}+0)."] $any->{error}";
+        delete $any->{backend_module};
+    }
+    $any->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available")
+        unless defined $any->{backend_module};
     $any;
 }
 
@@ -153,29 +166,31 @@ sub _or_set_error {
 
 sub _load_backend {
     my $any = shift;
-    for my $backend (@_) {
-        my $module = $backend;
-        $module =~ s/::/_/g;
-        $module = "Net::SSH::Any::Backend::$module";
-        local ($@, $SIG{__DIE__});
-        my $ok = eval <<EOE;
+    my $module = $any->{backend_module};
+    local ($@, $SIG{__DIE__});
+    my $ok = eval <<EOE;
 no strict;
 no warnings;
 require $module;
-$module->_backend_api_version >= $REQUIRED_BACKEND_VERSION
+1;
 EOE
-        if ($ok) {
-            $any->{backend} = $backend;
-            $any->{backend_module} = $module;
-            return 1;
-        }
-        elsif ($debug and $debug & 1) {
-            _debug "failed to load backend $backend, module $module, error follows...\n$@"
-        }
+    unless($ok) {
+        $any->_error(SSHA_BACKEND_ERROR, "unable to load module '$module'", $@);
+        return;
     }
-    $any->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available");
-    undef;
+    unless ($module->can('_backend_api_version')) {
+        $any->_error(SSHA_BACKEND_ERROR, 'method _backend_api_version missing');
+        return;
+    }
+    my $version = $module->_backend_api_version;
+    unless ($version >= $REQUIRED_BACKEND_VERSION) {
+        $any->_error(SSHA_BACKEND_ERROR,
+                     "backend API version $version is too old ($REQUIRED_BACKEND_VERSION required)");
+        return;
+    }
+    1;
 }
+
 
 sub _delete_stream_encoding {
     my ($any, $opts) = @_;
