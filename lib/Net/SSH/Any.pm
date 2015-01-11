@@ -48,30 +48,33 @@ sub new {
                      $}ix or croak "bad host/target '$target' specification";
 
     ($host) = $ipv6 =~ /^\[?(.*)\]?$/ if defined $ipv6;
+    defined $host or croak "host argument missing";
 
-    $user = delete $opts{user} unless defined $user;
-    $port = delete $opts{port} unless defined $port;
-    $passwd = delete $opts{passwd} unless defined $passwd;
-    $passwd = delete $opts{password} unless defined $passwd;
+    $user //= delete $opts{user} // do {
+        local ($SIG{__DIE__}, $@);
+        eval { (getpwuid $<)[0] } //
+        eval { getlogin() }
+    };
+
+    $port //= delete $opts{port};
+    $passwd //= delete $opts{passwd} // delete $opts{password};
+
     my ($key_path, $passphrase);
     unless (defined $passwd) {
         $key_path = delete $opts{key_path};
         $passphrase = delete $opts{passphrase};
     }
-    my $io_timeout = _first_defined delete $opts{io_timeout}, 120;
+    my $io_timeout = delete $opts{io_timeout} // 120;
     my $timeout = delete $opts{timeout};
-    my $target_os = _first_defined delete $opts{target_os}, 'unix';
-    my $encoding = delete $opts{encoding};
-    my $stream_encoding =
-        _first_defined delete $opts{stream_encoding}, $encoding, 'utf8';
-    my $argument_encoding =
-        _first_defined delete $opts{argument_encoding}, $encoding, 'utf8';
+    my $encoding = delete $opts{encoding} // 'utf8';
+    my $stream_encoding = delete $opts{stream_encoding} // $encoding;
+    my $argument_encoding = delete $opts{argument_encoding} // $encoding;
 
-    my $remote_shell = _first_defined delete $opts{remote_shell}, 'POSIX';
+    my $remote_shell = delete $opts{remote_shell} // 'POSIX';
 
     my $known_hosts_path = delete $opts{known_hosts_path};
-    my $strict_host_key_checking = _first_defined delete $opts{strict_host_key_checking}, 1;
-    my $compress = _first_defined delete $opts{compress}, 1;
+    my $strict_host_key_checking = delete $opts{strict_host_key_checking} // 1;
+    my $compress = delete $opts{compress} // 1;
     my $backend_opts = delete $opts{backend_opts};
 
     my $os = delete $opts{os};
@@ -82,6 +85,7 @@ sub new {
         /^local_(.*)_cmd$/ and $local_cmd{$1} = $opts{$_};
     }
 
+
     my $any = { host => $host,
                 user => $user,
                 port => $port,
@@ -90,7 +94,6 @@ sub new {
                 passphrase => $passphrase,
                 timeout => $timeout,
                 io_timeout => $io_timeout,
-                target_os => $target_os,
                 stream_encoding => $stream_encoding,
                 argument_encoding => $argument_encoding,
                 known_hosts_path => $known_hosts_path,
@@ -112,10 +115,20 @@ sub new {
     my @backend_log;
     $any->{_backend_log} = \@backend_log;
     for my $backend (_array_or_scalar_to_list($backends // \@BACKENDS)) {
+        my %backend_opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout
+                                                       strict_host_key_checking known_hosts_path
+                                                       compress );
+        if (my $extra = $any->{backend_opts}{$backend}) {
+            @backend_opts{keys %$extra} = values %$extra;
+        }
+        defined $backend_opts{$_} or delete $backend_opts{$_}
+            for keys %backend_opts;
+
         local $any->{error} = 0;
         $any->{backend_module} = "Net::SSH::Any::Backend::$backend";
+
         if ($any->_load_backend_module and
-            $any->_validate_backend_opts) {
+            $any->_validate_backend_opts(%backend_opts)) {
             $any->{backend} = $backend;
             $any->_connect;
             last;
@@ -164,7 +177,7 @@ sub _or_set_error {
     $any->{error} or $any->_set_error(@_);
 }
 
-sub _load_backend {
+sub _load_backend_module {
     my $any = shift;
     my $module = $any->{backend_module};
     local ($@, $SIG{__DIE__});
@@ -175,17 +188,17 @@ require $module;
 1;
 EOE
     unless($ok) {
-        $any->_error(SSHA_BACKEND_ERROR, "unable to load module '$module'", $@);
+        $any->_set_error(SSHA_BACKEND_ERROR, "unable to load module '$module'", $@);
         return;
     }
     unless ($module->can('_backend_api_version')) {
-        $any->_error(SSHA_BACKEND_ERROR, 'method _backend_api_version missing');
+        $any->_set_error(SSHA_BACKEND_ERROR, 'method _backend_api_version missing');
         return;
     }
     my $version = $module->_backend_api_version;
     unless ($version >= $REQUIRED_BACKEND_VERSION) {
-        $any->_error(SSHA_BACKEND_ERROR,
-                     "backend API version $version is too old ($REQUIRED_BACKEND_VERSION required)");
+        $any->_set_error(SSHA_BACKEND_ERROR,
+                         "backend API version $version is too old ($REQUIRED_BACKEND_VERSION required)");
         return;
     }
     1;

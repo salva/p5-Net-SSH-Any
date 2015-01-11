@@ -39,19 +39,20 @@ sub __check_and_copy_error {
     return;
 }
 
-sub _validate_connect_opts {
-    my ($any, %opts) = @_;
-    my $instance = delete $opts{instance};
-    unless (defined $instance) {
-        my @master_opts = _array_or_scalar_to_list delete $opts{master_opts};
-        my $strict_host_key_checking = delete $opts{strict_host_key_checking};
+sub _validate_backend_opts {
+    my ($any, %be_opts) = @_;
+    $any->SUPER::_validate_backend_opts(%be_opts) or return;
+
+    my $instance = $be_opts{instance} // do {
+        my @master_opts = _array_or_scalar_to_list delete $be_opts{master_opts};
+        my $strict_host_key_checking = delete $be_opts{strict_host_key_checking};
         push @master_opts, -o => 'StrictHostKeyChecking='.($strict_host_key_checking ? 'yes' : 'no');
-        my $known_hosts_path = delete $opts{known_hosts_path};
+        my $known_hosts_path = delete $be_opts{known_hosts_path};
         push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
             if defined $known_hosts_path;
-        $instance = Net::OpenSSH->new(map({ defined $opts{$_} ? ( $_ => $opts{$_}) : () } keys %opts),
-                                master_opts => \@master_opts);
-    }
+        Net::OpenSSH->new(%be_opts, master_opts => \@master_opts);
+    };
+    $any->{be_opts} = \%be_opts;
     $any->{be_ssh} = $instance;
     __check_and_copy_error($any);
 }

@@ -8,13 +8,22 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR);
 
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
-sub _validate_connect_opts {
+sub _validate_backend_opts {
     my ($any, %opts) = @_;
+    $any->SUPER::_validate_backend_opts(%opts) or return;
 
     $opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, { MSWin => 'PuTTY' });
     $opts{local_puttygen_cmd} //= $any->_find_cmd(puttygen => $opts{local_pink_cmd}, { MSWin => 'PuTTY' });
 
-    defined $opts{host} or croak "host argument missing";
+    my $out = $any->_local_capture($opts{local_plink_cmd}, '-V') // '';
+    if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Relase)\s*(.*?)\s*$/mi) {
+        $any->{be_plink_version} = $1;
+    }
+    else {
+        $any->_set_error(SSHA_CONNECTION_ERROR, 'plink not found or bad version');
+        return;
+    }
+
     my ($auth_type, $interactive_login);
 
     if (defined $opts{password}) {
@@ -46,34 +55,34 @@ sub _validate_connect_opts {
         $auth_type = 'default';
     }
 
-    $any->{be_connect_opts} = \%opts;
+    $any->{be_opts} = \%opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = 0;
     1;
 }
 
 sub _make_cmd {
-    my ($any, $opts, $cmd) = @_;
-    my $connect_opts = $any->{be_connect_opts};
+    my ($any, $cmd_opts, $cmd) = @_;
+    my $be_opts = $any->{be_opts};
 
-    my @args = ( $connect_opts->{local_plink_cmd},
+    my @args = ( $be_opts->{local_plink_cmd},
                  '-ssh',
                  '-batch',
                  '-C' );
 
-    push @args, -l => $connect_opts->{user} if defined $connect_opts->{user};
-    push @args, -P => $connect_opts->{port} if defined $connect_opts->{port};
-    push @args, -i => $connect_opts->{ppk_path} if defined $connect_opts->{ppk_path};
+    push @args, -l => $be_opts->{user} if defined $be_opts->{user};
+    push @args, -P => $be_opts->{port} if defined $be_opts->{port};
+    push @args, -i => $be_opts->{ppk_path} if defined $be_opts->{ppk_path};
 
     if ($any->{be_auth_type} eq 'password') {
-        push @args, -pw => $connect_opts->{password};
+        push @args, -pw => $be_opts->{password};
     }
 
-    push @args, _array_or_scalar_to_list($connect_opts->{plink_opts})
-        if defined $connect_opts->{plink_opts};
+    push @args, _array_or_scalar_to_list($be_opts->{plink_opts})
+        if defined $be_opts->{plink_opts};
 
-    push @args, '-s' if delete $opts->{subsystem};
-    push @args, $connect_opts->{host};
+    push @args, '-s' if delete $cmd_opts->{subsystem};
+    push @args, $be_opts->{host};
 
     return (@args, $cmd);
 }

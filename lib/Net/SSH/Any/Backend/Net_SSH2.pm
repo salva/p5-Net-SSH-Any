@@ -189,8 +189,8 @@ sub __check_host_key {
     ()
 }
 
-sub _connect {
-    my $any = shift;
+sub _validate_be_opts {
+    my ($any, %be_opts) = @_;
     my $ssh2 = $any->{be_ssh2} = Net::SSH2->new;
     unless ($ssh2) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to create Net::SSH2 object");
@@ -206,10 +206,16 @@ sub _connect {
             $flag_method->($ssh2, $C{FLAG_COMPRESS}, 1);
         }
     }
+    $any->{be_opts} = \%be_opts;
+    1;
+}
 
-    my $socket = IO::Socket::INET->new(PeerHost => $any->{host},
-                                       PeerPort => ($any->{port} || 22),
-                                       ($any->{timeout} ? (Timeout => $any->{timeout}) : ()));
+sub _connect {
+    my $any = shift;
+    my $be_opts = $self->{be_opts};
+    my $socket = IO::Socket::INET->new(PeerHost => $be_opts->{host},
+                                       PeerPort => ($be_opts->{port} || 22),
+                                       ($be_opts->{timeout} ? (Timeout => $be_opts->{timeout}) : ()));
     if ($socket) {
         $socket->sockopt(SO_LINGER, pack(SS => 0, 0));
         $socket->sockopt(SO_KEEPALIVE, 1);
@@ -222,12 +228,12 @@ sub _connect {
     __check_host_key($any) or return;
 
     my %aa;
-    $aa{username} = _first_defined($any->{user},
+    $aa{username} = _first_defined($be_opts->{user},
                                    eval { (getpwuid $<)[0] },
                                    eval { getlogin() });
-    $aa{password} = $any->{password} if defined $any->{password};
-    $aa{password} = $any->{passphrase} if defined $any->{passphrase};
-    if (defined (my $private = $any->{key_path})) {
+    $aa{password} = $be_opts->{password} if defined $be_opts->{password};
+    $aa{password} = $be_opts->{passphrase} if defined $be_opts->{passphrase};
+    if (defined (my $private = $be_opts->{key_path})) {
         unless (-f $private) {
             $any->_set_error(SSHA_CONNECTION_ERROR, "Private key '$private' does not exist on file system");
             return;

@@ -9,19 +9,15 @@ our @CARP_NOT = qw(Net::SSH::Any);
 use Net::SSH::Any::Util qw($debug _debug _first_defined _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
 
-sub _backend_api_version { 1 }
+sub _backend_api_version { 2 }
 
-sub _connect {
+sub _validate_backend_opts {
     my $any = shift;
-    my %opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout
-                                           strict_host_key_checking known_hosts_path);
-    if (my $extra = $any->{backend_opts}{$any->{backend}}) {
-        @opts{keys %$extra} = values %$extra;
-    }
-
     $any->_os_loaded or return; # ensure the OS module is loaded
-    $any->_validate_connect_opts(%opts);
+    1;
 }
+
+sub _connect { 1 }
 
 sub _check_connection { 1 }
 
@@ -126,7 +122,13 @@ sub _run_cmd {
                           defined $opts->{$_} } keys %$opts;
     @too_many and croak "unsupported options or bad combination ('".join("', '", @too_many)."')";
 
-    my @cmd = $any->_make_cmd($opts, $cmd) or return;
+    my @cmd = _array_or_scalar_to_list $cmd;
+    unless ($opts->{_local}) {
+        # FIXME: this is quite ugly, the make_cmd call should probably
+        # be done outside this method. Actually, this method should
+        # probably go into the OS module or in Any.
+        @cmd = $any->_make_cmd($opts, @cmd) or return;
+    };
 
     $debug and $debug & 1024 and _debug("launching cmd: '", join("', '", @cmd), "'");
     my $pty = ($any->{be_interactive_login} ? $any->_os_pty($any) : undef);
@@ -170,6 +172,15 @@ sub _capture {
     $opts->{stdout_pipe} = 1;
     my ($proc, @pipes) = $any->_run_cmd($opts, $cmd) or return;
     $any->_io3($opts, $proc, @pipes);
+}
+
+sub _local_capture {
+    # This method, or a better version, should go into Any
+    my ($any, @cmd) = @_;
+    my ($proc, @pipes) = $any->_run_cmd({ stdout_pipe => 1, stderr_to_stdout => 1, _local => 1 },
+                                        \@cmd);
+    my ($out) = $any->_io3({}, $proc, @pipes);
+    $out;
 }
 
 sub _capture2 {

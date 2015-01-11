@@ -8,8 +8,9 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_CHANNEL_ERROR SSHA_RE
 
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
-sub _validate_connect_opts {
+sub _validate_backend_opts {
     my ($any, %opts) = @_;
+    $any->SUPER::_validate_backend_opts(%opts) or return;
 
     defined $opts{host} or croak "host argument missing";
 
@@ -50,7 +51,7 @@ sub _validate_connect_opts {
 
     $opts{run_broker} //= 0;
 
-    $any->{be_connect_opts} = \%opts;
+    $any->{be_opts} = \%opts;
     $any->{be_auth_type} = join(',', @auth_type);
     $any->{be_interactive_login} = 0;
 
@@ -66,24 +67,24 @@ sub _validate_connect_opts {
 }
 
 sub _make_cmd {
-    my ($any, $opts, $cmd) = @_;
-    my $connect_opts = $any->{be_connect_opts};
+    my ($any, $cmd_opts, $cmd) = @_;
+    my $be_opts = $any->{be_opts};
 
-    my @args = ( $connect_opts->{local_sshg3_cmd},
+    my @args = ( $be_opts->{local_sshg3_cmd},
                  '-B', '-enone');
 
-    push @args, '--exclusive' if $connect_opts->{exclusive};
-    push @args, "-l$connect_opts->{user}" if defined $connect_opts->{user};
-    push @args, "-p$connect_opts->{port}" if defined $connect_opts->{port};
+    push @args, '--exclusive' if $be_opts->{exclusive};
+    push @args, "-l$be_opts->{user}" if defined $be_opts->{user};
+    push @args, "-p$be_opts->{port}" if defined $be_opts->{port};
     push @args, "-Pfile://$any->{be_password_path}" if defined $any->{be_password_path};
 
-    push @args, _array_or_scalar_to_list($connect_opts->{sshg3_opts})
-        if defined $connect_opts->{sshg3_opts};
+    push @args, _array_or_scalar_to_list($be_opts->{sshg3_opts})
+        if defined $be_opts->{sshg3_opts};
 
     return (@args,
-            ( delete $opts->{subsystem}
-              ? (-s => $cmd, $connect_opts->{host})
-              : ($connect_opts->{host}, $cmd)));
+            ( delete $cmd_opts->{subsystem}
+              ? (-s => $cmd, $be_opts->{host})
+              : ($be_opts->{host}, $cmd)));
 }
 
 sub DESTROY {

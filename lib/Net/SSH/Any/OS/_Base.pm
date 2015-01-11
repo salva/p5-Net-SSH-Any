@@ -39,7 +39,7 @@ sub io3_check_and_clean_data {
 
 sub interactive_login {
     my ($any, $pty, $proc) = @_;
-    my $opts = $any->{be_connect_opts};
+    my $opts = $any->{be_opts}; # FIXME. This shouldn't be here!
     my $user = $opts->{user};
     my $password = $opts->{password};
     my $password_prompt = $opts->{password_prompt};

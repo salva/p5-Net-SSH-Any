@@ -8,8 +8,9 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_CHANNEL_ERROR SSHA_RE
 
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
-sub _validate_connect_opts {
+sub _validate_backend_opts {
     my ($any, %opts) = @_;
+    $any->SUPER::_validate_backend_opts(%opts) or return;
 
     grep defined $opts{$_}, qw(profile_path host)
         or croak "host argument missing";
@@ -47,18 +48,18 @@ sub _validate_connect_opts {
     }
 
     $opts{local_sexec_cmd} = _first_defined $opts{local_sexec_cmd}, $any->{local_cmd}{sexec}, 'sexec';
-    $any->{be_connect_opts} = \%opts;
+    $any->{be_opts} = \%opts;
     $any->{be_auth_type} = join(',', @auth_type);
     $any->{be_interactive_login} = 0;
     1;
 }
 
 sub _make_cmd {
-    my ($any, $opts, $cmd) = @_;
-    my $connect_opts = $any->{be_connect_opts};
+    my ($any, $cmd_opts, $cmd) = @_;
+    my $be_opts = $any->{be_opts};
 
     my ($sexec, $host, $profile_path, $user, $password, $port) =
-        @{$connect_opts}{qw(local_sexec_cmd host profile_path user password port)};
+        @{$be_opts}{qw(local_sexec_cmd host profile_path user password port)};
 
     my @args = ($sexec, "-unat=y");
     if (defined $profile_path) {
@@ -72,10 +73,10 @@ sub _make_cmd {
     push @args, "-port=$port" if defined $port;
     push @args, "-pw=$password" if defined $password;
 
-    push @args, _array_or_scalar_to_list($connect_opts->{sexec_opts})
-        if defined $connect_opts->{sexec_opts};
+    push @args, _array_or_scalar_to_list($be_opts->{sexec_opts})
+        if defined $be_opts->{sexec_opts};
 
-    delete $opts->{subsystem} and croak "running subsystems is not supported by backend";
+    delete $cmd_opts->{subsystem} and croak "running subsystems is not supported by backend";
 
     return (@args, "-cmd=$cmd");
 }
