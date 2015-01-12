@@ -108,7 +108,7 @@ Net::SSH::Any::Backend::Plink_Cmd - Backend for PuTTY's plink
 
   use Net::SSH::Any;
   my $ssh = Net::SSH::Any->new($host, user => $user, password => $password,
-                               backends => ['Plink_Cmd'],
+                               backend => 'Plink_Cmd',
                                local_plink_cmd => 'C:\\PuTTY\\plink.exe');
   my $output = $ssh->capture("echo hello world");
 
