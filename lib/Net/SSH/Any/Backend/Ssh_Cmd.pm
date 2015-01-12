@@ -14,7 +14,8 @@ sub _validate_backend_opts {
     $be_opts{local_ssh_cmd} //= $any->_find_cmd(ssh => undef, { MSWin => 'Cygwin' });
     my $out = $any->_local_capture($be_opts{local_ssh_cmd}, '-V');
     if ($?) {
-        $any->_set_error(SSHA_CONNECTION_ERROR, 'ssh not found or bad version, rc: ', ($? >> 8));
+        $out =~ s/\s+/ /gs; $out =~ s/ $//;
+        $any->_set_error(SSHA_CONNECTION_ERROR, 'ssh not found or bad version, rc: '.($? >> 8)." output: $out");
         return;
     }
 
