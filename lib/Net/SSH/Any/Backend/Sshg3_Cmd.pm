@@ -107,3 +107,48 @@ sub DESTROY {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Net::SSH::Any::Backend::Sshg3_Cmd - Backend for Tectia sshg3 client
+
+=head1 SYNOPSIS
+
+  use Net::SSH::Any;
+  my $ssh = Net::SSH::Any->new($host, user => $user, password => $password,
+                               backend => 'Sshg3_Cmd');
+  $ssh->die_on_error("Unable to start SSH");
+  my $output = $ssh->capture("echo hello world");
+
+=head1 DESCRIPTION
+
+This module implements a Net::SSH::Any backend using the C<sshg3>
+utility distributed as part of the L<Tectia
+SSH|http://www.ssh.com/products/tectia-ssh> package.
+
+Note that Tectia SSH is not Open Source or Free Software. If you want
+to use it you will have to buy a license from some distributor.
+
+This backend supports password authentication in a secure way*.
+
+Currently, the feature set of this backend is similar to that of the
+other backends but it should be possible to add support for other
+features specific to the Tectia software. Get in touch with me in case
+you need any of them.
+
+The set of options currently supported is as follows:
+
+=over 4
+
+=item local_sshg3_cmd
+
+=item local_ssh_broker_g3_cmd
+
+=item exclusive
+
+
+=back
+
+=cut
