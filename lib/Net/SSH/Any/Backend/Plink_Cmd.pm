@@ -9,53 +9,61 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR);
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_backend_opts {
-    my ($any, %opts) = @_;
-    $any->SUPER::_validate_backend_opts(%opts) or return;
+    my ($any, %be_opts) = @_;
+    $any->SUPER::_validate_backend_opts(%be_opts) or return;
 
-    $opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, { MSWin => 'PuTTY' });
-    $opts{local_puttygen_cmd} //= $any->_find_cmd(puttygen => $opts{local_pink_cmd}, { MSWin => 'PuTTY' });
+    $be_opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, { MSWin => 'PuTTY' });
+    $be_opts{local_puttygen_cmd} //= $any->_find_cmd(puttygen => $be_opts{local_pink_cmd}, { MSWin => 'PuTTY' });
 
-    my $out = $any->_local_capture($opts{local_plink_cmd}, '-V') // '';
-    if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Relase)\s*(.*?)\s*$/mi) {
+    my $out = $any->_local_capture($be_opts{local_plink_cmd}, '-V');
+    if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Release)\s*(.*?)\s*$/mi) {
         $any->{be_plink_version} = $1;
     }
     else {
-        $any->_set_error(SSHA_CONNECTION_ERROR, 'plink not found or bad version');
+        $out =~ s/\s+/ /gs; $out =~ s/\s$//;
+        $any->_set_error(SSHA_CONNECTION_ERROR, "plink not found or bad version, output: $out");
         return;
     }
 
     my ($auth_type, $interactive_login);
 
-    if (defined $opts{password}) {
+    if (defined $be_opts{password}) {
         $auth_type = 'password';
-        if (my @too_much = grep defined($opts{$_}), qw(key_path passphrase)) {
+        if (my @too_much = grep defined($be_opts{$_}), qw(key_path passphrase)) {
             croak "option(s) '".join("', '", @too_much)."' can not be used together with 'password'"
         }
     }
-    elsif (defined (my $key = $opts{key_path})) {
-        $auth_type = 'publickey';
-        my $ppk = "$key.ppk";
-        $opts{ppk_path} = $ppk;
-        unless (-e $ppk) {
-            local $?;
-            my $cmd = $opts{local_puttygen_cmd};
-            my @cmd = ($cmd, -O => 'private', -o => $ppk, $key);
-            $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
-            if (system @cmd) {
-                $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed, rc: ' . ($? >> 8));
-                return
+    else {
+        if (defined (my $key = $be_opts{key_path})) {
+            my $ppk = "$key.ppk";
+            $be_opts{ppk_key_path} = $ppk;
+            unless (-e $ppk) {
+                local $?;
+                my $puttygen = $be_opts{local_puttygen_cmd};
+                my @cmd = ($puttygen, -O => 'private', -o => $ppk, $key);
+                $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
+                my $out = $any->_local_capture(@cmd);
+                if ($?) {
+                    $out =~ s/\s+/ /gs; $out =~ s/\s$//;
+                    $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed, rc: ', ($? >> 8), ', output: ', $out);
+                    return
+                }
             }
+            # fallback
+        }
+        if (defined (my $ppk = $be_opts{ppk_key_path})) {
             unless (-e $ppk) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed to convert key to PPK format');
                 return
             }
+            $auth_type = 'publickey';
+        }
+        else {
+            $auth_type = 'default';
         }
     }
-    else {
-        $auth_type = 'default';
-    }
 
-    $any->{be_opts} = \%opts;
+    $any->{be_opts} = \%be_opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = 0;
     1;
@@ -67,14 +75,15 @@ sub _make_cmd {
 
     my @args = ( $be_opts->{local_plink_cmd},
                  '-ssh',
-                 '-batch',
-                 '-C' );
+                 '-batch' );
 
+    push @args, '-C' if $be_opts->{compress};
     push @args, -l => $be_opts->{user} if defined $be_opts->{user};
     push @args, -P => $be_opts->{port} if defined $be_opts->{port};
-    push @args, -i => $be_opts->{ppk_path} if defined $be_opts->{ppk_path};
+    push @args, -i => $be_opts->{ppk_key_path} if defined $be_opts->{ppk_key_path};
 
     if ($any->{be_auth_type} eq 'password') {
+        # Add some guard here, user should allow this thing explicitly!
         push @args, -pw => $be_opts->{password};
     }
 

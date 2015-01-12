@@ -4,28 +4,32 @@ use strict;
 use warnings;
 use Carp;
 use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug);
-use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR);
+use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR SSHA_CONNECTION_ERROR);
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_backend_opts {
-    my ($any, %opts) = @_;
-    $any->SUPER::_validate_backend_opts(%opts) or return;
+    my ($any, %be_opts) = @_;
+    $any->SUPER::_validate_backend_opts(%be_opts) or return;
 
-    $opts{local_ssh_cmd} //= $any->_find_cmd(ssh => undef, { MSWin => 'Cygwin' });
+    $be_opts{local_ssh_cmd} //= $any->_find_cmd(ssh => undef, { MSWin => 'Cygwin' });
+    my $out = $any->_local_capture($be_opts{local_ssh_cmd}, '-V');
+    if ($?) {
+        $any->_set_error(SSHA_CONNECTION_ERROR, 'ssh not found or bad version, rc: ', ($? >> 8));
+        return;
+    }
 
-    defined $opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
 
-    if (defined $opts{password}) {
+    if (defined $be_opts{password}) {
         $auth_type = 'password';
         $interactive_login = 1;
-        if (my @too_more = grep defined($opts{$_}), qw(key_path passphrase)) {
+        if (my @too_more = grep defined($be_opts{$_}), qw(key_path passphrase)) {
             croak "option(s) '".join("', '", @too_more)."' can not be used together with 'password'"
         }
     }
-    elsif (defined $opts{key_path}) {
+    elsif (defined $be_opts{key_path}) {
         $auth_type = 'publickey';
-        if (defined $opts{passphrase}) {
+        if (defined $be_opts{passphrase}) {
             $auth_type .= ' with passphrase';
             $interactive_login = 1;
         }
@@ -34,7 +38,7 @@ sub _validate_backend_opts {
         $auth_type = 'default';
     }
 
-    $any->{be_opts} = \%opts;
+    $any->{be_opts} = \%be_opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = $interactive_login;
     1;
