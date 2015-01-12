@@ -45,7 +45,7 @@ sub _validate_backend_opts {
                 my $out = $any->_local_capture(@cmd);
                 if ($?) {
                     $out =~ s/\s+/ /gs; $out =~ s/\s$//;
-                    $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed, rc: ', ($? >> 8), ', output: ', $out);
+                    $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed, rc: '.($? >> 8).", output: $out");
                     return
                 }
             }
