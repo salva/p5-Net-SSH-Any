@@ -180,7 +180,7 @@ sub _local_capture {
     my ($proc, @pipes) = $any->_run_cmd({ stdout_pipe => 1, stderr_to_stdout => 1, _local => 1 },
                                         \@cmd);
     my ($out) = $any->_io3({}, $proc, @pipes);
-    $out;
+    $out // '';
 }
 
 sub _capture2 {
