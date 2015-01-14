@@ -37,6 +37,12 @@ sub io3_check_and_clean_data {
     \@data
 }
 
+sub current_user {
+    my $any = shift;
+    local ($SIG{__DIE__}, $@);
+    eval { (getpwuid $<)[0] } // eval { getlogin() }
+}
+
 sub interactive_login {
     my ($any, $pty, $proc) = @_;
     my $opts = $any->{be_opts}; # FIXME. This shouldn't be here!
