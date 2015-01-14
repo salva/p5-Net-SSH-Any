@@ -24,7 +24,9 @@ sub _new {
 
     $test->{run_server} = delete $opts->{run_server} // 1;
 
-    my @backends = _array_or_scalar_to_list(delete $opts->{backend} // delete $opts->{backends} // \@default_backends);
+    my @backends = _array_or_scalar_to_list(delete $opts->{backend} //
+                                            delete $opts->{backends} //
+                                            \@default_backends);
     $test->{backends} = \@backends;
 
     for my $backend (@backends) {
