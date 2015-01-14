@@ -11,19 +11,22 @@ use Net::SSH::Any::Constants qw(:error);
 use Scalar::Util qw(dualvar);
 use Encode ();
 
-our @CARP_NOT = qw(Net::SSH::Any::Util);
+use Net::SSH::Any::_Base;
+our @ISA = qw(Net::SSH::Any::_Base);
 
 my $REQUIRED_BACKEND_VERSION = '2';
-our @BACKENDS = qw(Net_OpenSSH Net_SSH2 Net_SSH_Perl Ssh_Cmd Plink_Cmd);
+our @default_backends = qw(Net_OpenSSH Net_SSH2 Net_SSH_Perl Ssh_Cmd Plink_Cmd);
 
 # regexp from Regexp::IPv6
 my $IPv6_re = qr((?-xism::(?::[0-9a-fA-F]{1,4}){0,5}(?:(?::[0-9a-fA-F]{1,4}){1,2}|:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})))|[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}|:)|(?::(?:[0-9a-fA-F]{1,4})?|(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))))|:(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})?|))|(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|:[0-9a-fA-F]{1,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){0,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,2}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,3}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))));
 
-sub new {
-    my $class = shift;
-    my %opts = (@_ & 1 ? (host => @_) : @_);
 
-    my $target = delete $opts{host};
+sub _new {
+    my ($class, $opts) = @_;
+
+    my $any = $class->SUPER::_new($opts);
+
+    my $target = delete $opts->{host};
     defined $target or croak "mandatory parameter host missing";
 
     my ($user, $passwd, $ipv6, $host, $port) =
@@ -48,105 +51,66 @@ sub new {
                      $}ix or croak "bad host/target '$target' specification";
 
     ($host) = $ipv6 =~ /^\[?(.*)\]?$/ if defined $ipv6;
-    defined $host or croak "host argument missing";
 
-    $user //= delete $opts{user} // do {
-        local ($SIG{__DIE__}, $@);
-        eval { (getpwuid $<)[0] } //
-        eval { getlogin() }
-    };
+    $any->{host} = $host //= croak "host argument missing";
+    $any->{port} = $port //= delete $opts->{port} // 22;
+    $any->{user} = $user //= delete $opts->{user} // $any->_os_current_user;
+    $any->{password} = $passwd //= delete $opts->{passwd} // delete $opts->{password};
 
-    $port //= delete $opts{port};
-    $passwd //= delete $opts{passwd} // delete $opts{password};
-
-    my ($key_path, $passphrase);
     unless (defined $passwd) {
-        $key_path = delete $opts{key_path};
-        $passphrase = delete $opts{passphrase};
-    }
-    my $io_timeout = delete $opts{io_timeout} // 120;
-    my $timeout = delete $opts{timeout};
-    my $encoding = delete $opts{encoding} // 'utf8';
-    my $stream_encoding = delete $opts{stream_encoding} // $encoding;
-    my $argument_encoding = delete $opts{argument_encoding} // $encoding;
-
-    my $remote_shell = delete $opts{remote_shell} // 'POSIX';
-
-    my $known_hosts_path = delete $opts{known_hosts_path};
-    my $strict_host_key_checking = delete $opts{strict_host_key_checking} // 1;
-    my $compress = delete $opts{compress} // 1;
-    my $backend_opts = delete $opts{backend_opts};
-
-    my $os = delete $opts{os};
-
-    my (%remote_cmd, %local_cmd);
-    for (keys %opts) {
-        /^remote_(.*)_cmd$/ and $remote_cmd{$1} = $opts{$_};
-        /^local_(.*)_cmd$/ and $local_cmd{$1} = $opts{$_};
+        $any->{key_path} = delete $opts->{key_path};
+        $any->{passphrase} = delete $opts->{passphrase};
     }
 
+    $any->{io_timeout} = delete $opts->{io_timeout} // 120;
+    $any->{timeout} = delete $opts->{timeout};
+    my $encoding = $any->{encoding} = delete $opts->{encoding} // 'utf8';
+    $any->{stream_encoding} = delete $opts->{stream_encoding} // $encoding;
+    $any->{argument_encoding} = delete $opts->{argument_encoding} // $encoding;
+    $any->{remote_shell} = delete $opts->{remote_shell} // 'POSIX';
+    $any->{known_hosts_path} = delete $opts->{known_hosts_path};
+    $any->{strict_host_key_checking} = delete $opts->{strict_host_key_checking} // 1;
+    $any->{compress} = delete $opts->{compress} // 1;
+    $any->{backend_opts} = delete $opts->{backend_opts};
+    my @backends = _array_or_scalar_to_list(delete $opts->{backend} // delete $opts->{backends} // \@default_backends);
+    $any->{backends} = \@backends;
 
-    my $any = { host => $host,
-                user => $user,
-                port => $port,
-                password => $passwd,
-                key_path => $key_path,
-                passphrase => $passphrase,
-                timeout => $timeout,
-                io_timeout => $io_timeout,
-                stream_encoding => $stream_encoding,
-                argument_encoding => $argument_encoding,
-                known_hosts_path => $known_hosts_path,
-                strict_host_key_checking => $strict_host_key_checking,
-                compress => $compress,
-                backend_opts => $backend_opts,
-                error_prefix => [],
-		remote_shell => $remote_shell,
-                remote_cmd => \%remote_cmd,
-                local_cmd => \%local_cmd,
-                os => $os,
-                error => 0,
-               };
-    bless $any, $class;
+    unless (defined $user) {
+        $self->_set_error(SSHA_UNIMPLEMENTED_ERROR, "Unable to infer login name");
+        return $any;
+    }
 
-    my $backends = delete $opts{backends};
-    $backends = delete $opts{backend} unless defined $backends;
+    for my $backend (@backends) {
+        $any->{error} = 0;
+        if ($any->_load_backend_module(__PACKAGE__, $backend, $REQUIRED_BACKEND_VERSION)) {
+            $any->{backend} or croak "internal error: backend not set";
+            my %backend_opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout
+                                                           strict_host_key_checking known_hosts_path
+                                                           compress );
+            if (my $extra = $any->{backend_opts}{$backend}) {
+                @backend_opts{keys %$extra} = values %$extra;
+            }
+            defined $backend_opts{$_} or delete $backend_opts{$_}
+                for keys %backend_opts;
 
-    my @backend_log;
-    $any->{_backend_log} = \@backend_log;
-    for my $backend (_array_or_scalar_to_list($backends // \@BACKENDS)) {
-        my %backend_opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout
-                                                       strict_host_key_checking known_hosts_path
-                                                       compress );
-        if (my $extra = $any->{backend_opts}{$backend}) {
-            @backend_opts{keys %$extra} = values %$extra;
+            if ($any->_validate_backend_opts(%backend_opts)) {
+                $any->_connect;
+                return $any;
+            }
+            unless ($any->{error}) {
+                $any->_set_error(SSHA_BACKEND_ERROR, "internal error: _validate_backend_opts failed without setting the error");
+            }
+            $any->_log_error_and_reset_backend;
         }
-        defined $backend_opts{$_} or delete $backend_opts{$_}
-            for keys %backend_opts;
-
-        local $any->{error} = 0;
-        $any->{backend_module} = "Net::SSH::Any::Backend::$backend";
-
-        if ($any->_load_backend_module and
-            $any->_validate_backend_opts(%backend_opts)) {
-            $any->{backend} = $backend;
-            $any->_connect;
-            last;
-        }
-        push @backend_log, "$backend: [".($any->{error}+0)."] $any->{error}";
-        delete $any->{backend_module};
     }
-    $any->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available")
-        unless defined $any->{backend_module};
+    $any->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available");
     $any;
 }
 
-sub error { shift->{error} }
-
-sub die_on_error {
-    my $ssh = shift;
-    $ssh->{error} and croak(join(': ', @_, "$ssh->{error}"));
-    1;
+sub new {
+    my $class = shift;
+    my %opts = (@_ & 1 ? (host => @_) : @_);
+    $class->_new(\%opts);
 }
 
 sub _clear_error {
@@ -159,51 +123,6 @@ sub _clear_error {
     $any->{error} = 0;
     1;
 }
-
-sub _set_error {
-    my $any = shift;
-    my $code = shift || 0;
-    my @msg = grep { defined && length } @_;
-    @msg = "Unknown error $code" unless @msg;
-    my $error = $any->{error} = ( $code
-                                  ? Scalar::Util::dualvar($code, join(': ', @{$any->{error_prefix}}, @msg))
-                                  : 0 );
-    $debug and $debug & 1 and _debug "set_error($code - $error)";
-    return $error
-}
-
-sub _or_set_error {
-    my $any = shift;
-    $any->{error} or $any->_set_error(@_);
-}
-
-sub _load_backend_module {
-    my $any = shift;
-    my $module = $any->{backend_module};
-    local ($@, $SIG{__DIE__});
-    my $ok = eval <<EOE;
-no strict;
-no warnings;
-require $module;
-1;
-EOE
-    unless($ok) {
-        $any->_set_error(SSHA_BACKEND_ERROR, "unable to load module '$module'", $@);
-        return;
-    }
-    unless ($module->can('_backend_api_version')) {
-        $any->_set_error(SSHA_BACKEND_ERROR, 'method _backend_api_version missing');
-        return;
-    }
-    my $version = $module->_backend_api_version;
-    unless ($version >= $REQUIRED_BACKEND_VERSION) {
-        $any->_set_error(SSHA_BACKEND_ERROR,
-                         "backend API version $version is too old ($REQUIRED_BACKEND_VERSION required)");
-        return;
-    }
-    1;
-}
-
 
 sub _delete_stream_encoding {
     my ($any, $opts) = @_;
@@ -226,6 +145,7 @@ sub _find_encoding {
     return $enc
 }
 
+# FIXME: move to base after renaming it _or_check_error_after_eval or alike
 sub _check_error_after_eval {
     if ($@) {
         my ($any, $code) = @_;
@@ -368,18 +288,6 @@ sub _check_child_error {
     return 1;
 }
 
-sub _open_file {
-    my ($any, $def_mode, $name_or_args) = @_;
-    my ($mode, @args) = (ref $name_or_args
-			 ? @$name_or_args
-			 : ($def_mode, $name_or_args));
-    if (open my $fh, $mode, @args) {
-        return $fh;
-    }
-    $any->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to open file '@args': $!");
-    return undef;
-}
-
 _sub_options capture => qw(timeout stdin_data stderr_to_stdout stderr_discard
                            stderr_fh stderr_file);
 sub capture {
@@ -454,14 +362,6 @@ sub sftp {
     $any->_sftp(\%opts)
 }
 
-my %loaded;
-sub _load_module {
-    my ($any, $module) = @_;
-    $loaded{$module} ||= eval "require $module; 1" and return 1;
-    $any->_set_error(SSHA_UNIMPLEMENTED_ERROR, "Unable to load perl module $module");
-    return;
-}
-
 sub _scp_delegate {
     my $any = shift;
     my $class = shift;
@@ -477,49 +377,6 @@ sub scp_mkdir       { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker
 sub scp_put         { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
 sub scp_put_content { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
 
-
-sub _load_os {
-    my $any = shift;
-    my $os = $any->{os} //= ($^O =~ /^mswin/i ? 'MSWin' : 'POSIX');
-    my $os_module = "Net::SSH::Any::OS::$os";
-    $any->_load_module($os_module) or return;
-    $any->{os_module} = $os_module;
-}
-
-# transparently delegate method calls to backend and os packages:
-sub AUTOLOAD {
-    our $AUTOLOAD;
-    my ($name) = $AUTOLOAD =~ /([^:]*)$/;
-    my $sub;
-    no strict 'refs';
-    if (my ($os_name) = $name =~ /^_os_(.*)/) {
-        $sub = sub {
-            my $os = $_[0]->{os_module} //= $_[0]->_load_os or return;
-            my $method = $os->can($os_name)
-                or croak "method '$os_name' not defined in OS '$os'";
-            goto &$method;
-        };
-    }
-    else {
-        $sub = sub {
-            my $backend = $_[0]->{backend_module} or return;
-            my $method = $backend->can($name)
-                or croak "method '$name' not defined in backend '$backend'";
-            goto &$method;
-        };
-    }
-    *{$AUTOLOAD} = $sub;
-    goto &$sub;
-}
-
-sub DESTROY {
-    my $any = shift;
-    my $be = $any->{backend_module};
-    if (defined $be) {
-        my $sub = $be->can('DESTROY');
-        $sub->($any) if $sub;
-    }
-}
 
 1;
 
