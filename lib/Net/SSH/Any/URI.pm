@@ -169,6 +169,15 @@ sub password {
     $self->{c_params}{password}[0];
 }
 
+sub get {
+    my ($self, $key) = @_;
+    $key = $alias{$key} // $key;
+    $self->{$key} // do {
+        my $a = $self->{c_params}{$key};
+        ($a ? $a->[0] : undef)
+    }
+}
+
 sub _c_params_escaped {
     my ($self, $safe) = @_;
     my $c_params = $self->{c_params} // return;

@@ -7,6 +7,7 @@ use warnings;
 use Carp;
 
 use Net::SSH::Any::Util;
+use Net::SSH::Any::URI;
 use Net::SSH::Any::Constants qw(:error);
 use Scalar::Util qw(dualvar);
 use Encode ();
@@ -17,49 +18,27 @@ our @ISA = qw(Net::SSH::Any::_Base);
 my $REQUIRED_BACKEND_VERSION = '2';
 our @default_backends = qw(Net_OpenSSH Net_SSH2 Net_SSH_Perl Ssh_Cmd Plink_Cmd);
 
-# regexp from Regexp::IPv6
-my $IPv6_re = qr((?-xism::(?::[0-9a-fA-F]{1,4}){0,5}(?:(?::[0-9a-fA-F]{1,4}){1,2}|:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})))|[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}:(?:[0-9a-fA-F]{1,4}|:)|(?::(?:[0-9a-fA-F]{1,4})?|(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))))|:(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})?|))|(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|:[0-9a-fA-F]{1,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){0,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,2}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,3}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))|(?:(?::[0-9a-fA-F]{1,4}){0,4}(?::(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))|(?::[0-9a-fA-F]{1,4}){1,2})|:))));
-
-
 sub _new {
     my ($class, $opts) = @_;
-
     my $any = $class->SUPER::_new($opts);
+    $opts->{uri} // $opts->{host} // croak "either host or uri argument must be given";
+    $opts->{password} //= delete $opts->{passwd};
+    my $uri = $any->{uri} = Net::SSH::Any::URI->new(port => 22,
+                                                    map { $_ => delete $opts->{$_} }
+                                                    qw(uri host user port password key_path passphrase));
+    unless ($uri) {
+        $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to parse URI");
+        return $any;
+    }
 
-    my $target = delete $opts->{host};
-    defined $target or croak "mandatory parameter host missing";
-
-    my ($user, $passwd, $ipv6, $host, $port) =
-        $target =~ m{^
-                     \s*               # space
-                     (?:
-                         ([^\@:]+)       # username
-                         (?::(.*))?      # : password
-                         \@              # @
-                     )?
-                     (?:               # host
-                         (              #   IPv6...
-                             \[$IPv6_re\] #     [IPv6]
-                         |            #     or
-                             $IPv6_re     #     IPv6
-                         )
-                     |              #   or
-                         ([^\[\]\@:]+)  #   hostname / ipv4
-                     )
-                     (?::([^\@:]+))?   # port
-                     \s*               # space
-                     $}ix or croak "bad host/target '$target' specification";
-
-    ($host) = $ipv6 =~ /^\[?(.*)\]?$/ if defined $ipv6;
-
-    $any->{host} = $host //= croak "host argument missing";
-    $any->{port} = $port //= delete $opts->{port} // 22;
-    $any->{user} = $user //= delete $opts->{user} // $any->_os_current_user;
-    $any->{password} = $passwd //= delete $opts->{passwd} // delete $opts->{password};
-
-    unless (defined $passwd) {
-        $any->{key_path} = delete $opts->{key_path};
-        $any->{passphrase} = delete $opts->{passphrase};
+    unless (defined $uri->user) {
+        if (defined (my $current_user = $any->_os_current_user)) {
+            $uri->user($current_user);
+        }
+        else {
+            $any->_set_error(SSHA_UNIMPLEMENTED_ERROR, "Unable to infer login name");
+            return $any;
+        }
     }
 
     $any->{io_timeout} = delete $opts->{io_timeout} // 120;
@@ -75,18 +54,15 @@ sub _new {
     my @backends = _array_or_scalar_to_list(delete $opts->{backend} // delete $opts->{backends} // \@default_backends);
     $any->{backends} = \@backends;
 
-    unless (defined $user) {
-        $self->_set_error(SSHA_UNIMPLEMENTED_ERROR, "Unable to infer login name");
-        return $any;
-    }
+
 
     for my $backend (@backends) {
         $any->{error} = 0;
         if ($any->_load_backend_module(__PACKAGE__, $backend, $REQUIRED_BACKEND_VERSION)) {
             $any->{backend} or croak "internal error: backend not set";
-            my %backend_opts = map { $_ => $any->{$_} } qw(host port user password passphrase key_path timeout
-                                                           strict_host_key_checking known_hosts_path
-                                                           compress );
+            my %backend_opts = map { $_ => $any->{$_} // $uri->get($_) }
+                qw(host port user password passphrase key_path timeout
+                   strict_host_key_checking known_hosts_path compress );
             if (my $extra = $any->{backend_opts}{$backend}) {
                 @backend_opts{keys %$extra} = values %$extra;
             }
@@ -109,7 +85,7 @@ sub _new {
 
 sub new {
     my $class = shift;
-    my %opts = (@_ & 1 ? (host => @_) : @_);
+    my %opts = (@_ & 1 ? (uri => @_) : @_);
     $class->_new(\%opts);
 }
 
