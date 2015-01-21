@@ -28,17 +28,20 @@ sub uri_unescape {
 sub new {
     my $class = shift;
     my %default = (@_ & 1 ? (uri => @_) : @_);
+    use Data::Dumper;
+    print Dumper [\%default, \@_];
     $_ = encode(latin1 => $_, Encode::FB_CROAK) for values %default;
     my $uri = delete $default{uri};
     my %c_params;
     my %uri = (c_params => \%c_params);
 
-
-
-    if (not defined $uri) {
-        defined $default{host} or croak "both uri and host are undefined";
+    for (keys %alias) {
+        if (defined (my $default = delete $default{$_})) {
+            $default{$alias{$_}} //= $default;
+        }
     }
-    else {
+
+    if (defined $uri) {
         if (my ($scheme, $user, $password, $c_params, $ipv6, $host, $port) =
             $uri =~ m{^
                       \s*                  # trim space
@@ -87,11 +90,8 @@ sub new {
             return;
         }
     }
-
-    for (keys %alias) {
-        if (defined (my $default = delete $default{$_})) {
-            $default{$alias{$_}} //= $default;
-        }
+    else {
+        defined $default{host} or croak "both uri and host are undefined";
     }
 
     for (qw(scheme user host port)) {
