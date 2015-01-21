@@ -6,7 +6,8 @@ use warnings;
 sub validate_backend_opts {
     my $any = shift;
     if (defined $any->{password}) {
-        
+
+        $sshd->_log("trying to authenticate using given password");
     }
 }
 
