@@ -148,11 +148,20 @@ sub c_params {
     @out;
 }
 
+sub c_param_count {
+    my ($self, $key) = @_;
+    $key = $alias{$key} // $key;
+    my $c_params = $self->{c_params} or return 0;
+    my $vs = $c_params->{$key} or return 0;
+    scalar (@$vs);
+}
+
 sub c_param {
     my ($self, $key) = @_;
     $key = $alias{$key} // $key;
     my $c_params = $self->{c_params} or return;
     my $vs = $c_params->{$key} or return;
+    wantarray or croak "c_param used in scalar context is not supported";
     @$vs;
 }
 
