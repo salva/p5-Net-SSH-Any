@@ -23,9 +23,15 @@ sub _new {
     my $any = $class->SUPER::_new($opts);
     $opts->{uri} // $opts->{host} // croak "either host or uri argument must be given";
     $opts->{password} //= delete $opts->{passwd};
-    my $uri = $any->{uri} = Net::SSH::Any::URI->new(port => 22,
-                                                    map { $_ => delete $opts->{$_} }
-                                                    qw(uri host user port password key_path passphrase));
+
+    my @uri_opts = (port => 22);
+    for (qw(uri host user port password key_path passphrase)) {
+        if (defined (my $v = delete $opts->{$_})) {
+            push @uri_opts, $_, $v;
+        }
+    }
+    my $uri = $tssh->{uri} = Net::SSH::Any::URI->new(@uri_opts);
+
     unless ($uri) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to parse URI");
         return $any;
@@ -53,8 +59,6 @@ sub _new {
     $any->{backend_opts} = delete $opts->{backend_opts};
     my @backends = _array_or_scalar_to_list(delete $opts->{backend} // delete $opts->{backends} // \@default_backends);
     $any->{backends} = \@backends;
-
-
 
     for my $backend (@backends) {
         $any->{error} = 0;
