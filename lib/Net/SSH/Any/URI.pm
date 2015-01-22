@@ -4,7 +4,6 @@ use strict;
 use warnings;
 use Carp;
 use Encode;
-use Data::Dumper;
 
 my %alias = (passwd => 'password',
              pwd => 'password');
@@ -19,6 +18,14 @@ sub uri_escape {
     $str
 }
 
+sub uri_escape_path { # doesn't escape slashes
+    my $str = shift;
+    $str =~ s/([^A-Za-z0-9\-\._~\[\]\/])/sprintf "%%%02x", ord $1/ge if defined $str;
+    $str
+}
+
+
+
 sub uri_unescape {
     my $str = shift;
     $str =~ s/\%([\da-f]{2})/chr hex $1/ige if defined $str;
@@ -28,8 +35,6 @@ sub uri_unescape {
 sub new {
     my $class = shift;
     my %default = (@_ & 1 ? (uri => @_) : @_);
-    use Data::Dumper;
-    print Dumper [\%default, \@_];
     $_ = encode(latin1 => $_, Encode::FB_CROAK) for values %default;
     my $uri = delete $default{uri};
     my %c_params;
@@ -42,7 +47,7 @@ sub new {
     }
 
     if (defined $uri) {
-        if (my ($scheme, $user, $password, $c_params, $ipv6, $host, $port) =
+        if (my ($scheme, $user, $password, $c_params, $ipv6, $host, $port, $path) =
             $uri =~ m{^
                       \s*                  # trim space
                       (?:([\w+-]+)://)?+   # scheme
@@ -59,12 +64,13 @@ sub new {
                               $IPv6_re     #     IPv6
                           )
                       |                    #   or
-                          ([^\[\]\@:]+)    #   hostname / ipv4
+                          ([^\[\]\@:/]+)   #   hostname / ipv4
                       )
-                      (?::(\w+\%))?+         # port
+                      (?::(\w+\%))?+       # port
+                      (/.*)?+              # path
                       \s*                  # trim space
                       $}xo) {
-            @uri{qw(scheme user port)} = map uri_unescape($_), $scheme, $user, $port;
+            @uri{qw(scheme user port path)} = map uri_unescape($_), $scheme, $user, $port, $path;
 
             if (defined $ipv6) {
                 $ipv6 =~ /^\[?(.*?)\]?$/;
@@ -94,7 +100,7 @@ sub new {
         defined $default{host} or croak "both uri and host are undefined";
     }
 
-    for (qw(scheme user host port)) {
+    for (qw(scheme user host port path)) {
         my $v = delete $default{$_};
         $uri{$_} //= $v;
     }
@@ -113,7 +119,7 @@ sub new {
     bless $self, $class;
 }
 
-for my $slot (qw(scheme user host port)) {
+for my $slot (qw(scheme user host port path)) {
     my $sub = sub {
         my $self = shift;
         if (@_) {
@@ -212,6 +218,7 @@ sub uri {
     my $h = $self->{host};
     push @parts, ($h =~ /^$IPv6_re$/o ? "[$h]" : uri_escape($h));
     push @parts, ':', uri_escape($self->{port}) if defined $self->{port};
+    push @parts, uri_escape_path($self->{path}) if defined $self->{path};
     join '', @parts;
 }
 
