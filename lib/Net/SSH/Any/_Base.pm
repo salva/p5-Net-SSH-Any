@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Carp;
 
+use Scalar::Util ();
 use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR SSHA_LOCAL_IO_ERROR SSHA_UNIMPLEMENTED_ERROR);
 use Net::SSH::Any::Util;
 our @CARP_NOT = qw(Net::SSH::Any::Util);
