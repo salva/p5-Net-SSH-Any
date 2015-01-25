@@ -55,7 +55,17 @@ sub _default_logger {
     print {$fh} $text;
 }
 
-my @uri_keys = qw(host user port password key_path passphrase);
+my @uri_keys = qw(host user port);
+
+sub _opts_delete_list {
+    my $opts = shift;
+    for (@_) {
+        return @$_ if ref $_ eq 'ARRAY';
+        if (defined (my $v = delete $opts->{$_})) {
+            return _array_or_scalar_to_list $v
+        }
+    }
+}
 
 sub _new {
     my ($class, $opts) = @_;
@@ -65,6 +75,9 @@ sub _new {
     open my $logger_fh_dup, '>>&', $logger_fh;
     $tssh->{logger_fh} = $logger_fh_dup;
     $tssh->{logger} = delete $opts->{logger} // \&_default_logger;
+    $tssh->{find_keys} = delete $opts->{find_keys} // 1;
+    $tssh->{timeout} = delete $opts->{timeout} // 10;
+    $tssh->{run_server} = delete $opts->{run_server} // 1;
 
     # This is a bit thorny, but we are trying to support receiving
     # just one uri or an array of them and also uris represented as
@@ -73,14 +86,13 @@ sub _new {
     #   uri => { host => localhost, port => 1022 }
     #   uri => [ 'ssh://localhost:1022',
     #            { host => localhost, port => 2022} ]
-    my @targets = _array_or_scalar_to_list(delete $opts->{targets} //
-                                           delete $opts->{target}  //
-                                           delete $opts->{uris}    //
-                                           delete $opts->{uri});
+    my @targets = _opts_delete_list($opts, qw(targets target uris uri));
     # And we also want to support passing the target details as direct
     # arguments to the constructor.
     push @targets, {} unless @targets;
-    my @uri_defaults = (port => 22, host => 'localhost');
+    my $user_default = $tssh->_os_current_user;
+    my @uri_defaults = (scheme => 'ssh', user => $user_default,
+                        host => 'localhost', port => 22);
     for (@uri_keys) {
         if (defined (my $v = delete $opts->{$_})) {
             push @uri_defaults, $_, $v;
@@ -100,15 +112,19 @@ sub _new {
         }
     }
 
-    use Data::Dumper;
-    print Dumper($tssh);
+    my @passwords = _opts_delete_list($opts, qw(passwords password));
+    $tssh->{passwords} = \@passwords;
 
-    $tssh->{timeout} = delete $opts->{timeout} // 10;
-    $tssh->{run_server} = delete $opts->{run_server} // 1;
+    my @keys_found;
+    if ($tssh->{find_keys}) {
+        @keys_found = $tssh->_search_keys;
+        $tssh->{keys_found} = \@keys_found;
+    }
+    my @key_paths = (@keys_found,
+                     _opts_delete_list($opts, qw(key_paths key_path)));
+    $tssh->{key_paths} = \@key_paths;
 
-    my @backends = _array_or_scalar_to_list(delete $opts->{backend} //
-                                            delete $opts->{backends} //
-                                            \@default_backends);
+    my @backends = _opts_delete_list($opts, qw(backends backend), \@default_backends);
     $tssh->{backends} = \@backends;
 
     for my $backend (@backends) {
