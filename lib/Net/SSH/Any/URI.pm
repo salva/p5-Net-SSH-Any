@@ -5,8 +5,12 @@ use warnings;
 use Carp;
 use Encode;
 
-my %alias = (passwd => 'password',
-             pwd => 'password');
+my @slots = qw(scheme user host port path);
+my %is_slot = map { $_ => $_ } @slots;
+
+my %alias = (passwd => 'password', pwd => 'password');
+
+
 
 my %unsafe = (password => 1, passphrase => 1);
 
@@ -66,7 +70,7 @@ sub new {
                       |                    #   or
                           ([^\[\]\@:/]+)   #   hostname / ipv4
                       )
-                      (?::(\w+\%))?+       # port
+                      (?::([\w\%]+))?+     # port
                       (/.*)?+              # path
                       \s*                  # trim space
                       $}xo) {
@@ -100,7 +104,7 @@ sub new {
         defined $default{host} or croak "both uri and host are undefined";
     }
 
-    for (qw(scheme user host port path)) {
+    for (@slots) {
         my $v = delete $default{$_};
         $uri{$_} //= $v;
     }
@@ -119,7 +123,7 @@ sub new {
     bless $self, $class;
 }
 
-for my $slot (qw(scheme user host port path)) {
+for my $slot (@slots) {
     my $sub = sub {
         my $self = shift;
         if (@_) {
@@ -130,6 +134,7 @@ for my $slot (qw(scheme user host port path)) {
                 $slot eq 'host' and croak "attribute host is mandatory";
                 delete $self->{$slot};
             }
+            return;
         }
         $self->{$slot};
     };
@@ -185,12 +190,31 @@ sub password {
 }
 
 sub get {
-    my ($self, $key) = @_;
+    my $self = shift;
+    my $key = shift;
     $key = $alias{$key} // $key;
-    $self->{$key} // do {
+    my @r = $self->{$key} // do {
         my $a = $self->{c_params}{$key};
-        ($a ? $a->[0] : undef)
+        ($a ? @$a : ())
+    };
+    if (@r > 1 and not wantarray) {
+        warn "\$uri->get($key) called on scalar context when it contains more than one entry";
     }
+    wantarray ? @r : $r[0];
+}
+
+sub set {
+    my $self = shift;
+    my $key = shift;
+    $key = $alias{$key} // $key;
+    if ($is_slot{$key}) {
+        @_ != 1 and warn "URI attribute $key is an scalar but set($key) called with ".scalar(@_)." arguments";
+        $self->$key($_[0]);
+    }
+    else {
+        $self->set_c_param($key, @_);
+    }
+    ()
 }
 
 sub _c_params_escaped {

@@ -13,6 +13,9 @@ our @ISA = qw(Net::SSH::Any::_Base);
 
 my @default_backends = qw(Remote OpenSSH);
 
+my @default_test_commands = ('true', 'exit', 'echo foo', 'date',
+                             'cmd /c ver', 'cmd /c echo foo');
+
 sub new {
     my ($class, %opts) = @_;
     return $class->_new(\%opts);
@@ -65,6 +68,7 @@ sub _opts_delete_list {
             return _array_or_scalar_to_list $v
         }
     }
+    ()
 }
 
 sub _new {
@@ -78,6 +82,8 @@ sub _new {
     $tssh->{find_keys} = delete $opts->{find_keys} // 1;
     $tssh->{timeout} = delete $opts->{timeout} // 10;
     $tssh->{run_server} = delete $opts->{run_server} // 1;
+    $tssh->{test_commands} = [_opts_delete_list($opts, 'test_commands',
+                                                \@default_test_commands)];
 
     # This is a bit thorny, but we are trying to support receiving
     # just one uri or an array of them and also uris represented as
@@ -142,5 +148,14 @@ sub _new {
     $tssh;
 }
 
+sub _run_remote_cmd {
+    
+}
+
+sub _is_server_running {
+    my $tssh = shift;
+    $tssh->_log("_is_server_running not implemnented yet!");
+    1;
+}
 
 1;
