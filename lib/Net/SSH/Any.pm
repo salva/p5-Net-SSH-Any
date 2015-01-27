@@ -25,12 +25,16 @@ sub _new {
     $opts->{password} //= delete $opts->{passwd};
 
     my @uri_opts = (port => 22);
-    for (qw(uri host user port password key_path passphrase)) {
+    if (defined (my $uri = delete $opts->{uri})) {
+        $uri = $uri->as_string if ref $uri and $uri->can('as_string');
+        push @uri_opts, uri => $uri;
+    }
+    for (qw(host user port password key_path passphrase)) {
         if (defined (my $v = delete $opts->{$_})) {
             push @uri_opts, $_, $v;
         }
     }
-    my $uri = $tssh->{uri} = Net::SSH::Any::URI->new(@uri_opts);
+    my $uri = $any->{uri} = Net::SSH::Any::URI->new(@uri_opts);
 
     unless ($uri) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to parse URI");
@@ -64,7 +68,7 @@ sub _new {
         $any->{error} = 0;
         if ($any->_load_backend_module(__PACKAGE__, $backend, $REQUIRED_BACKEND_VERSION)) {
             $any->{backend} or croak "internal error: backend not set";
-            my %backend_opts = map { $_ => $any->{$_} // $uri->get($_) }
+            my %backend_opts = map { $_ => $any->{$_} // scalar($uri->get($_)) }
                 qw(host port user password passphrase key_path timeout
                    strict_host_key_checking known_hosts_path compress );
             if (my $extra = $any->{backend_opts}{$backend}) {
