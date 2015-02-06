@@ -108,16 +108,16 @@ sub new {
 
     for (@slots) {
         my $v = delete $opt{$_};
-        $uri{$_} = $v if defined $v;
+        $uri{$_} //= $v if defined $v;
     }
 
     if (defined (my $password = delete $opt{password})) {
-        $uri->{c_params}{password} = [$password] if defined $password;
+        $uri->{c_params}{password} //= [$password] if defined $password;
     }
 
     for (keys %opt) {
         my $v = delete $opt{$_};
-        $c_params{$_} = [$v] if defined $v;
+        $c_params{$_} //= [$v] if defined $v;
     }
 
     my $self = \%uri;
@@ -215,6 +215,14 @@ sub set {
     else {
         $self->set_c_param($key, @_);
     }
+    ()
+}
+
+sub or_set {
+    my $self = shift;
+    my $key = shift;
+    $key = $alias{$key} // $key;
+    $self->set($key, @_) unless defined $self->{$key} or defined $self->{c_params}{$key};
     ()
 }
 
