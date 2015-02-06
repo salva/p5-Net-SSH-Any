@@ -4,6 +4,7 @@ our $VERSION = '0.05';
 
 use strict;
 use warnings;
+use warnings::register;
 use Carp;
 
 use Net::SSH::Any::Util;
@@ -29,13 +30,12 @@ sub _new {
         $uri = $uri->as_string if ref $uri and $uri->can('as_string');
         push @uri_opts, uri => $uri;
     }
-    for (qw(host user port password key_path passphrase)) {
+    for (qw(host user port password passphrase)) {
         if (defined (my $v = delete $opts->{$_})) {
             push @uri_opts, $_, $v;
         }
     }
     my $uri = $any->{uri} = Net::SSH::Any::URI->new(@uri_opts);
-
     unless ($uri) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Unable to parse URI");
         return $any;
@@ -49,6 +49,10 @@ sub _new {
             $any->_set_error(SSHA_UNIMPLEMENTED_ERROR, "Unable to infer login name");
             return $any;
         }
+    }
+
+    if (defined (my $key_paths = delete $opts->{key_path} // delete $opts->{key_paths})) {
+        $uri->set(key_path => _array_or_scalar_to_list($key_paths));
     }
 
     $any->{io_timeout} = delete $opts->{io_timeout} // 120;
