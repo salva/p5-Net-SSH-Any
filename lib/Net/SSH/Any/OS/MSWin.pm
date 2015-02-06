@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 use Socket;
 use Errno;
-use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list);
+use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list _warn);
 use Net::SSH::Any::Constants qw(:error);
 use Time::HiRes qw(sleep);
 use Config ();
@@ -247,8 +247,8 @@ sub wait_proc {
                     $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, "child process $pid does not exist", $!);
                     return;
                 }
-                warn "Internal error: unexpected error (" . ($!+0) .
-                    ": $!) from waitpid($pid) = $r. Report it, please!";
+                _warn("Internal error: unexpected error (" . ($!+0) .
+                      ": $!) from waitpid($pid) = $r. Report it, please!");
             }
         }
     }
