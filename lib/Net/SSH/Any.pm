@@ -52,7 +52,7 @@ sub _new {
     }
 
     if (defined (my $key_paths = delete $opts->{key_path} // delete $opts->{key_paths})) {
-        $uri->set(key_path => _array_or_scalar_to_list($key_paths));
+        $uri->or_set(key_path => _array_or_scalar_to_list($key_paths))
     }
 
     $any->{io_timeout} = delete $opts->{io_timeout} // 120;
