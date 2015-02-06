@@ -41,15 +41,19 @@ sub _check_and_set_uri {
                 return;
             }
         }
-        my ($out, $err) = $ssh->capture($cmd);
+        my ($out, $err) = $ssh->capture2($cmd);
         if (my $error = $ssh->error) {
             $tssh->log("Running command '$cmd' failed, rc: $?, error: $error");
             undef $ssh unless $error != SSHA_REMOTE_CMD_ERROR;
         }
         else {
-            $out =~ s/\n?$//; $out =~ s/^/stdout: /mg;
-            $err =~ s/\n?$//; $err =~ s/^/stderr: /mg;
-            $tssh->log("Running command '$cmd', rc: $?\n$out\n$err");
+            if (length $out) {
+                $out =~ s/\n?$/\n/; $out =~ s/^/out: /mg;
+            }
+            if (length $err) {
+                $err =~ s/\n?$/\n/; $err =~ s/^/err: /mg;
+            }
+            $tssh->_log("Running command '$cmd', rc: $?\n$out$err");
             return 1;
         }
     }
