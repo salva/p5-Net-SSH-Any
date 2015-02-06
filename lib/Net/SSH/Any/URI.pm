@@ -210,7 +210,7 @@ sub set {
     $key = $alias{$key} // $key;
     if ($is_slot{$key}) {
         @_ > 1 and _warn "URI attribute $key is an scalar but set($key) called with ".scalar(@_)." arguments";
-        $self->$key($v);
+        $self->$key($_[0]);
     }
     else {
         $self->set_c_param($key, @_);
