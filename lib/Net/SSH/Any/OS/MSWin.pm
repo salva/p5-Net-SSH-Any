@@ -386,6 +386,8 @@ sub validate_cmd {
         $any->SUPER::validate_cmd("$cmd.EXE");
 }
 
+my @cygwin_variants = qw(Cygwin MinGW MinGW\\MSYS\\1.0);
+
 sub find_cmd_by_app {
     my ($any, $name, $app) = @_;
     $app = $app->{MSWin} if ref $app;
@@ -393,7 +395,7 @@ sub find_cmd_by_app {
         if (lc($app) eq 'cygwin') {
             if (defined (my $drive = $ENV{SystemDrive})) {
                 for my $bin (qw(bin sbin)) {
-                    for my $path (qw(Cygwin MinGW MinGW\\MSYS\\1.0)) {
+                    for my $path (@cygwin_variants) {
                         my $cmd = $any->_os_validate_cmd(join('\\', $drive, $path, $bin, $name));
                         return $cmd if defined $cmd;
                     }
@@ -410,6 +412,30 @@ sub find_cmd_by_app {
         }
     }
     ()
+}
+
+sub find_user_dirs {
+    my $any = shift;
+    my $drive = $ENV{SystemDrive};
+    my $user = $ENV{USERNAME};
+    my $appdata = $ENV{APPDATA};
+    my @dirs;
+    for my $name (@_) {
+        my $mswin_name = (ref $name ? $name->{MSWin} : $name);
+        if (defined $mswin_name and
+            defined $appdata) {
+            push @dirs, join('\\', $appdata, $mswin_name);
+        }
+        my $cygwin_name = (ref $name ? $name->{Cygwin} // $name->{POSIX} : $name);
+        if (defined $cygwin_name and
+            defined $drive and
+            defined $user) {
+            for my $path (@cygwin_variants) {
+                push @dirs, join('\\', $drive, $path, 'home', $user, $cygwin_name);
+            }
+        }
+    }
+    grep -d $_, @dirs;
 }
 
 sub create_secret_file {

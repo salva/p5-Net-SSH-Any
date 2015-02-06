@@ -7,7 +7,7 @@ use Carp;
 use POSIX ();
 use Fcntl ();
 use Socket;
-use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined);
+use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _warn);
 use Net::SSH::Any::Constants qw(:error);
 use File::Spec;
 use Time::HiRes ();
@@ -112,13 +112,13 @@ sub check_proc {
                     $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, "child process $pid does not exist", $!);
                     return;
                 }
-                warn "Internal error: unexpected error (" . ($!+0) .
-                    ": $!) from waitpid($pid) = $r. Report it, please!";
+                _warn("Internal error: unexpected error (" . ($!+0) .
+                      ": $!) from waitpid($pid) = $r. Report it, please!");
             }
         }
     }
     else {
-        warn "internal error: spurious process $r exited";
+        _warn("internal error: spurious process $r exited");
     }
     1;
 }
@@ -288,6 +288,20 @@ sub find_cmd_by_app {
     ()
 }
 
+sub find_user_dirs {
+    my $any = shift;
+    my $home = (getpwuid $<)[7];
+    my @dirs;
+    for my $name (@_) {
+        my $posix_name = (ref $name ? $name->{POSIX} : $name);
+        if (defined $posix_name and
+            defined $home) {
+            push @dirs, join('/', $home, $posix_name)
+        }
+    }
+    grep -d $_, @dirs;
+}
+
 sub set_file_inherit_flag {
     my ($any, $file, $value) = @_;
     $debug and $debug & 1024 and _debug "setting inherit flag for file $file (",fileno($file),") to $value";
@@ -306,7 +320,7 @@ my $unique_ix = 0;
 
 sub create_secret_file {
     my ($any, $name, $data) = @_;
-    my $home = (getpwuid $<)[2];
+    my $home = (getpwuid $<)[7];
     unless (defined $home) {
         $any->_os_set_error(SSHA_LOCAL_IO_ERROR, "Unable to determine user home directory: $!");
         return;
