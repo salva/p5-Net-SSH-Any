@@ -5,6 +5,8 @@ use warnings;
 use Carp;
 use Encode;
 
+use Net::SSH::Any::Util qw(_warn);
+
 my @slots = qw(scheme user host port path);
 my %is_slot = map { $_ => $_ } @slots;
 
@@ -38,15 +40,15 @@ sub uri_unescape {
 
 sub new {
     my $class = shift;
-    my %default = (@_ & 1 ? (uri => @_) : @_);
-    $_ = encode(latin1 => $_, Encode::FB_CROAK) for values %default;
-    my $uri = delete $default{uri};
+    my %opt = (@_ & 1 ? (uri => @_) : @_);
+    $_ = encode(latin1 => $_, Encode::FB_CROAK) for values %opt;
+    my $uri = delete $opt{uri};
     my %c_params;
     my %uri = (c_params => \%c_params);
 
     for (keys %alias) {
-        if (defined (my $default = delete $default{$_})) {
-            $default{$alias{$_}} //= $default;
+        if (defined (my $opt = delete $opt{$_})) {
+            $opt{$alias{$_}} //= $opt;
         }
     }
 
@@ -101,22 +103,21 @@ sub new {
         }
     }
     else {
-        defined $default{host} or croak "both uri and host are undefined";
+        defined $opt{host} or croak "both uri and host are undefined";
     }
 
     for (@slots) {
-        my $v = delete $default{$_};
-        $uri{$_} //= $v;
+        my $v = delete $opt{$_};
+        $uri{$_} = $v if defined $v;
     }
 
-    if (defined (my $default_password = delete $default{password})) {
-        $uri->{c_params}{password} //= [$default_password];
+    if (defined (my $password = delete $opt{password})) {
+        $uri->{c_params}{password} = [$password] if defined $password;
     }
 
-    for (keys %default) {
-        if (defined (my $v = delete $default{$_})) {
-            $c_params{$_} //= [$v];
-        }
+    for (keys %opt) {
+        my $v = delete $opt{$_};
+        $c_params{$_} = [$v] if defined $v;
     }
 
     my $self = \%uri;
@@ -198,7 +199,7 @@ sub get {
         ($a ? @$a : ())
     };
     if (@r > 1 and not wantarray) {
-        warn "\$uri->get($key) called on scalar context when it contains more than one entry";
+        _warn("\$uri->get($key) called on scalar context when it contains more than one entry");
     }
     wantarray ? @r : $r[0];
 }
@@ -208,8 +209,8 @@ sub set {
     my $key = shift;
     $key = $alias{$key} // $key;
     if ($is_slot{$key}) {
-        @_ != 1 and warn "URI attribute $key is an scalar but set($key) called with ".scalar(@_)." arguments";
-        $self->$key($_[0]);
+        @_ > 1 and _warn "URI attribute $key is an scalar but set($key) called with ".scalar(@_)." arguments";
+        $self->$key($v);
     }
     else {
         $self->set_c_param($key, @_);
