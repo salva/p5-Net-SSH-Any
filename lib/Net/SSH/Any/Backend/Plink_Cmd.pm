@@ -16,7 +16,7 @@ sub _validate_backend_opts {
     $be_opts{local_puttygen_cmd} //= $any->_find_cmd(puttygen => $be_opts{local_pink_cmd}, { MSWin => 'PuTTY' });
 
     my $out = $any->_local_capture($be_opts{local_plink_cmd}, '-V');
-    if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Release)\s*(.*?)\s*$/mi) {
+    if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Pre-release|Release)\s*(.*?)\s*$/mi) {
         $any->{be_plink_version} = $1;
     }
     else {
