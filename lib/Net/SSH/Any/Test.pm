@@ -5,6 +5,7 @@ use warnings;
 
 use Carp;
 use Time::HiRes ();
+use IO::Socket::INET ();
 use Net::SSH::Any::Util qw(_array_or_scalar_to_list);
 use Net::SSH::Any::URI;
 use Net::SSH::Any::_Base;
@@ -26,7 +27,7 @@ sub _log_at_level {
     my $tssh = shift;
     my $level = shift;
     my ($pkg, undef, $line) = caller $level;
-    my $time = sprintf "%.2f", Time::HiRes::time - $^T;
+    my $time = sprintf "%.4f", Time::HiRes::time - $^T;
     my $text = join(': ', @_);
     my $prefix = "$time $pkg $line|";
     $text =~ s/\n$//;
@@ -49,7 +50,7 @@ sub _log_dump {
 
 sub _log_error_and_reset_backend {
     my $tssh = shift;
-    $tssh->_log_at_level(1, "saving error", $tssh->{error});
+    $tssh->_log_at_level(1, "Saving error", $tssh->{error});
     $tssh->SUPER::_log_error_and_reset_backend(@_);
 }
 
@@ -109,8 +110,10 @@ sub _new {
         my @args = (@uri_defaults, (ref $_ ? %$_ : (uri => $_)));
         my $uri = Net::SSH::Any::URI->new(@args);
         if ($uri) {
-            $tssh->_log("Potential target", $uri->uri(1));
-            push @{$tssh->{uris}}, $uri;
+            if ($tssh->_is_server_running($uri)) {
+                $tssh->_log("Potential target", $uri->uri(1));
+                push @{$tssh->{uris}}, $uri;
+            }
         }
         else {
             require Data::Dumper;
@@ -123,15 +126,17 @@ sub _new {
 
     my @keys_found;
     if ($tssh->{find_keys}) {
-        @keys_found = $tssh->_search_keys;
+        @keys_found = $tssh->_find_keys;
         $tssh->{keys_found} = \@keys_found;
     }
     my @key_paths = (@keys_found,
                      _opts_delete_list($opts, qw(key_paths key_path)));
     $tssh->{key_paths} = \@key_paths;
 
-    my @backends = _opts_delete_list($opts, qw(backends backend), \@default_backends);
+    my @backends = _opts_delete_list($opts, qw(test_backends test_backend), \@default_backends);
     $tssh->{backends} = \@backends;
+
+    $tssh->{any_backends} = delete $opts->{any_backend} // delete $opts->{any_backends};
 
     for my $backend (@backends) {
         if ($tssh->_load_backend_module(__PACKAGE__, $backend)) {
@@ -148,14 +153,50 @@ sub _new {
     $tssh;
 }
 
+sub _find_keys {
+    my $tssh = shift;
+    my @keys;
+    my @dirs = $tssh->_os_find_user_dirs({POSIX => '.ssh'});
+    for my $dir (@dirs) {
+        for my $name (qw(id_dsa id_ecdsa id_ed25519 id_rsa identity)) {
+            my $key = File::Spec->join($dir, $name);
+            -f $key and push @keys, $key;
+        }
+    }
+    $tssh->_log("Key found at $_") for @keys;
+    @keys;
+}
+
 sub _run_remote_cmd {
     
 }
 
 sub _is_server_running {
-    my $tssh = shift;
-    $tssh->_log("_is_server_running not implemnented yet!");
-    1;
+    my ($tssh, $uri) = @_;
+    my $host = $uri->host;
+    my $port = $uri->port;
+    my $tcp = IO::Socket::INET->new(PeerHost => $host,
+                                    PeerPort => $port,
+                                    Proto => 'tcp',
+                                    Timeout => $tssh->{timeout});
+    if ($tcp) {
+        my $line;
+        local ($@, $SIG{__DIE__});
+        eval {
+            alarm $tssh->{timeout};
+            $line = <$tcp>;
+            alarm 0;
+        };
+        if (defined $line and $line =~ /^SSH\b/) {
+            $tssh->_log("SSH server found at ${host}:$port");
+            return 1;
+        }
+        $tssh->_log("Server at ${host}:$port doesn't look like a SSH server, ignoring it!");
+    }
+    else {
+        $tssh->_log("No server found listening at ${host}:$port");
+    }
+    0;
 }
 
 1;
