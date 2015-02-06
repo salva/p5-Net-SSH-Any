@@ -13,9 +13,12 @@ our @EXPORT = qw($debug _debug _debugf _debug_dump _debug_hexdump
                  _sub_options _croak_bad_options
                  _first_defined _array_or_scalar_to_list
                  _inc_numbered _gen_wanted
-                 _scp_escape_name _scp_unescape_name);
+                 _scp_escape_name _scp_unescape_name
+                 _warn);
 
 our $debug ||= 0;
+
+sub _warn { warnings::warnif('Net::SSH::Any', join(': ', @_)) }
 
 sub _debug {
     local ($@, $!, $_);
