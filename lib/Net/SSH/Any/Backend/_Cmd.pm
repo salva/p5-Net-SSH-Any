@@ -205,7 +205,7 @@ sub _sftp {
     $opts->{stdout_pipe} = 1;
     my ($proc, $in, $out) = $any->_run_cmd($opts, 'sftp') or return;
     my $pid = $any->_export_proc($proc) or return;
-    Net::SFTP::Foreign->new(transport => [$in, $out, $pid], %$opts);
+    Net::SFTP::Foreign->new(transport => [$out, $in, $pid], %$opts);
 }
 
 1;
