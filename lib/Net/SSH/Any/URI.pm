@@ -112,7 +112,7 @@ sub new {
     }
 
     if (defined (my $password = delete $opt{password})) {
-        $uri->{c_params}{password} //= [$password] if defined $password;
+        $uri{c_params}{password} //= [$password];
     }
 
     for (keys %opt) {
