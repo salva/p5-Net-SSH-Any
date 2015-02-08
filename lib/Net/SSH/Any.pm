@@ -1074,7 +1074,7 @@ Sets the atime and mtime properties of the remote directories.
 =item $sftp = $ssh->sftp(%opts);
 
 Returns a new L<Net::SFTP::Foreign> object connected to the remote
-system.
+system or C<undef> in case of failure.
 
 =over
 
