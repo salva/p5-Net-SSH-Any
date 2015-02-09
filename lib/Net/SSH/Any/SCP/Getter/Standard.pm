@@ -65,7 +65,6 @@ sub _resolve_local_path {
 
 sub on_open_before_wanted {
     my ($g, $action) = @_;
-    my $lcwd = $g->{lcwd}[-1];
     $action->{local_path} = $g->_resolve_local_path($action->{name});
     1;
 }
