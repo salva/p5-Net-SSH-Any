@@ -370,6 +370,10 @@ sub scp_mkdir       { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker
 sub scp_put         { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
 sub scp_put_content { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
 
+sub scp_find        {
+    _warn("this feature is not finished yet");
+    shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Finder', @_)
+}
 
 1;
 

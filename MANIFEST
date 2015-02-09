@@ -24,6 +24,7 @@ lib/Net/SSH/Any/SCP/Base.pm
 lib/Net/SSH/Any/SCP/Getter.pm
 lib/Net/SSH/Any/SCP/Getter/Content.pm
 lib/Net/SSH/Any/SCP/Getter/Standard.pm
+lib/Net/SSH/Any/SCP/Getter/Finder.pm
 lib/Net/SSH/Any/SCP/Putter.pm
 lib/Net/SSH/Any/SCP/Putter/Content.pm
 lib/Net/SSH/Any/SCP/Putter/DirMaker.pm
