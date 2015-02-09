@@ -6,10 +6,11 @@ use warnings;
 use Carp;
 use Time::HiRes ();
 use IO::Socket::INET ();
+use File::Temp ();
 use Net::SSH::Any::Util qw(_array_or_scalar_to_list);
 use Net::SSH::Any::URI;
 use Net::SSH::Any::_Base;
-use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR);
+use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR SSHA_LOCAL_IO_ERROR);
 our @ISA = qw(Net::SSH::Any::_Base);
 
 my @default_backends = qw(Remote OpenSSH);
@@ -34,6 +35,7 @@ sub _log_at_level {
     my $n;
     $text =~ s/^/$prefix.($n++?'\\':'-')/emg;
     $text .= "\n";
+    print {$tssh->{logger_2_fh}} $text if defined $tssh->{logger_2_fh};
     eval { $tssh->{logger}->($tssh->{logger_fh}, $text) }
 }
 
@@ -80,6 +82,25 @@ sub _new {
     open my $logger_fh_dup, '>>&', $logger_fh;
     $tssh->{logger_fh} = $logger_fh_dup;
     $tssh->{logger} = delete $opts->{logger} // \&_default_logger;
+
+    # A copy of the log is always stored in disk:
+    my $wdir = $tssh->{wdir} = delete $opts->{working_dir} //
+        File::Temp::tempdir('libnet-ssh-any-perl.XXXXXXXXXX', TMPDIR => 1);
+
+    unless (-d $wdir) {
+        $tssh->_set_error("Invalid working directory '$wdir'");
+        return $tssh;
+    }
+
+    my $logger_2_fn = File::Spec->join($wdir, 'test.log');
+    open my $logger_2_fh, '>', $logger_2_fn;
+    unless ($logger_2_fh) {
+        $tssh->_set_error("Unable to open log file at $logger_2_fn", $!);
+        return $tssh;
+    }
+    $tssh->{logger_2_fh} = $logger_2_fh;
+    $tssh->_log("Working dir set to '$wdir'");
+
     $tssh->{find_keys} = delete $opts->{find_keys} // 1;
     $tssh->{timeout} = delete $opts->{timeout} // 10;
     $tssh->{run_server} = delete $opts->{run_server} // 1;
@@ -153,6 +174,18 @@ sub _new {
     $tssh;
 }
 
+sub _backend_wdir {
+    my $tssh = shift;
+    my $backend = $tssh->{backend} // croak "Internal error: backend not set";
+    my $dir = File::Spec->join($tssh->{wdir}, $backend);
+    mkdir $dir unless -d $dir;
+    unless (do { local $!; -d $dir}) {
+        $tssh->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create directory '$dir'", $!);
+        return;
+    }
+    $dir
+}
+
 sub _find_keys {
     my $tssh = shift;
     my @keys;
@@ -165,10 +198,6 @@ sub _find_keys {
     }
     $tssh->_log("Key found at $_") for @keys;
     @keys;
-}
-
-sub _run_remote_cmd {
-    
 }
 
 sub _is_server_running {
