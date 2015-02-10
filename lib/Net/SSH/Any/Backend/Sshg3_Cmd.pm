@@ -3,7 +3,7 @@ package Net::SSH::Any::Backend::Sshg3_Cmd;
 use strict;
 use warnings;
 use Carp;
-use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug _debugf);
+use Net::SSH::Any::Util qw(_first_defined _array_or_scalar_to_list $debug _debug _debugf _debug_dump);
 use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR);
 
 use parent 'Net::SSH::Any::Backend::_Cmd';
@@ -40,6 +40,19 @@ sub _validate_backend_opts {
         croak "pubkey authentication not supported yet by Sshg3_Cmd backend";
     }
 
+    if (delete $be_opts{strict_host_key_checking}) {
+        $be_opts{hostkey_policy} = 'strict';
+    }
+    else {
+        my $known_hosts_path = delete $be_opts{known_hosts_path};
+        if (defined $known_hosts_path and $known_hosts_path eq '/dev/null') {
+            $be_opts{hostkey_policy} = 'advisory';
+        }
+        else {
+            $be_opts{hostkey_policy} = 'tofu';
+        }
+    }
+
     # Work around bug on Tectia/Windows affecting only old Windows versions, apparently.
     my ($os, $mayor, $minor) = $any->_os_version;
     if ($os eq 'MSWin' and not $be_opts{exclusive}) {
@@ -56,6 +69,8 @@ sub _validate_backend_opts {
     }
 
     $be_opts{run_broker} //= 0;
+
+    $debug and $debug & 1024 and _debug_dump be_opts => \%be_opts;
 
     $any->{be_opts} = \%be_opts;
     $any->{be_auth_type} = join(',', @auth_type);
@@ -82,7 +97,8 @@ sub _make_cmd {
     my $be_opts = $any->{be_opts};
 
     my @args = ( $be_opts->{local_sshg3_cmd},
-                 '-B', '-enone', '-q');
+                 '-B', '-enone', '-q',
+                 "--hostkey-policy=$be_opts->{hostkey_policy}");
 
     push @args, '--exclusive' if $be_opts->{exclusive};
     push @args, "-l$be_opts->{user}" if defined $be_opts->{user};
