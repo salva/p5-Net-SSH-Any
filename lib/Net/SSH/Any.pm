@@ -347,12 +347,17 @@ sub sftp {
         unless defined $opts{fs_encoding};
     _croak_bad_options %opts;
     $any->_load_module('Net::SFTP::Foreign') or return;
-    my $sftp = $any->_sftp(\%opts);
-    if (my $error = $sftp->error) {
-        $any->_set_error(SSHA_SFTP_ERROR, 'Unable to start SFTP connection', $sftp->error);
-        return;
+    if (my $sftp = $any->_sftp(\%opts)) {
+        if (my $error = $sftp->error) {
+            $any->_set_error(SSHA_SFTP_ERROR, 'Unable to start SFTP connection', $sftp->error);
+            return;
+        }
+        return $sftp;
     }
-    return $sftp;
+    else {
+        $any->_or_set_error(SSHA_SFTP_ERROR, 'Unable to start SFTP connection', 'Unknown error');
+    }
+    ()
 }
 
 sub _scp_delegate {
