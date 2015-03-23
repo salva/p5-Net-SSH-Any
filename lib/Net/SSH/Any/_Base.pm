@@ -13,10 +13,12 @@ sub _new {
     my ($class, $opts) = @_;
     my $os = delete $opts->{os};
 
-    my (%remote_cmd, %local_cmd);
+    my (%remote_cmd, %local_cmd, %remote_extra_args, %local_extra_args);
     for (keys %$opts) {
         /^remote_(.*)_cmd$/ and $remote_cmd{$1} = $opts->{$_};
         /^local_(.*)_cmd$/ and $local_cmd{$1} = $opts->{$_};
+        /^remote_(.*)_extra_args$/ and $remote_extra_args{$1} = $opts->{$_};
+        /^local_(.*)_extra_args$/ and $local_extra_args{$1} = $opts->{$_};
     }
 
     my $self = { os => $os,
@@ -25,6 +27,8 @@ sub _new {
                  backend_log => [],
                  remote_cmd => \%remote_cmd,
                  local_cmd => \%local_cmd,
+                 remote_extra_args => \%remote_extra_args,
+                 local_extra_args => \%local_extra_args,
                };
 
     bless $self, $class;

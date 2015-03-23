@@ -29,6 +29,9 @@ sub _validate_backend_opts {
                         { POSIX => 'tectia',
                           MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Broker' });
 
+    $be_opts{local_sshg3_extra_args} = $any->_find_local_extra_args(sshg3 => \%be_opts);
+    $be_opts{local_ssh_broker_g3_extra_args} = $any->_find_local_extra_args(ssh_broker_g3 => \%be_opts);
+
     my @auth_type;
     if (defined $be_opts{password}) {
         $any->{be_password_path} = # save it here to ensure it can be unlinked on destruction
@@ -84,10 +87,13 @@ sub _connect{
     my $be_opts = $any->{be_opts};
 
     if ($be_opts->{run_broker}) {
-        my $broker = $be_opts->{local_ssh_broker_g3_cmd};
-        # FIXME: quote broker properly.
-        local $?; # ignore errors here;
-        system qq("$broker") if defined $broker;
+        if (defined (my $broker = $be_opts->{local_ssh_broker_g3_cmd})) {
+            local $?; # ignore errors here;
+            my @args = @{$be_opts->{local_ssh_broker_g3_extra_args}};
+            push @args, -a => $be_opts->{broker_address}
+                if defined $be_opts->{broker_address};
+            system $broker $broker, @args;
+        }
     }
     1;
 }
@@ -96,7 +102,14 @@ sub _make_cmd {
     my ($any, $cmd_opts, $cmd) = @_;
     my $be_opts = $any->{be_opts};
 
+    # FIXME: the environment variable should only be set when running
+    # the sshg3 command, not globally!
+    if (defined (my $broker_address = $be_opts->{broker_address})) {
+        $any->_os_setenv(SSH_SECSH_BROKER => $broker_address);
+    }
+
     my @args = ( $be_opts->{local_sshg3_cmd},
+                 @{$be_opts->{local_sshg3_extra_args}},
                  '-B', '-enone', '-q',
                  "--hostkey-policy=$be_opts->{hostkey_policy}");
 
@@ -104,9 +117,6 @@ sub _make_cmd {
     push @args, "-l$be_opts->{user}" if defined $be_opts->{user};
     push @args, "-p$be_opts->{port}" if defined $be_opts->{port};
     push @args, "-Pfile://$any->{be_password_path}" if defined $any->{be_password_path};
-
-    push @args, _array_or_scalar_to_list($be_opts->{sshg3_opts})
-        if defined $be_opts->{sshg3_opts};
 
     return (@args,
             ( delete $cmd_opts->{subsystem}

@@ -11,8 +11,15 @@ use Net::SSH::Any::Constants qw(:error);
 
 sub loaded { 1 } # helper method to ensure the module has been correctly loaded
 
+sub setenv {
+    my ($any, $key, $value) = @_;
+    # FIXME: this fails on threaded perls on Windows.
+    $ENV{$key} = $value;
+    1;
+}
+
 sub pty {
-    my ($os, $any) = @_;
+    my $any = shift;
     $any->_load_module('IO::Pty') or return;
     IO::Pty->new;
 }
