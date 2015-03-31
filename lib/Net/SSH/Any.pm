@@ -340,11 +340,13 @@ sub dpipe {
 }
 
 _sub_options sftp => qw(fs_encoding timeout block_size queue_size autoflush write_delay
-                        read_ahead late_set_perm autodie);
+                        read_ahead late_set_perm autodie remote_sftp_server_cmd ssh1);
 sub sftp {
     my ($any, %opts) = @_;
-    $opts{fs_encoding} = $any->_delete_argument_encoding(\%opts)
-        unless defined $opts{fs_encoding};
+
+    $opts{timeout} //= $any->{timeout} if defined $any->{timeout};
+    $opts{fs_encoding} //= $any->_delete_argument_encoding(\%opts);
+
     _croak_bad_options %opts;
     $any->_load_module('Net::SFTP::Foreign') or return;
     if (my $sftp = $any->_sftp(\%opts)) {

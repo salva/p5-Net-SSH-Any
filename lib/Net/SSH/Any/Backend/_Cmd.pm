@@ -213,10 +213,19 @@ sub _dpipe {
 
 sub _sftp {
     my ($any, $opts) = @_;
-    $opts->{subsystem} = 1;
-    $opts->{stdin_pipe} = 1;
-    $opts->{stdout_pipe} = 1;
-    my ($proc, $in, $out) = $any->_run_cmd($opts, 'sftp') or return;
+    my ($cmd, $subsystem);
+    if ($opts->{ssh1}) {
+        $cmd = $any->{remote_cmd}{sftp_server} // '/usr/lib/sftp-server';
+    }
+    else {
+        $cmd = 'sftp';
+        $subsystem = 1;
+    }
+    my ($proc, $in, $out) = $any->_run_cmd( { stdin_pipe => 1,
+                                              stdout_pipe => 1,
+                                              subsystem => $subsystem },
+                                            $cmd)
+        or return;
     my $pid = $any->_export_proc($proc) or return;
     Net::SFTP::Foreign->new(transport => [$out, $in, $pid], %$opts);
 }
