@@ -16,7 +16,7 @@ use Net::SSH::Any::Constants qw(:error);
 use Net::OpenSSH;
 use Net::OpenSSH::Constants qw(:error);
 
-sub _backend_api_version { 1 }
+# sub _backend_api_version { 1 }
 
 my @error_translation;
 $error_translation[OSSH_MASTER_FAILED    ] = SSHA_CONNECTION_ERROR;
@@ -50,6 +50,7 @@ sub _validate_backend_opts {
         my $known_hosts_path = delete $be_opts{known_hosts_path};
         push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
             if defined $known_hosts_path;
+        push @master_opts, '-C' if delete $be_opts{compress};
         Net::OpenSSH->new(%be_opts, master_opts => \@master_opts);
     };
     $any->{be_opts} = \%be_opts;
