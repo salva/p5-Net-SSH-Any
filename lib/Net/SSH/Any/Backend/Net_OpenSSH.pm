@@ -51,7 +51,7 @@ sub _validate_backend_opts {
         push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
             if defined $known_hosts_path;
         push @master_opts, '-C' if delete $be_opts{compress};
-        Net::OpenSSH->new(%be_opts, master_opts => \@master_opts);
+        Net::OpenSSH->new(%be_opts, master_opts => \@master_opts, connect => 0);
     };
     $any->{be_opts} = \%be_opts;
     $any->{be_ssh} = $instance;
@@ -65,6 +65,10 @@ sub _check_connection {
     $any->{be_ssh}->wait_for_master;
     __check_and_copy_error($any);
 }
+
+sub _connect { shift->_check_connection }
+
+
 
 1;
 
