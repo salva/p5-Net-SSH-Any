@@ -727,6 +727,10 @@ stored in a file of the same name with C<.pub> appended.
 
 Passphrase to be used to unlock the private key.
 
+=item batch_mode => 1
+
+Dissable any authentication method requiring user interaction.
+
 =item timeout => $seconds
 
 Default timeout.
