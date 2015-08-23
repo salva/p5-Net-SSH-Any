@@ -51,6 +51,7 @@ sub _validate_backend_opts {
         push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
             if defined $known_hosts_path;
         push @master_opts, '-C' if delete $be_opts{compress};
+        delete $be_opts{io_timeout};
         Net::OpenSSH->new(%be_opts, master_opts => \@master_opts, connect => 0);
     };
     $any->{be_opts} = \%be_opts;

@@ -65,6 +65,8 @@ sub _new {
     $any->{strict_host_key_checking} = delete $opts->{strict_host_key_checking} // 1;
     $any->{compress} = delete $opts->{compress} // 1;
     $any->{backend_opts} = delete $opts->{backend_opts};
+    $any->{batch_mode} = delete $opts->{batch_mode};
+
     my @backends = _array_or_scalar_to_list(delete $opts->{backend} // delete $opts->{backends} // \@default_backends);
     $any->{backends} = \@backends;
 
@@ -73,8 +75,8 @@ sub _new {
         if ($any->_load_backend_module(__PACKAGE__, $backend, $REQUIRED_BACKEND_VERSION)) {
             $any->{backend} or croak "internal error: backend not set";
             my %backend_opts = map { $_ => $any->{$_} // scalar($uri->get($_)) }
-                qw(host port user password passphrase key_path timeout
-                   strict_host_key_checking known_hosts_path compress );
+                qw(host port user password passphrase key_path timeout io_timeout
+                   strict_host_key_checking known_hosts_path compress batch_mode);
             if (my $extra = $any->{backend_opts}{$backend}) {
                 @backend_opts{keys %$extra} = values %$extra;
             }
