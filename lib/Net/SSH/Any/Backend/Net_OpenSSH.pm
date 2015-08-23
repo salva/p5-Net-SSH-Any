@@ -16,7 +16,7 @@ use Net::SSH::Any::Constants qw(:error);
 use Net::OpenSSH;
 use Net::OpenSSH::Constants qw(:error);
 
-# sub _backend_api_version { 1 }
+sub _backend_api_version { 2 }
 
 my @error_translation;
 $error_translation[OSSH_MASTER_FAILED    ] = SSHA_CONNECTION_ERROR;
