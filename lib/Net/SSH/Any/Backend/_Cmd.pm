@@ -215,7 +215,7 @@ sub _sftp {
     my ($any, $opts) = @_;
     my ($cmd, $subsystem);
     if ($opts->{ssh1}) {
-        $cmd = $any->{remote_cmd}{sftp_server} // '/usr/lib/sftp-server';
+        $cmd = delete($opts{remote_sftp_server_cmd}) // $any->{remote_cmd}{sftp_server} // '/usr/lib/sftp-server';
     }
     else {
         $cmd = 'sftp';
@@ -224,8 +224,7 @@ sub _sftp {
     my ($proc, $in, $out) = $any->_run_cmd( { stdin_pipe => 1,
                                               stdout_pipe => 1,
                                               subsystem => $subsystem },
-                                            $cmd)
-        or return;
+                                            $cmd) or return;
     my $pid = $any->_export_proc($proc) or return;
     Net::SFTP::Foreign->new(transport => [$out, $in, $pid], %$opts);
 }
