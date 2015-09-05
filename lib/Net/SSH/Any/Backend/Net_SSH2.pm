@@ -374,7 +374,8 @@ sub __parse_fh_opts {
     for my $stream (qw(stdout stderr)) {
         my $fh = delete $opts->{"${stream}_fh"};
         unless ($fh) {
-            my $file = ( delete($opts->{"stdout_discard"}) # first pass may delete element, second never does
+            my $file = ( ( $stream eq 'stdout' and
+			   delete($opts->{"stdout_discard"}) )
                          ? File::Spec->devnull
                          : delete $opts->{"${stream}_file"} );
             if (defined $file) {
@@ -443,18 +444,25 @@ sub _capture2 {
 sub __write_all {
     my $any = shift;
     my $fh = shift;
-    my $off = 0;
-    while (length($_[0]) > $off) {
-        if (my $bytes = syswrite $fh, $_[0], 40000, $off) {
-            $off += $bytes;
-        }
-        elsif ($! == Errno::EAGAIN()) {
-            select undef, undef, undef, 0.05;
-        }
-        else {
-            $any->_set_error(SSHA_LOCAL_IO_ERROR, "Couldn't write to pipe", $!);
-            return;
-        }
+    if (ref $fh eq 'CODE') {
+	unless ($cb->($_[0])) {
+	    $any->_set_error(SSHA_LOCAL_IO_ERROR, "Couldn't handle remote data, callback failed");
+	    return;
+	}
+    }
+    elsif (defined $_[0]) {
+	while (length($_[0]) > $off) {
+	    if (my $bytes = syswrite $fh, $_[0], 40000, $off) {
+		$off += $bytes;
+	    }
+	    elsif ($! == Errno::EAGAIN()) {
+		select undef, undef, undef, 0.05;
+	    }
+	    else {
+		$any->_set_error(SSHA_LOCAL_IO_ERROR, "Couldn't write to pipe", $!);
+		return;
+	    }
+	}
     }
     return 1;
 }
@@ -489,6 +497,7 @@ sub __io3 {
     $timeout ||= $any->{timeout};
     my $start = time;
     my $select_bm = $any->{be_select_bm};
+
  OUTER:
     while (1) {
         my $delay = 3;
@@ -501,20 +510,30 @@ sub __io3 {
                         $in .= shift @$in_data while @$in_data and length $in < $in_buffer_size;
                     }
                     elsif ($in_fh) {
-                        my $bytes = sysread($in_fh, $in, $in_buffer_size, length $in);
-                        $debug and $debug and _debug "stdin sysread: ", $bytes, " \$!: ", $!;
-                        if (not defined $bytes and $! == Errno::EAGAIN()) {
-                            $in_refill = 1;
-                        }
-                        else {
-                            $in_refill = 0;
-                            unless ($bytes) {
-                                $debug and $debug & 1024 and _debug "end of in file reached";
-                                undef $in_fh;
-                            }
-                        }
-                    }
-                    else {
+			if (ref $in_fh eq 'CODE') {
+			    if (defined (my $data = $in_cb->($in_buffer_size - length $in))) {
+				$in .= $data;
+			    }
+			    else {
+				undef $in_fh;
+			    }
+			}
+			else {
+			    my $bytes = sysread($in_fh, $in, $in_buffer_size, length $in);
+			    $debug and $debug and _debug "stdin sysread: ", $bytes, " \$!: ", $!;
+			    if (not defined $bytes and $! == Errno::EAGAIN()) {
+				$in_refill = 1;
+			    }
+			    else {
+				$in_refill = 0;
+				unless ($bytes) {
+				    $debug and $debug & 1024 and _debug "end of in file reached";
+				    undef $in_fh;
+				}
+			    }
+			}
+		    }
+		    else {
                         $debug and $debug & 1024 and _debug "in_at_eof = 1";
                         $in_at_eof = 1;
                     }
@@ -549,8 +568,8 @@ sub __io3 {
                 defined $bytes or last OUTER;
                 if ($bytes) {
                     $delay = 0;
-                    if ($out_fh[$ext]) {
-                        __write_all($any, $out_fh[$ext], $out) or last OUTER;
+		    if ($out_fh[$ext]) {
+			__write_all($any, $out_fh[$ext], $out) or last OUTER;
                     }
                     else {
                         $cap[$ext] .= $out;
@@ -559,9 +578,12 @@ sub __io3 {
                     $out = '';
                 }
             }
-            if ($channel->eof) {
-                $eof_received = 1;
-                $debug and $debug & 1024 and _debug "eof_received";
+	    if ($channel->eof) {
+		$eof_received = 1;
+		$debug and $debug & 1024 and _debug "eof_received";
+		for my $fh (@out_fh) {
+		    __write_all($any, $_) or last OUTER;
+		}
             }
         }
         last if $eof_sent and $eof_received;
