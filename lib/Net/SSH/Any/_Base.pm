@@ -138,6 +138,52 @@ sub _load_os {
     $self->{os_module} = $os_module;
 }
 
+sub _find_cmd_by_friend {
+    my ($any, $name, $friend) = @_;
+    if (defined $friend) {
+        require File::Spec;
+        my ($drive, $dir) = File::Spec->splitpath($friend);
+        my $cmd = File::Spec->join($drive, $dir, $name);
+        return $any->_os_validate_cmd($cmd);
+    }
+    ()
+}
+
+sub _find_cmd {
+    my ($any, $name, $friend, $app, $default) = @_;
+    my $safe_name = $name;
+    $safe_name =~ s/\W/_/g;
+    return ( $any->{local_cmd}{$safe_name}             //
+             $any->_find_cmd_by_friend($name, $friend) //
+             $any->_find_helper_cmd($name)             //
+             $any->_os_find_cmd_by_app($name, $app)    //
+             $any->_os_validate_cmd($default)          //
+             $name );
+}
+
+sub _find_helper_cmd {
+    my ($any, $name) = @_;
+    $debug and $debug & 1024 and _debug "looking for helper $name";
+    my $module = my $last = $any->{backend_module} // return;
+    $last =~ s/.*::// or return;
+    $module =~ s{::}{/}g;
+    $debug and $debug & 1024 and _debug "module as \$INC key is ", $module, ".pm";
+    my $file_pm = $INC{"$module.pm"} // return;
+    my ($drive, $dir) = File::Spec->splitpath(File::Spec->rel2abs($file_pm));
+    my $path = File::Spec->join($drive, $dir, $last, 'Helpers', $name);
+    $any->_os_validate_cmd($path);
+}
+
+sub _find_local_extra_args {
+    my ($any, $name, $opts, @default) = @_;
+    my $safe_name = $name;
+    $safe_name =~ s/\W/_/g;
+    my $extra = ( $opts->{"local_${safe_name}_extra_args"} //
+                  $any->{local_extra_args}{$safe_name} //
+                  \@default );
+    [_array_or_scalar_to_list $extra]
+}
+
 # transparently delegate method calls to backend and os packages:
 sub AUTOLOAD {
     our $AUTOLOAD;
