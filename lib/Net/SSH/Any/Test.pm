@@ -186,6 +186,12 @@ sub _backend_wdir {
     $dir
 }
 
+sub _backend_wfile {
+    my ($tssh, $fn) = @_;
+    my $wdir = $tssh->_backend_wdir;
+    File::Spec->join($wdir, $fn);
+}
+
 sub _find_keys {
     my $tssh = shift;
     my @keys;
