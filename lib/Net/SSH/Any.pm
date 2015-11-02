@@ -364,7 +364,7 @@ sub sftp {
     ()
 }
 
-sub _scp_delegate {
+sub _helper_delegate {
     my $any = shift;
     my $class = shift;
     $any->_load_module($class) or return;
@@ -373,15 +373,15 @@ sub _scp_delegate {
     $obj->run(\%opts);
 }
 
-sub scp_get         { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
-sub scp_get_content { shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
-sub scp_mkdir       { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
-sub scp_put         { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
-sub scp_put_content { shift->_scp_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
+sub scp_get         { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
+sub scp_get_content { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
+sub scp_mkdir       { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
+sub scp_put         { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
+sub scp_put_content { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
 
 sub scp_find        {
     _warn("this feature is not finished yet");
-    shift->_scp_delegate('Net::SSH::Any::SCP::Getter::Finder', @_)
+    shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Finder', @_)
 }
 
 1;
