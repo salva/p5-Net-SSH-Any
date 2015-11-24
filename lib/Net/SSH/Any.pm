@@ -152,6 +152,7 @@ sub _check_error_after_eval {
 sub _encode_data {
     my $any = shift;
     my $encoding = shift;
+    return 1 if $encoding eq "none";
     if (@_) {
         my $enc = $any->_find_encoding($encoding) or return;
         local $any->{error_prefix} = [@{$any->{error_prefix}}, "data encoding failed"];
@@ -165,6 +166,7 @@ sub _encode_data {
 sub _decode_data {
     my $any = shift;
     my $encoding = shift;
+    return 1 if $encoding eq "none";
     my $enc = $any->_find_encoding($encoding) or return;
     if (@_) {
         local ($@, $SIG{__DIE__});
