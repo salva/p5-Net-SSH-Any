@@ -445,12 +445,13 @@ sub __write_all {
     my $any = shift;
     my $fh = shift;
     if (ref $fh eq 'CODE') {
-	unless ($cb->($_[0])) {
+	unless ($fh->($_[0])) {
 	    $any->_set_error(SSHA_LOCAL_IO_ERROR, "Couldn't handle remote data, callback failed");
 	    return;
 	}
     }
     elsif (defined $_[0]) {
+        my $off = 0;
 	while (length($_[0]) > $off) {
 	    if (my $bytes = syswrite $fh, $_[0], 40000, $off) {
 		$off += $bytes;
@@ -511,7 +512,7 @@ sub __io3 {
                     }
                     elsif ($in_fh) {
 			if (ref $in_fh eq 'CODE') {
-			    if (defined (my $data = $in_cb->($in_buffer_size - length $in))) {
+			    if (defined (my $data = $in_fh->($in_buffer_size - length $in))) {
 				$in .= $data;
 			    }
 			    else {
