@@ -6,6 +6,7 @@ use strict;
 use warnings;
 use Carp;
 use File::Spec;
+use Time::HiRes ();
 
 require Exporter;
 our @ISA = qw(Exporter);
@@ -22,7 +23,7 @@ sub _warn { warnings::warnif('Net::SSH::Any', join(': ', @_)) }
 
 sub _debug {
     local ($@, $!, $_);
-    print STDERR '#', (time - $^T), ': ', (map { defined($_) ? $_ : '<undef>' } @_), "\n";
+    print STDERR '#', (Time::HiRes::time() - $^T), ': ', (map { defined($_) ? $_ : '<undef>' } @_), "\n";
 }
 
 sub _debugf {
