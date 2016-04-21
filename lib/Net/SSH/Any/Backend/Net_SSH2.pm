@@ -274,6 +274,7 @@ sub _connect {
     }
 
     $any->{be_fileno} = fileno $ssh2->sock;
+    $debug and $debug & 1024 and _debug("SSH socket file descriptor: $any->{be_fileno}");
     $any->{be_select_bm} = '';
     vec ($any->{be_select_bm}, $any->{be_fileno}, 1) = 1;
     1;
@@ -611,7 +612,7 @@ sub __io3 {
 		undef $start;
 	    }
 	}
-        $any->_wait_for_data($eof_sent, $delay, ($in_refill ? [$in_fh] : ()));
+        $any->_wait_for_data(!$eof_sent, $delay, ($in_refill ? [$in_fh] : ()));
     }
 
     # clear buffer memory
@@ -623,6 +624,8 @@ sub __io3 {
 
 sub _wait_for_data {
     my ($any, $write, $max_delay, $extra_read) = @_;
+    $debug and $debug & 1024 and _debug "waiting for data, write: " . ($write//'<undef>') .
+        ", max_delay: " . ($max_delay//'<undef>') . ", extra_read: " . ($extra_read//'<undef>');
     if ($max_delay) {
         my $rbm = $any->{be_select_bm};
         my $wbm = ($write ? $rbm : '');
@@ -640,6 +643,7 @@ sub _channel_read {
     my $channel = shift;
     my $blocking = shift;
     while (1) {
+        $debug and $debug & 1024 and _debug "iterating inside _channel_read loop";
         my $rc = $any->_channel_do($channel, 0, 'read', @_);
         return $rc if $rc or not defined $rc or not $blocking;
         return if $channel->eof;
