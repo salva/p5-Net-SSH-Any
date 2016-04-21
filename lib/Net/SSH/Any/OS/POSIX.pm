@@ -282,7 +282,7 @@ sub find_cmd_by_app {
     $app = $app->{POSIX} if ref $app;
     if (defined $app) {
         for my $app ($app, lc($app)) {
-            for my $base (@base_apps_dirs) {
+            for my $base (@base_app_dirs) {
                 my $app_dir = "$base/$app";
                 if (-d $app_dir) {
                     for my $bin (qw(bin sbin)) {
