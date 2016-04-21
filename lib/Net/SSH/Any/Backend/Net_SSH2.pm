@@ -192,6 +192,13 @@ sub __check_host_key {
 
 sub _validate_backend_opts {
     my ($any, %be_opts) = @_;
+    my $mod_ver = do { no warnings; 0 + $Net::SSH2::VERSION };
+    if ($mod_ver < 0.59) {
+        $any->_set_error(SSHA_CONNECTION_ERROR,
+                         "The version of Net::SSH2 available ($Net::SSH2::VERSION) is too old. ".
+                         "0.59 or later required");
+        return;
+    }
 
     my @lib_ver = Net::SSH2::version();
     $debug and $debug & 1024 and _debug "libssh2 version $lib_ver[2]";
