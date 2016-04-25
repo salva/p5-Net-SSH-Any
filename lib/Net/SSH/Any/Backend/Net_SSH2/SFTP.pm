@@ -37,7 +37,12 @@ sub _conn_lost {
 }
 
 sub _init_transport {}
-sub _after_init {}
+sub _after_init {
+    my $self = shift;
+    $self->{_bin} //= '';
+    $self->{_bout} //= '';
+    1;
+}
 
 sub _do_io {
     my ($self, $sftp, $timeout) = @_;
@@ -46,7 +51,6 @@ sub _do_io {
 
     my $bin = \$sftp->{_bin};
     my $bout = \$sftp->{_bout};
-
     my $deadline;
     my $len;
     my $first = 1;
@@ -72,8 +76,8 @@ sub _do_io {
 
         $debug and $debug & 4096 and _debug "SFTP reading...";
         my $bytes = sysread $dpipe, $$bin, 64 * 1024, length($$bin);
+        $debug and $debug & 4096 and _debug "SFTP read " . ($bytes//'<undef>') . " bytes";
         if ($bytes) {
-            $debug and $debug & 4096 and _debug "SFTP read $bytes bytes";
             $delay = 0
         }
         elsif (defined $bytes or $! != Errno::EAGAIN()) {
@@ -82,7 +86,7 @@ sub _do_io {
         }
 
         my $lbin = length $$bin;
-        $debug and $debug & 4096 and _debug "SFTP buffers, input: $lbin, ouput: ".lenght($$bout)
+        $debug and $debug & 4096 and _debug "SFTP buffers, input: $lbin, ouput: ".length($$bout);
 
         if (defined $len) {
             return 1 if $lbin >= $len;
