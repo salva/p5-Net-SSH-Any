@@ -37,12 +37,8 @@ sub _conn_lost {
 }
 
 sub _init_transport {}
-sub _after_init {
-    my $self = shift;
-    $self->{_bin} //= '';
-    $self->{_bout} //= '';
-    1;
-}
+
+sub _after_init {}
 
 sub _do_io {
     my ($self, $sftp, $timeout) = @_;

@@ -90,6 +90,7 @@ sub READ {
     }
     else {
         $bytes = $any->_channel_read($channel, $blocking, $_[1], $len, $ext);
+        $_[1] //= '';
     }
     $bytes || $dpipe->_check_error($bytes);
 }
