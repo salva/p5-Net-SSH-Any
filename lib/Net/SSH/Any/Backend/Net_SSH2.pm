@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
-use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _warn);
+use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _debug_dump _first_defined _warn);
 use Net::SSH::Any::Constants qw(:error);
 
 use Net::SSH2;
@@ -16,6 +16,9 @@ use Fcntl ();
 use Time::HiRes ();
 use Socket qw(SO_LINGER SO_KEEPALIVE);
 use IO::Socket::INET;
+
+our $stdin_buffer_size  ||= 40000;
+our $stdout_buffer_size ||= 262144;
 
 my $windows = $^O =~ /^MSWin/;
 
@@ -267,6 +270,8 @@ sub _connect {
     }
     # TODO: use default user keys on ~/.ssh/id_dsa and ~/.ssh/id_rsa
 
+    $debug and $debug & 1024 and _debug_dump "Net::SSH2 authentication args", \%aa;
+
     $ssh2->auth(%aa, interact => !$be_opts->{batch_mode});
     unless ($ssh2->auth_ok) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Authentication failed");
@@ -303,14 +308,13 @@ sub _channel_do {
     while (1) {
         my $rc = $channel->$method(@_);
         $debug and $debug & 1024 and _debug "$channel->$method rc: ", $rc;
-        return $rc if defined $rc and $rc >= 0;
+        return $rc if defined $rc;
         my ($error, $error_name, $error_msg) = $ssh2->error;
         # We assume Net::SSH2 masked a LIBSSH2_ERROR_EAGAIN if
         # both $rc and $ssh->error are unset
-        $rc ||= $error || $C{ERROR_EAGAIN};
         $debug and $debug & 1024 and _debug("rc: ", $rc, "error: ", $error, ", name: ",
                                             $error_name, ", msg: ", $error_msg);
-        if ($rc == $C{ERROR_EAGAIN} and not $blocking) {
+        if ($error == $C{ERROR_EAGAIN} and not $blocking) {
             # When an EAGAIN arrives and there is data queued for
             # writting we have to repeat the operation unchanged until
             # it succeeds or the timeout is reached otherwise we risk
@@ -330,10 +334,10 @@ sub _channel_do {
             }
         }
         else {
-            unless ($rc == $C{ERROR_CHANNEL_CLOSED} or
-                    $rc == $C{ERROR_CHANNEL_EOF_SENT}) {
+            unless ($error == $C{ERROR_CHANNEL_CLOSED} or
+                    $error == $C{ERROR_CHANNEL_EOF_SENT}) {
                 $error_msg ||= $error_name || "unknown libssh2 error";
-                if ($rc == $C{ERROR_EAGAIN}) {
+                if ($error == $C{ERROR_EAGAIN}) {
                     $any->_set_error(SSHA_CONNECTION_ERROR,
                                      "connection lost: internal libssh2 error, unhandled EAGAIN, $error_msg");
                 }
@@ -493,8 +497,6 @@ sub _channel_close {
     1
 }
 
-my $in_buffer_size = 40000;
-
 sub __io3 {
     my ($any, $channel, $timeout, $in_data, $in_fh, @out_fh) = @_;
     my $ssh2 = $any->{be_ssh2} or return;
@@ -506,6 +508,7 @@ sub __io3 {
     $timeout ||= $any->{timeout};
     my $start = time;
     my $select_bm = $any->{be_select_bm};
+    my $total = 0;
 
  OUTER:
     while (1) {
@@ -514,13 +517,13 @@ sub __io3 {
             my $window_write = $channel->window_write;
             $debug and $debug & 1024 and _debug("window write: ", $window_write);
             if ($window_write) {
-                if (length $in < $in_buffer_size and not $in_at_eof) {
+                if (length $in < $stdin_buffer_size and not $in_at_eof) {
                     if ($in_data and @$in_data) {
-                        $in .= shift @$in_data while @$in_data and length $in < $in_buffer_size;
+                        $in .= shift @$in_data while @$in_data and length $in < $stdin_buffer_size;
                     }
                     elsif ($in_fh) {
 			if (ref $in_fh eq 'CODE') {
-			    if (defined (my $data = $in_fh->($in_buffer_size - length $in))) {
+			    if (defined (my $data = $in_fh->($stdin_buffer_size - length $in))) {
 				$in .= $data;
 			    }
 			    else {
@@ -528,7 +531,7 @@ sub __io3 {
 			    }
 			}
 			else {
-			    my $bytes = sysread($in_fh, $in, $in_buffer_size, length $in);
+			    my $bytes = sysread($in_fh, $in, $stdin_buffer_size, length $in);
 			    $debug and $debug and _debug "stdin sysread: ", $bytes, " \$!: ", $!;
 			    if (not defined $bytes and $! == Errno::EAGAIN()) {
 				$in_refill = 1;
@@ -553,6 +556,7 @@ sub __io3 {
                         my $bytes = $any->_channel_do($channel, 1, 'write', $in);
                         defined $bytes or last OUTER;
                         if ($bytes) {
+                            $total += $bytes;
                             $delay = 0;
                             substr($in, 0, $bytes, '');
                         }
@@ -573,9 +577,10 @@ sub __io3 {
                 _debug "window_read avail: $avail, size: $size/$size0";
             }
             for my $ext (0, 1) {
-                my $bytes = $any->_channel_do($channel, 0, 'read', $out, 262144, $ext);
+                my $bytes = $any->_channel_do($channel, 0, 'read', $out, $stdout_buffer_size, $ext);
                 defined $bytes or last OUTER;
                 if ($bytes) {
+                    $total += $bytes;
                     $delay = 0;
 		    if ($out_fh[$ext]) {
 			__write_all($any, $out_fh[$ext], $out) or last OUTER;
@@ -618,6 +623,8 @@ sub __io3 {
     # clear buffer memory
     undef $in; undef $out;
 
+    $debug and $debug & 1024 and _debug "data moved:", $total;
+
     $any->_channel_close($channel);
     return @cap;
 }
@@ -634,7 +641,6 @@ sub _wait_for_data {
         }
         my $n = select($rbm, $wbm, undef, $max_delay);
         $debug and $debug & 1024 and _debug "active sockets: ", $n;
-        $n;
     }
 }
 
