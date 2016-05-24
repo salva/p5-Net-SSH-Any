@@ -166,7 +166,7 @@ sub _sftp {
     my ($any, $opts) = @_;
     my ($cmd, $subsystem);
     if ($opts->{ssh1}) {
-        $cmd = delete($opts{remote_sftp_server_cmd}) // $any->{remote_cmd}{sftp_server} // '/usr/lib/sftp-server';
+        $cmd = delete($opts->{remote_sftp_server_cmd}) // $any->{remote_cmd}{sftp_server} // '/usr/lib/sftp-server';
     }
     else {
         $cmd = 'sftp';
