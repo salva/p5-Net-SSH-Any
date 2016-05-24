@@ -215,7 +215,7 @@ sub _validate_backend_opts {
     }
     $debug and $debug & 2048 and $ssh2->trace(~0); #~$C{TRACE_TRANS});
 
-    $ssh2->timeout($be_opts{timeout} // 1000 * $be_opts{io_timeout});
+    $ssh2->timeout(1000 * ($be_opts{timeout} // $be_opts{io_timeout}));
 
     if ($be_opts{compress}) {
         if (defined(my $flag_method = $ssh2->can('flag'))) {
