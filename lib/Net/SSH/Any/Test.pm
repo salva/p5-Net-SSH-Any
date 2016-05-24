@@ -10,10 +10,11 @@ use File::Temp ();
 use Net::SSH::Any::Util qw(_array_or_scalar_to_list);
 use Net::SSH::Any::URI;
 use Net::SSH::Any::_Base;
-use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR SSHA_LOCAL_IO_ERROR);
+use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR SSHA_REMOTE_CMD_ERROR SSHA_LOCAL_IO_ERROR);
+
 our @ISA = qw(Net::SSH::Any::_Base);
 
-my @default_backends = qw(Remote OpenSSH);
+my @default_backends = qw(Remote OpenSSH_Daemon);
 
 my @default_test_commands = ('true', 'exit', 'echo foo', 'date',
                              'cmd /c ver', 'cmd /c echo foo');
@@ -106,7 +107,7 @@ sub _new {
     $tssh->{run_server} = delete $opts->{run_server} // 1;
     $tssh->{test_commands} = [_opts_delete_list($opts, 'test_commands',
                                                 \@default_test_commands)];
-
+    $tssh->{backend_opts} = delete $opts->{backend_opts};
     # This is a bit thorny, but we are trying to support receiving
     # just one uri or an array of them and also uris represented as
     # strings or as hashes. For instance:
@@ -154,14 +155,15 @@ sub _new {
                      _opts_delete_list($opts, qw(key_paths key_path)));
     $tssh->{key_paths} = \@key_paths;
 
-    my @backends = _opts_delete_list($opts, qw(test_backends test_backend), \@default_backends);
+    my @backends = _opts_delete_list($opts, qw(test_backends test_backend backends backend), \@default_backends);
     $tssh->{backends} = \@backends;
 
     $tssh->{any_backends} = delete $opts->{any_backend} // delete $opts->{any_backends};
 
     for my $backend (@backends) {
         if ($tssh->_load_backend_module(__PACKAGE__, $backend)) {
-            if ($tssh->start_and_check) {
+            if ($tssh->_validate_backend_opts(%{$tssh->{backend_opts}{$backend} // {}}) and
+                $tssh->_start_and_check) {
                 $tssh->_log("Ok, backend $backend can do it!");
                 return $tssh;
             }
@@ -233,5 +235,49 @@ sub _is_server_running {
     }
     0;
 }
+
+my $dev_null = File::Spec->devnull;
+sub _dev_null { $dev_null }
+
+sub _check_and_set_uri {
+    my ($tssh, $uri) = @_;
+    $tssh->_log("Checking URI ".$uri->uri);
+    my $ssh;
+    for my $cmd (@{$tssh->{test_commands}}) {
+        unless ($ssh) {
+            $tssh->_log("Trying to connect to server at ".$uri->uri);
+            $ssh = Net::SSH::Any->new($uri,
+                                      batch_mode => 1,
+                                      timeout => $tssh->{timeout},
+                                      backends => $tssh->{any_backends},
+                                      strict_host_key_checking => 0,
+                                      known_hosts_path => $tssh->_dev_null);
+            if ($ssh->error) {
+                $tssh->_log("Unable to establish SSH connection", $ssh->error, uri => $uri->as_string);
+                return;
+            }
+        }
+        my ($out, $err) = $ssh->capture2($cmd);
+        if (my $error = $ssh->error) {
+            $tssh->_log("Running command '$cmd' failed, rc: $?, error: $error");
+            undef $ssh unless $error == SSHA_REMOTE_CMD_ERROR;
+        }
+        else {
+            if (length $out) {
+                $out =~ s/\n?$/\n/; $out =~ s/^/out: /mg;
+            }
+            if (length $err) {
+                $err =~ s/\n?$/\n/; $err =~ s/^/err: /mg;
+            }
+            $tssh->_log("Running command '$cmd', rc: $?\n$out$err");
+
+            $tssh->{good_uri} = $uri;
+
+            return 1;
+        }
+    }
+}
+
+sub uri { shift->{good_uri} }
 
 1;
