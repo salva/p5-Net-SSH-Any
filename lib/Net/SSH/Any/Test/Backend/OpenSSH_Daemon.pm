@@ -7,34 +7,25 @@ use Net::SSH::Any;
 use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 
 sub _validate_backend_opts {
-    my ($tssh, %be_opts) = @_;
-    # $tssh->SUPER::_validate_backend_opts(%be_opts) or return;
+    my ($tssh, %opts) = @_;
+    # $tssh->SUPER::_validate_backend_opts(%opts) or return;
 
-    for my $cmd (qw(ssh ssh-keygen sshd)) {
-        my $name = $cmd; $name =~ s/\W/_/g;
-        my $sub = ($cmd eq 'sshd' ? 'sbin' : 'bin');
-        $be_opts{"local_${name}_cmd"} //= $tssh->_find_cmd($cmd,
-                                                           $be_opts{"local_ssh_cmd"},
-                                                           'OpenSSH',
-                                                           "/usr/$sub/$cmd");
+    $tssh->{be_opts} = \%opts;
 
-    }
+    $opts{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key") for qw(user host);
+    $opts{sshd_config_file} //= $tssh->_backend_wfile('sshd_config');
+    $opts{user} //= $tssh->_os_current_user;
 
-    $be_opts{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key")
-        for qw(user host);
-
-    $be_opts{sshd_config_file} //= $tssh->_backend_wfile('sshd_config');
-
-    $be_opts{user} //= $tssh->_os_current_user;
-
-    $tssh->{be_opts} = \%be_opts;
+    # ssh and sshd are resolved here so that they can be used as
+    # friends by any other commands
+    $opts{local_ssh_cmd} //= $tssh->_resolve_local_cmd('ssh');
+    $opts{local_sshd_cmd} //= $tssh->_resolve_local_cmd('sshd');
     1;
 }
 
 sub _create_all_keys {
     my $tssh = shift;
-    my $be_opts = $tssh->{be_opts};
-    $tssh->_create_key($be_opts->{"${_}_key_path"}) or return
+    $tssh->_create_key($tssh->{be_opts}{"${_}_key_path"}) or return
         for qw(user host);
     1;
 }
@@ -44,7 +35,7 @@ sub _create_key {
     my $path_pub = "$path.pub";
     -f $path and -f $path_pub and return 1;
      my $tmppath = join('.', $path, $$, int(rand(9999999)));
-    if ($tssh->_run_cmd({}, 'ssh_keygen', -t => 'rsa', -b => 1024, -f => $tmppath, -P => '')) {
+    if ($tssh->_run_cmd({}, 'ssh-keygen', -t => 'rsa', -b => 1024, -f => $tmppath, -P => '')) {
         unlink $path;
         unlink $path_pub;
         if (rename $tmppath, $path and
@@ -57,24 +48,23 @@ sub _create_key {
     return;
 }
 
-sub _run_cmd {
-    my ($tssh, $opts, $cmd, @args) = @_;
-    my $be_opts = $tssh->{be_opts};
-    my $async = $opts->{async};
-    my $out_fn = $tssh->_backend_wfile($opts->{out_name} // $cmd);
-    my $resolved_cmd = $be_opts->{"local_${cmd}_cmd"};
-    # warn "resolved_cmd: $resolved_cmd, was $cmd";
-    if (defined $resolved_cmd            and
-        open my ($out_fh), '>>', $out_fn and
-        open my ($in_fh), '<', $tssh->_dev_null) {
-        if (my $proc = $tssh->_os_open4([$in_fh, $out_fh], [], undef, 1,
-                                        $resolved_cmd => @args)) {
-            $async and return $proc;
-            $tssh->_os_wait_proc($proc, $opts->{timeout}, $opts->{force_kill}) and return 1;
-        }
-        $tssh->_set_error(SSHA_BACKEND_ERROR, "Can't execute command $cmd: $!");
-    }
-    ()
+my $log_ix;
+
+sub _log_fn {
+    my ($tssh, $name) = @_;
+    my $fn = sprintf "%d-%s.log", ++$log_ix, $name;
+    $tssh->_backend_wfile($fn);
+}
+
+sub _resolve_cmd {
+    my ($tssh, $name) = @_;
+    my $opts = $tssh->{be_opts};
+    my $safe_name = $name;
+    $safe_name =~ s/\W/_/g;
+    $opts->{"local_${safe_name}_cmd"} //=
+        $tssh->_find_cmd($name,
+                         $opts->{local_ssh_cmd},
+                         'OpenSSH');
 }
 
 sub _find_unused_tcp_port {
@@ -103,8 +93,7 @@ sub _path_to_unix {
 
 sub _user_key_path_quoted {
     my $tssh = shift;
-    my $be_opts = $tssh->{be_opts};
-    my $key = $tssh->_path_to_unix($be_opts->{user_key_path});
+    my $key = $tssh->_path_to_unix($tssh->{be_opts}{user_key_path});
     $key =~ s/%/%%/g;
     $key;
 }
@@ -117,12 +106,10 @@ sub _escape_config {
 
 sub _write_config {
     my $tssh = shift;
-    my $be_opts = $tssh->{be_opts};
-    my $fn = $be_opts->{sshd_config_file};
+    my $fn = $tssh->{be_opts}{sshd_config_file};
     -f $fn and return 1;
     if (open my $fn, '>', $fn) {
         while (@_) {
-            print "k: $_[0], v: $_[1]\n";
             my $k = $tssh->_escape_config(shift);
             my $v = $tssh->_escape_config(shift);
             print $fn "$k=$v\n";
@@ -133,6 +120,22 @@ sub _write_config {
     ()
 }
 
+sub _override_config {
+    my $tssh = shift;
+    my %override = %{ $tssh->{be_opts}{override_config} // {} };
+    my @cfg;
+    while (@_) {
+        my $k = shift;
+        my $v = shift;
+        if (exists $override{$k}) {
+            $v = delete $override{$k};
+            next unless defined $v;
+        }
+        push @cfg, $k, $v;
+    }
+    (@cfg, %override);
+}
+
 sub _start_and_check {
     my $tssh = shift;
 
@@ -141,40 +144,44 @@ sub _start_and_check {
         return
     }
 
-    my $be_opts = $tssh->{be_opts};
+    my $opts = $tssh->{be_opts};
+    my $port = $opts->{port} //= $tssh->_find_unused_tcp_port;
+    my $sftp_server = $tssh->_resolve_local_cmd('sftp-server');
 
     $tssh->_create_all_keys;
-    my $port = $tssh->_find_unused_tcp_port;
-    $tssh->_write_config(HostKey            => $tssh->_path_to_unix($be_opts->{host_key_path}),
-                         AuthorizedKeysFile => $tssh->_user_key_path_quoted . ".pub",
-                         AllowUsers         => $be_opts->{user}, # only user running the script can log
-                         AllowTcpForwarding => 'yes',
-                         GatewayPorts       => 'no', # bind port forwarder listener to localhost only
-                         ChallengeResponseAuthentication => 'no',
-                         PasswordAuthentication => 'no',
-                         Port               => $port,
-                         ListenAddress      => "localhost:$port",
-                         LogLevel           => 'INFO',
-                         PermitRootLogin    => 'yes',
-                         PidFile            => $tssh->_backend_wfile("sshd.pid"),
-                         PrintLastLog       => 'no',
-                         PrintMotd          => 'no',
-                         UseDNS             => 'no',
-                         StrictModes        => 'no',
-                         UsePrivilegeSeparation => 'no') or return;
+
+    my @cfg = $tssh->_override_config( HostKey            => $tssh->_path_to_unix($opts->{host_key_path}),
+                                       AuthorizedKeysFile => $tssh->_user_key_path_quoted . ".pub",
+                                       AllowUsers         => $opts->{user}, # only user running the script can log
+                                       AllowTcpForwarding => 'yes',
+                                       GatewayPorts       => 'no', # bind port forwarder listener to localhost only
+                                       ChallengeResponseAuthentication => 'no',
+                                       PasswordAuthentication => 'no',
+                                       Port               => $port,
+                                       ListenAddress      => "localhost:$port",
+                                       LogLevel           => 'INFO',
+                                       PermitRootLogin    => 'yes',
+                                       PidFile            => $tssh->_backend_wfile('sshd.pid'),
+                                       PrintLastLog       => 'no',
+                                       PrintMotd          => 'no',
+                                       UseDNS             => 'no',
+                                       StrictModes        => 'no',
+                                       UsePrivilegeSeparation => 'no',
+                                       Subsystem          => "sftp $sftp_server");
+    $tssh->_write_config(@cfg) or return;
 
     $tssh->_log("Starting sshd at localhost:$port");
-    $tssh->{sshd_proc} = $tssh->_run_cmd({out_name => 'server',
+    $tssh->{sshd_proc} = $tssh->_run_cmd({out_name => 'sshd',
                                           async => 1 },
                                          'sshd',
                                          '-D', # no daemon
                                          '-e', # send output to STDEE
-                                         '-f', $be_opts->{sshd_config_file}) or return;
+                                         '-f', $opts->{sshd_config_file}) or return;
 
     my $uri = Net::SSH::Any::URI->new(host => "localhost",
                                       port => $port,
-                                      user => $be_opts->{user},
-                                      key_path => $be_opts->{user_key_path});
+                                      user => $opts->{user},
+                                      key_path => $opts->{user_key_path});
 
     $tssh->_check_and_set_uri($uri) and return 1;
 

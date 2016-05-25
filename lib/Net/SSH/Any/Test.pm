@@ -167,9 +167,7 @@ sub _new {
                 $tssh->_log("Ok, backend $backend can do it!");
                 return $tssh;
             }
-            else {
-                $tssh->_log_error_and_reset_backend
-            }
+            $tssh->_log_error_and_reset_backend
         }
     }
     $tssh->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available");
@@ -276,6 +274,27 @@ sub _check_and_set_uri {
             return 1;
         }
     }
+}
+
+sub _resolve_cmd {
+    my ($tssh, $name) = @_;
+    $tssh->_find_cmd($name);
+}
+
+sub _run_cmd {
+    my ($tssh, $opts, $cmd, @args) = @_;
+    my $out_fn = $tssh->_log_fn($opts->{out_name} // $cmd);
+    my $resolved_cmd = $tssh->_resolve_cmd($cmd);
+    if (open my ($out_fh), '>>', $out_fn and
+        open my ($in_fh), '<', $tssh->_dev_null) {
+        if (my $proc = $tssh->_os_open4([$in_fh, $out_fh], [], undef, 1,
+                                        $resolved_cmd => @args)) {
+            $opts->{async} and return $proc;
+            $tssh->_os_wait_proc($proc, $opts->{timeout}, $opts->{force_kill}) and return 1;
+        }
+        $tssh->_set_error(SSHA_BACKEND_ERROR, "Can't execute command $cmd: $!");
+    }
+    ()
 }
 
 sub uri { shift->{good_uri} }
