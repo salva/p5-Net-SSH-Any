@@ -77,6 +77,8 @@ sub _new {
             my %backend_opts = map { $_ => $any->{$_} // scalar($uri->get($_)) }
                 qw(host port user password passphrase key_path timeout io_timeout
                    strict_host_key_checking known_hosts_path compress batch_mode);
+
+
             if (my $extra = $any->{backend_opts}{$backend}) {
                 @backend_opts{keys %$extra} = values %$extra;
             }
@@ -377,7 +379,7 @@ sub scp_get         { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Stand
 sub scp_get_content { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
 sub scp_mkdir       { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
 sub scp_put         { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
-sub scp_put_content { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Content', @_) }
+sub scp_put_content { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Content',  @_) }
 
 sub scp_find        {
     _warn("this feature is not finished yet");
