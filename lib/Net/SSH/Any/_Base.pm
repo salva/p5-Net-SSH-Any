@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Carp;
 
+use File::Spec;
 use Scalar::Util ();
 use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR SSHA_LOCAL_IO_ERROR SSHA_UNIMPLEMENTED_ERROR);
 use Net::SSH::Any::Util;
@@ -141,10 +142,22 @@ sub _load_os {
 sub _find_cmd_by_friend {
     my ($any, $name, $friend) = @_;
     if (defined $friend) {
-        require File::Spec;
+        my $up = File::Spec->updir;
         my ($drive, $dir) = File::Spec->splitpath($friend);
-        my $cmd = File::Spec->join($drive, $dir, $name);
-        return $any->_os_validate_cmd($cmd);
+        for my $path (File::Spec->join($drive, $dir, $name),
+                      map File::Spec->join($drive, $dir, $up, $_, $name), qw(bin sbin libexec) ) {
+            my $cmd = $any->_os_validate_cmd($path);
+            return $cmd if defined $cmd;
+        }
+    }
+    ()
+}
+
+sub _find_cmd_in_path {
+    my ($any, $name) = @_;
+    for my $path (File::Spec->path) {
+        my $cmd = $any->_os_validate_cmd(File::Spec->join($path, $name));
+        return $cmd if defined $cmd;
     }
     ()
 }
@@ -156,6 +169,7 @@ sub _find_cmd {
     return ( $any->{local_cmd}{$safe_name}             //
              $any->_find_cmd_by_friend($name, $friend) //
              $any->_find_helper_cmd($name)             //
+             $any->_find_cmd_in_path($name)            //
              $any->_os_find_cmd_by_app($name, $app)    //
              $any->_os_validate_cmd($default)          //
              $name );

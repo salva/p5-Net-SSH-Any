@@ -275,7 +275,7 @@ sub io3 {
     return ($bout, $berr);
 }
 
-my @base_app_dirs = qw(/opt /usr/local);
+my @base_app_dirs = qw(/usr/lib /opt /usr/local);
 
 sub find_cmd_by_app {
     my ($any, $name, $app) = @_;
@@ -285,7 +285,7 @@ sub find_cmd_by_app {
             for my $base (@base_app_dirs) {
                 my $app_dir = "$base/$app";
                 if (-d $app_dir) {
-                    for my $bin (qw(bin sbin)) {
+                    for my $bin (qw(bin sbin libexec .)) {
                         my $path = $any->_os_validate_cmd("$app_dir/$bin/$name");
                         defined $path and return $path;
                     }
