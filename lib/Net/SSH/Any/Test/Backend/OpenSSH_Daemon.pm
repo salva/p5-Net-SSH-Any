@@ -18,8 +18,8 @@ sub _validate_backend_opts {
 
     # ssh and sshd are resolved here so that they can be used as
     # friends by any other commands
-    $opts{local_ssh_cmd} //= $tssh->_resolve_local_cmd('ssh');
-    $opts{local_sshd_cmd} //= $tssh->_resolve_local_cmd('sshd');
+    $opts{local_ssh_cmd} //= $tssh->_resolve_cmd('ssh');
+    $opts{local_sshd_cmd} //= $tssh->_resolve_cmd('sshd');
     1;
 }
 
@@ -146,7 +146,7 @@ sub _start_and_check {
 
     my $opts = $tssh->{be_opts};
     my $port = $opts->{port} //= $tssh->_find_unused_tcp_port;
-    my $sftp_server = $tssh->_resolve_local_cmd('sftp-server');
+    my $sftp_server = $tssh->_resolve_cmd('sftp-server');
 
     $tssh->_create_all_keys;
 

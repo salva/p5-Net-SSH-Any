@@ -10,7 +10,7 @@ use File::Temp ();
 use Net::SSH::Any::Util qw(_array_or_scalar_to_list);
 use Net::SSH::Any::URI;
 use Net::SSH::Any::_Base;
-use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR SSHA_REMOTE_CMD_ERROR SSHA_LOCAL_IO_ERROR);
+use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR SSHA_REMOTE_CMD_ERROR SSHA_LOCAL_IO_ERROR SSHA_BACKEND_ERROR);
 
 our @ISA = qw(Net::SSH::Any::_Base);
 
