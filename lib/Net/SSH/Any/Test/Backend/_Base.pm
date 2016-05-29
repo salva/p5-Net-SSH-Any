@@ -52,11 +52,21 @@ sub _check_and_set_uri {
     }
 }
 
+sub _cmd_to_name {
+    my ($tssh, $cmd) = @_;
+    $cmd =~ s{.*[/\\]}{};
+    $cmd =~ s{\.exe$}{};
+    $cmd;
+}
+
 sub _run_cmd {
     my ($tssh, $opts, $cmd, @args) = @_;
     $tssh->_log("Running cmd: $cmd @args");
-    my $out_fn = $tssh->_log_fn($opts->{out_name} // $cmd);
-    my $resolved_cmd = $tssh->_resolve_cmd($cmd);
+    my $name = $opts->{out_name} // $tssh->_cmd_to_name($cmd);
+    my $out_fn = $tssh->_log_fn($name);
+    my $resolved_cmd = ($opts->{find} // 1
+                        ? $tssh->_resolve_cmd($cmd)
+                        : $cmd);
     if (open my ($out_fh), '>>', $out_fn and
         open my ($in_fh), '<', $tssh->_dev_null) {
         if (my $proc = $tssh->_os_open4([$in_fh, $out_fh], [], undef, 1,

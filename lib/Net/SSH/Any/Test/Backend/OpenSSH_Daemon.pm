@@ -12,6 +12,11 @@ sub _validate_backend_opts {
     my ($tssh, %opts) = @_;
     # $tssh->SUPER::_validate_backend_opts(%opts) or return;
 
+    unless ($tssh->{run_server}) {
+        $tssh->_log("Skipping OpenSSH_Daemon backend as run_server is unset");
+        return
+    }
+
     $tssh->{be_opts} = \%opts;
 
     $opts{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key") for qw(user host);
@@ -134,11 +139,6 @@ sub _override_config {
 
 sub _start_and_check {
     my $tssh = shift;
-
-    unless ($tssh->{run_server}) {
-        $tssh->_log("Skipping OpenSSH_Daemon backend as run_server is unset");
-        return
-    }
 
     $tssh->_create_all_keys;
 
