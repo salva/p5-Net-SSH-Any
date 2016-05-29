@@ -179,7 +179,7 @@ sub _start_and_check {
     if ($^O eq 'MSWin32') {
         my $sshd_cmd = $tssh->_os_unix_path($tssh->_resolve_cmd('sshd'));
         @cmd = ('bash', '--login', '-c',
-                scalar($tssh->_quote_args({shell => 'MSCmd'}, $sshd_cmd, @sshd_args)));
+                scalar($tssh->_quote_args({shell => 'MSCmd'}, exec => $sshd_cmd, @sshd_args)));
     }
     else {
         @cmd = ('sshd', @sshd_args)
