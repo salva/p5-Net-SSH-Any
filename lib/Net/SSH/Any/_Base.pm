@@ -163,8 +163,9 @@ sub _find_cmd_by_friend {
     if (defined $friend) {
         my $up = File::Spec->updir;
         my ($drive, $dir) = File::Spec->splitpath($friend);
-        for my $path (File::Spec->join($drive, $dir, $name),
-                      map File::Spec->join($drive, $dir, $up, $_, $name), qw(bin sbin libexec) ) {
+        my $base = File::Spec->catpath($drive, $dir);
+        for my $path (File::Spec->join($base, $name),
+                      map File::Spec->join($base, $up, $_, $name), qw(bin sbin libexec) ) {
             my $cmd = $any->_os_validate_cmd($path);
             return $cmd if defined $cmd;
         }
@@ -203,7 +204,7 @@ sub _find_helper_cmd {
     $debug and $debug & 1024 and _debug "module as \$INC key is ", $module, ".pm";
     my $file_pm = $INC{"$module.pm"} // return;
     my ($drive, $dir) = File::Spec->splitpath(File::Spec->rel2abs($file_pm));
-    my $path = File::Spec->join($drive, $dir, $last, 'Helpers', $name);
+    my $path = File::Spec->catpath($drive, $dir, $last, 'Helpers', $name);
     $any->_os_validate_cmd($path);
 }
 
