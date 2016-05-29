@@ -6,6 +6,9 @@ use warnings;
 use Net::SSH::Any;
 use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 
+use parent 'Net::SSH::Any::Test::Backend::_Base';
+
+
 sub _validate_backend_opts { 1 }
 
 sub _start_and_check {
