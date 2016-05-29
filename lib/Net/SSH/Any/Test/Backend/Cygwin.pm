@@ -42,7 +42,7 @@ sub _start_and_check {
                      -R => $rootdir,
                      -s => $opts->{cygwin_site},
                      -P => 'openssh',
-                     '-q') or return;
+                     '-q', '-B', '-n') or return;
 
     local $ENV{PATH} = "$ENV{PATH};$rootdir\\bin;$rootdir\\sbin";
 

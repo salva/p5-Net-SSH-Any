@@ -72,6 +72,7 @@ sub _run_cmd {
         if (my $proc = $tssh->_os_open4([$in_fh, $out_fh], [], undef, 1,
                                         $resolved_cmd => @args)) {
             $opts->{async} and return $proc;
+            $tssh->_log("Waiting for process $proc->{pid} to finish");
             $tssh->_os_wait_proc($proc, $opts->{timeout}, $opts->{force_kill}) and return 1;
         }
         $tssh->_set_error(SSHA_BACKEND_ERROR, "Can't execute command $cmd: $!");
