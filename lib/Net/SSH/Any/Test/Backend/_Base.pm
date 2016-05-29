@@ -10,6 +10,8 @@ our @CARP_NOT = qw(Net::SSH::Any::Test);
 
 sub _validate_backend_opts { 1 }
 
+sub _stop { 1 }
+
 my $dev_null = File::Spec->devnull;
 sub _dev_null { $dev_null }
 

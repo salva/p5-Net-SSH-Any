@@ -9,30 +9,30 @@ use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 use parent 'Net::SSH::Any::Test::Backend::_Base';
 
 sub _validate_backend_opts {
-    my ($tssh, %opts) = @_;
-    # $tssh->SUPER::_validate_backend_opts(%opts) or return;
+    my $tssh = shift;
+    $tssh->SUPER::_validate_backend_opts or return;
 
     unless ($tssh->{run_server}) {
         $tssh->_log("Skipping OpenSSH_Daemon backend as run_server is unset");
         return
     }
 
-    $tssh->{be_opts} = \%opts;
+    my $opts = $tssh->{current_opts};
 
-    $opts{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key") for qw(user host);
-    $opts{sshd_config_file} //= $tssh->_backend_wfile('sshd_config');
-    $opts{user} //= $tssh->_os_current_user;
+    $opts->{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key") for qw(user host);
+    $opts->{sshd_config_file} //= $tssh->_backend_wfile('sshd_config');
+    $opts->{user} //= $tssh->_os_current_user;
 
     # ssh and sshd are resolved here so that they can be used as
     # friends by any other commands
-    $opts{local_ssh_cmd} //= $tssh->_resolve_cmd('ssh');
-    $opts{local_sshd_cmd} //= $tssh->_resolve_cmd('sshd');
+    $opts->{local_ssh_cmd} //= $tssh->_resolve_cmd('ssh');
+    $opts->{local_sshd_cmd} //= $tssh->_resolve_cmd('sshd');
     1;
 }
 
 sub _create_all_keys {
     my $tssh = shift;
-    $tssh->_create_key($tssh->{be_opts}{"${_}_key_path"}) or return
+    $tssh->_create_key($tssh->{current_opts}{"${_}_key_path"}) or return
         for qw(user host);
     1;
 }
@@ -65,7 +65,7 @@ sub _log_fn {
 
 sub _resolve_cmd {
     my ($tssh, $name) = @_;
-    my $opts = $tssh->{be_opts};
+    my $opts = $tssh->{current_opts};
     my $safe_name = $name;
     $safe_name =~ s/\W/_/g;
     $opts->{"local_${safe_name}_cmd"} //=
@@ -93,8 +93,8 @@ sub _find_unused_tcp_port {
 
 sub _user_key_path_quoted {
     my $tssh = shift;
-    my $key = $tssh->_os_unix_path($tssh->{be_opts}{user_key_path});
-    $tssh->_log("user_key_path: $tssh->{be_opts}{user_key_path}, unix path: $key");
+    my $key = $tssh->_os_unix_path($tssh->{current_opts}{user_key_path});
+    $tssh->_log("user_key_path: $tssh->{current_opts}{user_key_path}, unix path: $key");
     $key =~ s/%/%%/g;
     $key;
 }
@@ -107,7 +107,7 @@ sub _escape_config {
 
 sub _write_config {
     my $tssh = shift;
-    my $fn = $tssh->{be_opts}{sshd_config_file};
+    my $fn = $tssh->{current_opts}{sshd_config_file};
     -f $fn and return 1;
     if (open my $fn, '>', $fn) {
         while (@_) {
@@ -123,7 +123,7 @@ sub _write_config {
 
 sub _override_config {
     my $tssh = shift;
-    my %override = %{ $tssh->{be_opts}{override_config} // {} };
+    my %override = %{ $tssh->{current_opts}{override_config} // {} };
     my @cfg;
     while (@_) {
         my $k = shift;
@@ -142,7 +142,7 @@ sub _start_and_check {
 
     $tssh->_create_all_keys;
 
-    my $opts = $tssh->{be_opts};
+    my $opts = $tssh->{current_opts};
     my $port = $opts->{port} //= $tssh->_find_unused_tcp_port;
     my $sftp_server = $tssh->_resolve_cmd('sftp-server');
 

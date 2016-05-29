@@ -9,12 +9,10 @@ use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 use parent 'Net::SSH::Any::Test::Backend::OpenSSH_Daemon';
 
 sub _validate_backend_opts {
-    my ($tssh, %opts) = @_;
-
-    $tssh->{be_opts} = \%opts;
-
-    $opts{cygwin_url} //= "http://cygwin.com/setup-x86.exe";
-    $opts{cygwin_site} //= "http://mirrors.kernel.org/sourceware/cygwin/";
+    my $tssh = shift;
+    my $opts = $tssh->{current_opts};
+    $opts->{cygwin_url} //= "http://cygwin.com/setup-x86.exe";
+    $opts->{cygwin_site} //= "http://mirrors.kernel.org/sourceware/cygwin/";
 
     1;
 }
@@ -22,7 +20,7 @@ sub _validate_backend_opts {
 sub _start_and_check {
     my $tssh = shift;
 
-    my $opts = $tssh->{be_opts};
+    my $opts = $tssh->{current_opts};
 
     my $wdir = $tssh->_backend_wdir;
     my $installer = File::Spec->join($wdir, 'cygwin-setup.exe');
@@ -46,7 +44,11 @@ sub _start_and_check {
 
     local $ENV{PATH} = "$ENV{PATH};$rootdir\\bin;$rootdir\\sbin";
 
-    $tssh->SUPER::_validate_backend_opts(%$opts) and
+    $opts->{local_ssh_cmd} //= "$rootdir/bin/ssh.exe";
+    $opts->{local_sshd_cmd} //= "$rootdir/usr/sbin/sshd.exe";
+    $opts->{local_bash_cmd} //= "$rootdir/bin/bash.exe";
+
+    $tssh->SUPER::_validate_backend_opts and
         $tssh->SUPER::_start_and_check;
 }
 

@@ -79,6 +79,8 @@ sub _new {
     my ($class, $opts) = @_;
     my $tssh = $class->SUPER::_new($opts);
 
+    $tssh->{state} = 'new';
+
     my $logger_fh = delete $opts->{logger_fh} // \*STDERR;
     open my $logger_fh_dup, '>>&', $logger_fh;
     $tssh->{logger_fh} = $logger_fh_dup;
@@ -162,16 +164,33 @@ sub _new {
 
     for my $backend (@backends) {
         if ($tssh->_load_backend_module(__PACKAGE__, $backend)) {
-            if ($tssh->_validate_backend_opts(%{$tssh->{backend_opts}{$backend} // {}}) and
+            my %opts = %{$tssh->{backend_opts}{$backend} // {}};
+            $tssh->{current_opts} = \%opts;
+            if ($tssh->_validate_backend_opts and
                 $tssh->_start_and_check) {
+                $tssh->{state} = 'running';
                 $tssh->_log("Ok, backend $backend can do it!");
                 return $tssh;
             }
             $tssh->_log_error_and_reset_backend
         }
     }
+    $tssh->{state} = 'failed';
     $tssh->_set_error(SSHA_NO_BACKEND_ERROR, "no backend available");
     $tssh;
+}
+
+sub stop {
+    my $tssh = shift;
+    if ($tssh->{state} eq 'running') {
+        $tssh->_stop;
+        $tssh->{state} = 'stopped';
+    }
+}
+
+sub DESTROY {
+    my $tssh = shift;
+    $tssh->_stop;
 }
 
 sub _backend_wdir {
