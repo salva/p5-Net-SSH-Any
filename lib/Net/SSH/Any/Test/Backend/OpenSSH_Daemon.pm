@@ -6,6 +6,8 @@ use warnings;
 use Net::SSH::Any;
 use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 
+use parent 'Net::SSH::Any::Test::Backend::_Base';
+
 sub _validate_backend_opts {
     my ($tssh, %opts) = @_;
     # $tssh->SUPER::_validate_backend_opts(%opts) or return;
@@ -64,7 +66,8 @@ sub _resolve_cmd {
     $opts->{"local_${safe_name}_cmd"} //=
         $tssh->_find_cmd($name,
                          $opts->{local_ssh_cmd},
-                         'OpenSSH');
+                         { POSIX => 'OpenSSH',
+                           MSWin => 'Cygwin' });
 }
 
 sub _find_unused_tcp_port {
@@ -83,17 +86,10 @@ sub _find_unused_tcp_port {
     return;
 }
 
-sub _path_to_unix {
-    my ($tssh, $path) = @_;
-    # FIXME: _w32path_to_cygwin is not implemented yet!
-    ( $^O =~ /^MSWin/
-      ? $tssh->_w32path_to_cygwin($path)
-      : $path );
-}
-
 sub _user_key_path_quoted {
     my $tssh = shift;
-    my $key = $tssh->_path_to_unix($tssh->{be_opts}{user_key_path});
+    my $key = $tssh->_os_unix_path($tssh->{be_opts}{user_key_path});
+    $tssh->_log("user_key_path: $tssh->{be_opts}{user_key_path}, unix path: $key");
     $key =~ s/%/%%/g;
     $key;
 }
@@ -144,15 +140,18 @@ sub _start_and_check {
         return
     }
 
+    $tssh->_create_all_keys;
+
     my $opts = $tssh->{be_opts};
     my $port = $opts->{port} //= $tssh->_find_unused_tcp_port;
     my $sftp_server = $tssh->_resolve_cmd('sftp-server');
 
-    $tssh->_create_all_keys;
+    my $user = $opts->{user};
+    $user =~ s/\s/?/g;
 
-    my @cfg = $tssh->_override_config( HostKey            => $tssh->_path_to_unix($opts->{host_key_path}),
+    my @cfg = $tssh->_override_config( HostKey            => $tssh->_os_unix_path($opts->{host_key_path}),
                                        AuthorizedKeysFile => $tssh->_user_key_path_quoted . ".pub",
-                                       AllowUsers         => $opts->{user}, # only user running the script can log
+                                       AllowUsers         => $user, # only user running the script can log in
                                        AllowTcpForwarding => 'yes',
                                        GatewayPorts       => 'no', # bind port forwarder listener to localhost only
                                        ChallengeResponseAuthentication => 'no',
@@ -161,7 +160,7 @@ sub _start_and_check {
                                        ListenAddress      => "localhost:$port",
                                        LogLevel           => 'INFO',
                                        PermitRootLogin    => 'yes',
-                                       PidFile            => $tssh->_backend_wfile('sshd.pid'),
+                                       PidFile            => $tssh->_os_unix_path($tssh->_backend_wfile('sshd.pid')),
                                        PrintLastLog       => 'no',
                                        PrintMotd          => 'no',
                                        UseDNS             => 'no',
@@ -171,12 +170,24 @@ sub _start_and_check {
     $tssh->_write_config(@cfg) or return;
 
     $tssh->_log("Starting sshd at localhost:$port");
+
+    my @cmd;
+    my @sshd_args = ( '-D', # no daemon
+                      '-e', # send output to STDEE
+                      '-f', $tssh->_os_unix_path($opts->{sshd_config_file}) );
+
+    if ($^O eq 'MSWin32') {
+        my $sshd_cmd = $tssh->_os_unix_path($tssh->_resolve_cmd('sshd'));
+        @cmd = ('bash', '--login', '-c',
+                scalar($tssh->_quote_args({shell => 'MSCmd'}, $sshd_cmd, @sshd_args)));
+    }
+    else {
+        @cmd = ('sshd', @sshd_args)
+    }
+
     $tssh->{sshd_proc} = $tssh->_run_cmd({out_name => 'sshd',
                                           async => 1 },
-                                         'sshd',
-                                         '-D', # no daemon
-                                         '-e', # send output to STDEE
-                                         '-f', $opts->{sshd_config_file}) or return;
+                                         @cmd) or return;
 
     my $uri = Net::SSH::Any::URI->new(host => "localhost",
                                       port => $port,
