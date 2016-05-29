@@ -8,6 +8,8 @@ use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR SSHA_REMOTE_CMD_ERROR);
 
 our @CARP_NOT = qw(Net::SSH::Any::Test);
 
+sub _validate_backend_opts { 1 }
+
 sub _find_keys {
     my $tssh = shift;
     my @keys;

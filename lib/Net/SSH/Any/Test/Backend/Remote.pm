@@ -8,9 +8,6 @@ use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 
 use parent 'Net::SSH::Any::Test::Backend::_Base';
 
-
-sub _validate_backend_opts { 1 }
-
 sub _start_and_check {
     my $tssh = shift;
 
@@ -29,7 +26,7 @@ sub _start_and_check {
             $tssh->_check_and_set_uri($uri2) and return 1;
         }
     }
-    $tssh->_set_error(SSHA_BACKEND_ERROR, "Open SSH server not found");
+    $tssh->_set_error(SSHA_BACKEND_ERROR, "SSH server not found");
     ()
 }
 
