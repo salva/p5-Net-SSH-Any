@@ -366,6 +366,8 @@ sub create_secret_file {
     }
 }
 
+sub unix_path { $_[1] }
+
 sub version { 'POSIX' }
 
 1;

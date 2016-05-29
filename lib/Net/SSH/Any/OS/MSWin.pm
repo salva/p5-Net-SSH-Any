@@ -394,7 +394,7 @@ sub find_cmd_by_app {
     if (defined $app) {
         if (lc($app) eq 'cygwin') {
             if (defined (my $drive = $ENV{SystemDrive})) {
-                for my $bin (qw(bin sbin)) {
+                for my $bin (qw(bin sbin usr\\bin usr\\sbin)) {
                     for my $path (@cygwin_variants) {
                         my $cmd = $any->_os_validate_cmd(join('\\', $drive, $path, $bin, $name));
                         return $cmd if defined $cmd;
@@ -460,6 +460,14 @@ sub version {
     my $minor = ($v >> 8) & 0xff;
     my $build = ($v >> 16);
     wantarray ? ('MSWin', $mayor, $minor, $build) : "MSWin-$mayor.$minor.$build";
+}
+
+sub unix_path {
+    my ($any, $path) = @_;
+    my ($drive, @rest) = File::Spec->splitpath(File::Spec->rel2abs($path));
+    $drive =~ s/:$//;
+    s{\\}{/}g for @rest;
+    return "/cygdrive/$drive" . join('/', @rest);
 }
 
 our $debug; # make debug visible below
