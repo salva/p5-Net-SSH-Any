@@ -11,7 +11,6 @@ use Net::SSH::Any::Util;
 use Net::SSH::Any::URI;
 use Net::SSH::Any::Constants qw(:error);
 use Scalar::Util qw(dualvar);
-use Encode ();
 
 use Net::SSH::Any::_Base;
 our @ISA = qw(Net::SSH::Any::_Base);
@@ -57,9 +56,6 @@ sub _new {
 
     $any->{io_timeout} = delete $opts->{io_timeout} // 120;
     $any->{timeout} = delete $opts->{timeout};
-    my $encoding = $any->{encoding} = delete $opts->{encoding} // 'utf8';
-    $any->{stream_encoding} = delete $opts->{stream_encoding} // $encoding;
-    $any->{argument_encoding} = delete $opts->{argument_encoding} // $encoding;
     $any->{remote_shell} = delete $opts->{remote_shell} // 'POSIX';
     $any->{known_hosts_path} = delete $opts->{known_hosts_path};
     $any->{strict_host_key_checking} = delete $opts->{strict_host_key_checking} // 1;
@@ -116,143 +112,12 @@ sub _clear_error {
     1;
 }
 
-sub _delete_stream_encoding {
-    my ($any, $opts) = @_;
-    _first_defined(delete $opts->{stream_encoding},
-                   $opts->{encoding},
-                   $any->{stream_encoding})
-}
-
-sub _delete_argument_encoding {
-    my ($any, $opts) = @_;
-    _first_defined(delete $opts->{argument_encoding},
-                   delete $opts->{encoding},
-                   $any->{argument_encoding})
-}
-
-sub _find_encoding {
-    my ($any, $encoding, $data) = @_;
-    my $enc = Encode::find_encoding($encoding)
-        or $any->_or_set_error(SSHA_ENCODING_ERROR, "bad encoding '$encoding'");
-    return $enc
-}
-
-# FIXME: move to base after renaming it _or_check_error_after_eval or alike
-sub _check_error_after_eval {
-    if ($@) {
-        my ($any, $code) = @_;
-        unless ($any->{error}) {
-            my $err = $@;
-            $err =~ s/(.*) at .* line \d+.$/$1/;
-            $any->_set_error($code, $err);
-        }
-        return 0;
+sub _quoter {
+    my ($any, $shell) = @_;
+    if (defined $shell and $shell ne $any->{remote_shell}) {
+	return $any->_new_quoter($shell);
     }
-    1
-}
-
-sub _encode_data {
-    my $any = shift;
-    my $encoding = shift;
-    if (@_) {
-        my $enc = $any->_find_encoding($encoding) or return;
-        local $any->{error_prefix} = [@{$any->{error_prefix}}, "data encoding failed"];
-        local ($@, $SIG{__DIE__});
-        eval { defined and $_ = $enc->encode($_, Encode::FB_CROAK()) for @_ };
-        $any->_check_error_after_eval(SSHA_ENCODING_ERROR) or return;
-    }
-    1
-}
-
-sub _decode_data {
-    my $any = shift;
-    my $encoding = shift;
-    my $enc = $any->_find_encoding($encoding) or return;
-    if (@_) {
-        local ($@, $SIG{__DIE__});
-        eval { defined and $_ = $enc->decode($_, Encode::FB_CROAK()) for @_ };
-        $any->_check_error_after_eval(SSHA_ENCODING_ERROR) or return;
-    }
-    1;
-}
-
-sub _encode_args {
-    if (@_ > 2) {
-        my $any = shift;
-        my $encoding = shift;
-        local $any->{error_prefix} = [@{$any->{error_prefix}}, "argument encoding failed"];
-        if (my $enc = $any->_find_encoding($encoding)) {
-            $any->_encode_data($enc, @_);
-        }
-        return !$any->{_error};
-    }
-    1;
-}
-
-my %posix_shell = map { $_ => 1 } qw(POSIX bash sh ksh ash dash pdksh mksh lksh zsh fizsh posh);
-
-sub _new_remote_quoter {
-    my ($any, $remote_shell) = @_;
-    if ($posix_shell{$remote_shell}) {
-	$any->_load_module('Net::SSH::Any::POSIXShellQuoter') or return;
-	return 'Net::SSH::Any::POSIXShellQuoter';
-    }
-    else {
-	$any->_load_module('Net::OpenSSH::ShellQuoter') or return;
-	return Net::OpenSSH::ShellQuoter->quoter($remote_shell);
-    }
-}
-
-sub _remote_quoter {
-    my ($any, $remote_shell) = @_;
-    if (defined $remote_shell and $remote_shell ne $any->{remote_shell}) {
-	return $any->_new_remote_quoter($remote_shell);
-    }
-    $any->{remote_quoter} //= $any->_new_remote_quoter($any->{remote_shell});
-}
-
-sub _quote_args {
-    my $any = shift;
-    my $opts = shift;
-    ref $opts eq 'HASH' or die "internal error";
-    my $quote = delete $opts->{quote_args};
-    my $glob_quoting = delete $opts->{glob_quoting};
-    my $argument_encoding =  $any->_delete_argument_encoding($opts);
-    $quote = (@_ > 1) unless defined $quote;
-
-    my @quoted;
-    if ($quote) {
-	my $remote_shell = delete $opts->{remote_shell};
-	my $quoter = $any->_remote_quoter($remote_shell) or return;
-	my $quote_method = ($glob_quoting ? 'quote_glob' : 'quote');
-
-        # foo   => $quoter
-        # \foo  => $quoter_glob
-        # \\foo => no quoting at all and disable extended quoting as it is not safe
-        for (@_) {
-            if (ref $_) {
-                if (ref $_ eq 'SCALAR') {
-                    push @quoted, $quoter->quote_glob($$_);
-                }
-                elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
-                    push @quoted, $$$_;
-                }
-                else {
-                    croak "invalid reference in remote command argument list"
-                }
-            }
-            else {
-                push @quoted, $quoter->$quote_method($_);
-            }
-        }
-    }
-    else {
-        croak "reference found in argument list when argument quoting is disabled" if (grep ref, @_);
-        @quoted = @_;
-    }
-    $any->_encode_args($argument_encoding, @quoted);
-    $debug and $debug & 1024 and _debug("command+args: @quoted");
-    wantarray ? @quoted : join(" ", @quoted);
+    $any->{quoter} //= $any->_new_quoter($any->{remote_shell});
 }
 
 sub _delete_stream_encoding_and_encode_input_data {

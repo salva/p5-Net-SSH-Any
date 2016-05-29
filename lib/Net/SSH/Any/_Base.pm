@@ -6,7 +6,9 @@ use Carp;
 
 use File::Spec;
 use Scalar::Util ();
-use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR SSHA_LOCAL_IO_ERROR SSHA_UNIMPLEMENTED_ERROR);
+use Encode ();
+
+use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR SSHA_LOCAL_IO_ERROR SSHA_UNIMPLEMENTED_ERROR SSHA_ENCODING_ERROR);
 use Net::SSH::Any::Util;
 our @CARP_NOT = qw(Net::SSH::Any::Util);
 
@@ -31,6 +33,10 @@ sub _new {
                  remote_extra_args => \%remote_extra_args,
                  local_extra_args => \%local_extra_args,
                };
+
+    my $encoding = $self->{encoding} = delete $opts->{encoding} // 'utf8';
+    $self->{stream_encoding} = delete $opts->{stream_encoding} // $encoding;
+    $self->{argument_encoding} = delete $opts->{argument_encoding} // $encoding;
 
     bless $self, $class;
     $self;
@@ -109,6 +115,19 @@ sub _set_error {
 sub _or_set_error {
     my $self = shift;
     $self->{error} or $self->_set_error(@_);
+}
+
+sub _or_check_error_after_eval {
+    if ($@) {
+        my ($any, $code) = @_;
+        unless ($any->{error}) {
+            my $err = $@;
+            $err =~ s/(.*) at .* line \d+.$/$1/;
+            $any->_set_error($code, $err);
+        }
+        return 0;
+    }
+    1
 }
 
 sub _open_file {
@@ -196,6 +215,129 @@ sub _find_local_extra_args {
                   $any->{local_extra_args}{$safe_name} //
                   \@default );
     [_array_or_scalar_to_list $extra]
+}
+
+my %posix_shell = map { $_ => 1 } qw(POSIX bash sh ksh ash dash pdksh mksh lksh zsh fizsh posh);
+
+sub _new_quoter {
+    my ($any, $shell) = @_;
+    if ($posix_shell{$shell}) {
+	$any->_load_module('Net::SSH::Any::POSIXShellQuoter') or return;
+	return 'Net::SSH::Any::POSIXShellQuoter';
+    }
+    else {
+	$any->_load_module('Net::OpenSSH::ShellQuoter') or return;
+	return Net::OpenSSH::ShellQuoter->quoter($shell);
+    }
+}
+
+sub _quoter {
+    my ($any, $shell) = @_;
+    defined $shell or croak "shell argument is undef";
+    return $any->_new_quoter($shell);
+}
+
+sub _quote_args {
+    my $any = shift;
+    my $opts = shift;
+    ref $opts eq 'HASH' or die "internal error";
+    my $quote = delete $opts->{quote_args};
+    my $glob_quoting = delete $opts->{glob_quoting};
+    my $argument_encoding =  $any->_delete_argument_encoding($opts);
+    $quote = (@_ > 1) unless defined $quote;
+
+    my @quoted;
+    if ($quote) {
+	my $shell = delete $opts->{remote_shell} // delete $opts->{shell};
+	my $quoter = $any->_quoter($shell) or return;
+	my $quote_method = ($glob_quoting ? 'quote_glob' : 'quote');
+
+        # foo   => $quoter
+        # \foo  => $quoter_glob
+        # \\foo => no quoting at all and disable extended quoting as it is not safe
+        for (@_) {
+            if (ref $_) {
+                if (ref $_ eq 'SCALAR') {
+                    push @quoted, $quoter->quote_glob($$_);
+                }
+                elsif (ref $_ eq 'REF' and ref $$_ eq 'SCALAR') {
+                    push @quoted, $$$_;
+                }
+                else {
+                    croak "invalid reference in remote command argument list"
+                }
+            }
+            else {
+                push @quoted, $quoter->$quote_method($_);
+            }
+        }
+    }
+    else {
+        croak "reference found in argument list when argument quoting is disabled" if (grep ref, @_);
+        @quoted = @_;
+    }
+    $any->_encode_args($argument_encoding, @quoted);
+    $debug and $debug & 1024 and _debug("command+args: @quoted");
+    wantarray ? @quoted : join(" ", @quoted);
+}
+
+sub _delete_argument_encoding {
+    my ($any, $opts) = @_;
+    _first_defined(delete $opts->{argument_encoding},
+                   delete $opts->{encoding},
+                   $any->{argument_encoding})
+}
+
+sub _delete_stream_encoding {
+    my ($any, $opts) = @_;
+    _first_defined(delete $opts->{stream_encoding},
+                   $opts->{encoding},
+                   $any->{stream_encoding})
+}
+
+sub _find_encoding {
+    my ($any, $encoding, $data) = @_;
+    my $enc = Encode::find_encoding($encoding)
+        or $any->_or_set_error(SSHA_ENCODING_ERROR, "bad encoding '$encoding'");
+    return $enc
+}
+
+sub _encode_data {
+    my $any = shift;
+    my $encoding = shift;
+    if (@_) {
+        my $enc = $any->_find_encoding($encoding) or return;
+        local $any->{error_prefix} = [@{$any->{error_prefix}}, "data encoding failed"];
+        local ($@, $SIG{__DIE__});
+        eval { defined and $_ = $enc->encode($_, Encode::FB_CROAK()) for @_ };
+        $any->_or_check_error_after_eval(SSHA_ENCODING_ERROR) or return;
+    }
+    1
+}
+
+sub _decode_data {
+    my $any = shift;
+    my $encoding = shift;
+    my $enc = $any->_find_encoding($encoding) or return;
+    if (@_) {
+        local ($@, $SIG{__DIE__});
+        eval { defined and $_ = $enc->decode($_, Encode::FB_CROAK()) for @_ };
+        $any->_or_check_error_after_eval(SSHA_ENCODING_ERROR) or return;
+    }
+    1;
+}
+
+sub _encode_args {
+    if (@_ > 2) {
+        my $any = shift;
+        my $encoding = shift;
+        local $any->{error_prefix} = [@{$any->{error_prefix}}, "argument encoding failed"];
+        if (my $enc = $any->_find_encoding($encoding)) {
+            $any->_encode_data($enc, @_);
+        }
+        return !$any->{_error};
+    }
+    1;
 }
 
 # transparently delegate method calls to backend and os packages:
