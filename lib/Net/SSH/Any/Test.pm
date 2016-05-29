@@ -194,4 +194,46 @@ sub _backend_wfile {
 
 sub uri { shift->{good_uri} }
 
+sub _is_server_running {
+    my ($tssh, $uri) = @_;
+    my $host = $uri->host;
+    my $port = $uri->port;
+    my $tcp = IO::Socket::INET->new(PeerHost => $host,
+                                    PeerPort => $port,
+                                    Proto => 'tcp',
+                                    Timeout => $tssh->{timeout});
+    if ($tcp) {
+        my $line;
+        local ($@, $SIG{__DIE__});
+        eval {
+            alarm $tssh->{timeout};
+            $line = <$tcp>;
+            alarm 0;
+        };
+        if (defined $line and $line =~ /^SSH\b/) {
+            $tssh->_log("SSH server found at ${host}:$port");
+            return 1;
+        }
+        $tssh->_log("Server at ${host}:$port doesn't look like a SSH server, ignoring it!");
+    }
+    else {
+        $tssh->_log("No server found listening at ${host}:$port");
+    }
+    0;
+}
+
+sub _find_keys {
+    my $tssh = shift;
+    my @keys;
+    my @dirs = $tssh->_os_find_user_dirs({POSIX => '.ssh'});
+    for my $dir (@dirs) {
+        for my $name (qw(id_dsa id_ecdsa id_ed25519 id_rsa identity)) {
+            my $key = File::Spec->join($dir, $name);
+            -f $key and push @keys, $key;
+        }
+    }
+    $tssh->_log("Key found at $_") for @keys;
+    @keys;
+}
+
 1;
