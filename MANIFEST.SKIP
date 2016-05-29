@@ -12,3 +12,4 @@
 ^\.travis.yml\z
 ^MYMETA\.
 ^c/
+^lib/Net/SSH/Any/CopyId.pm\z
