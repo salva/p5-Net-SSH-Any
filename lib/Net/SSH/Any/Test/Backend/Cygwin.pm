@@ -10,6 +10,9 @@ use parent 'Net::SSH::Any::Test::Backend::OpenSSH_Daemon';
 
 sub _validate_backend_opts {
     my $tssh = shift;
+
+    $^O eq 'MSWin32' or return;
+
     my $opts = $tssh->{current_opts};
     $opts->{cygwin_url} //= "http://cygwin.com/setup-x86.exe";
     $opts->{cygwin_site} //= "http://mirrors.kernel.org/sourceware/cygwin/";
