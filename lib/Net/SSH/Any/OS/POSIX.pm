@@ -88,83 +88,6 @@ sub open4 {
     return { pid => $pid};
 }
 
-# $any->_os_check_proc($proc, $wait)
-# Checks wether some process is still running.
-# Args:
-#   $wait: waits until the process exits
-sub check_proc {
-    my ($any, $proc, $wait) = @_;
-    my $pid = $proc->{pid};
-    $? = 0;
-
-    # FIXME: we assume that all OSs return 0 when the
-    # process is still running, that may be false!
-    my $r = CORE::waitpid($pid, ($wait ? 0 : POSIX::WNOHANG()));
-    if ($r == $pid) {
-        $debug and $debug & 1024 and _debug "process $pid exited with code $?";
-        $proc->{rc} = $?;
-        return;
-    }
-    elsif ($r <= 0) {
-        if ($r < 0) {
-            if ($! != Errno::EINTR()) {
-                if ($! == Errno::ECHILD()) {
-                    $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, "child process $pid does not exist", $!);
-                    return;
-                }
-                _warn("Internal error: unexpected error (" . ($!+0) .
-                      ": $!) from waitpid($pid) = $r. Report it, please!");
-            }
-        }
-    }
-    else {
-        _warn("internal error: spurious process $r exited");
-    }
-    1;
-}
-
-sub wait_proc {
-    my ($any, $proc, $timeout, $force_kill) = @_;
-
-    my $wait = 1;
-    my $delay = 1.0;
-    my $time_limit;
-
-    if ($force_kill || $any->{_kill_ssh_on_timeout}) {
-        $timeout = $any->{_timeout} unless defined $timeout;
-        $timeout = 0 if $any->error == SSHA_TIMEOUT_ERROR;
-        if (defined $timeout) {
-            $time_limit = time + $timeout;
-            $wait = 0;
-        }
-    }
-
-    my $pid = $proc->{pid};
-    local $SIG{CHLD} = sub {};
-    while (1) {
-        unless ($wait) {
-            $any->_os_check_proc($proc) or last;
-            my $remaining = $time_limit - time;
-            if ($remaining <= 0) {
-                $debug and $debug & 1024 and _debug "killing SSH slave, pid: $pid";
-                kill TERM => $pid;
-                $any->_or_set_error(SSHA_TIMEOUT_ERROR, "slave command timed out");
-            }
-
-            $delay = 0.1 if $remaining < 1;
-            $debug and $debug & 1024 and
-                _debug "waiting for slave cmd, timeout: $timeout, remaining: $remaining, delay: $delay";
-        }
-        # There is a (harmless) race condition here. We try to
-        # minimize it by keeping the 'waitpid' and 'select' calls
-        # together and limiting the sleep time to 1s max:
-        $any->_os_check_proc($proc, $wait) or last;
-        select(undef, undef, undef, $delay);
-    }
-
-    not $any->{_error};
-}
-
 my @retriable = (Errno::EINTR, Errno::EAGAIN);
 push @retriable, Errno::EWOULDBLOCK if Errno::EWOULDBLOCK != Errno::EAGAIN;
 
@@ -269,7 +192,7 @@ sub io3 {
     close $err if $cerr;
     close $in if $cin;
 
-    $any->_os_wait_proc($proc, $timeout);
+    $any->_wait_ssh_proc($proc, $timeout);
 
     $debug and $debug & 1024 and _debug "leaving io3()";
     return ($bout, $berr);

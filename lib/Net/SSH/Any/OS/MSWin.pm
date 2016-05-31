@@ -8,7 +8,7 @@ use Socket;
 use Errno;
 use Net::SSH::Any::Util qw($debug _debug _debug_hexdump _first_defined _array_or_scalar_to_list _warn);
 use Net::SSH::Any::Constants qw(:error);
-use Time::HiRes qw(sleep);
+use Time::HiRes qw(sleep time);
 use Config ();
 use Win32::API ();
 use File::Spec ();
@@ -225,33 +225,11 @@ sub open4 {
     return $proc;
 }
 
-sub wait_proc {
-    my ($any, $proc, $timeout, $force_kill) = @_;
-    # FIXME: implement timeout handling
-    my $pid = $proc->{pid};
-    $? = 0;
-    while (1) {
-        $debug and $debug & 1024 and _debug "waiting for slave process $pid to exit";
-        my $r = waitpid($pid, 0);
-        if ($r == $pid) {
-            $proc->{rc} = $?;
-            my $native_rc = 0;
-            $win32_get_exit_code_process->Call($proc->{handle}, $native_rc);
-            $proc->{native_rc} = $native_rc;
-            $debug and $debug & 1024 and _debug "process $pid exited with code $?, native: $proc->{native_rc}";
-            return 1;
-        }
-        elsif ($r < 0) {
-            if ($! != Errno::EINTR()) {
-                if ($! == Errno::ECHILD()) {
-                    $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, "child process $pid does not exist", $!);
-                    return;
-                }
-                _warn("Internal error: unexpected error (" . ($!+0) .
-                      ": $!) from waitpid($pid) = $r. Report it, please!");
-            }
-        }
-    }
+sub native_rc {
+    my ($tssh, $proc) = @_;
+    my $native_rc = 0;
+    $win32_get_exit_code_process->Call($proc->{handle}, $native_rc);
+    return $native_rc;
 }
 
 my @retriable = (Errno::EINTR, Errno::EAGAIN, Errno::ENOSPC, Errno::EINVAL);
@@ -373,7 +351,8 @@ sub io3 {
     }
 
     $debug and $debug & 1024 and _debug "waiting for child";
-    $any->_os_wait_proc($proc, $timeout);
+    # FIXME: _io3 is not limited to ssh processes
+    $any->_wait_ssh_proc($proc, $timeout);
 
     $debug and $debug & 1024 and _debug "leaving io3()";
     return ($bout, $berr);

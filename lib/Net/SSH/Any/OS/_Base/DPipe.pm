@@ -28,7 +28,7 @@ sub close {
     $dpipe->_close_fhs or undef $ok;
     my $any = $dpipe->_any;
     my $proc = delete ${*$dpipe}{_ssha_os_proc};
-    $any->_os_wait_proc($proc) or undef $ok;
+    $any->_wait_ssh_proc($proc) or undef $ok;
     $any->_remap_child_error($proc);
     $? = $proc->{rc};
     $any->_check_child_error or undef $ok;

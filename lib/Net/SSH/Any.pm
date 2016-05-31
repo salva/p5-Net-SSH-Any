@@ -240,6 +240,17 @@ sub _helper_delegate {
     $obj->run(\%opts);
 }
 
+sub _wait_ssh_proc {
+    my ($any, $proc, $timeout, $force_kill) = @_;
+    $force_kill //= $any->{_kill_ssh_on_timeout};
+    if ($force_kill) {
+        $timeout = $any->{_timeout} unless defined $timeout;
+        $timeout = 0 if $any->error == SSHA_TIMEOUT_ERROR;
+    }
+
+    $any->_os_wait_proc($proc, $timeout, $force_kill);
+}
+
 sub scp_get         { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
 sub scp_get_content { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
 sub scp_mkdir       { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }

@@ -6,6 +6,7 @@ use warnings;
 use Carp;
 our @CARP_NOT = ('Net::SSH::Any::Backend::_Cmd');
 
+use POSIX ();
 use Net::SSH::Any::Util qw($debug _debug _array_or_scalar_to_list);
 use Net::SSH::Any::Constants qw(:error);
 
@@ -84,13 +85,13 @@ sub interactive_login {
             $debug and $debug & 1024 and _debug "checking timeout, max: $any->{_timeout}, ellapsed: " . (time - $start_time);
             if (time - $start_time > $any->{_timeout}) {
                 $any->_set_error(SSHA_TIMEOUT_ERROR, "timed out while login");
-                $any->_os_wait_proc($proc, 0, 1);
+                $any->_wait_ssh_proc($proc, 0, 1);
                 return;
             }
         }
 
         unless ($any->_os_check_proc($proc)) {
-            my $err = ($? >> 8);
+            my $err = ($proc->{rc} >> 8);
             $any->_set_error(SSHA_CONNECTION_ERROR,
                              "slave process exited unexpectedly with error code $err");
             return;
@@ -109,7 +110,7 @@ sub interactive_login {
                                   "the authenticity of the target host can't be established, " .
                                   "the remote host public key is probably not present on the " .
                                   "'~/.ssh/known_hosts' file");
-                $any->_os_wait_proc($proc, 0, 1);
+                $any->_wait_ssh_proc($proc, 0, 1);
                 return;
             }
             if ($password_sent) {
@@ -161,5 +162,73 @@ sub validate_cmd {
 }
 
 sub find_cmd_by_app {}
+
+sub wait_proc {
+    my ($any, $proc, $timeout, $force_kill) = @_;
+    my $delay = 0.1;
+    my $deadline;
+    $deadline = time + $timeout
+        if $force_kill and defined $timeout;
+
+    while (1) {
+        if (defined $deadline) {
+            $any->_os_check_proc($proc) or last;
+            my $remaining = $deadline - time;
+            if ($remaining <= 0) {
+                $debug and $debug & 1024 and _debug "killing SSH slave, pid: $proc->{pid}";
+                kill TERM => $proc->{pid};
+                $any->_or_set_error(SSHA_TIMEOUT_ERROR, "slave command timed out");
+            }
+
+            $debug and $debug & 1024 and
+                _debug "waiting for slave cmd, timeout: $timeout, remaining: $remaining, delay: $delay";
+        }
+        # There is a (harmless) race condition here. We try to
+        # minimize it by keeping the 'waitpid' and 'select' calls
+        # together and limiting the sleep time to 1s max:
+        $any->_os_check_proc($proc, !defined($deadline)) or last;
+        select(undef, undef, undef, $delay);
+    }
+
+    not $any->{_error};
+}
+
+sub native_rc { undef }
+
+# $any->_os_check_proc($proc, $wait)
+# Checks wether the given process is still running.
+# Args:
+#   $wait: if true, waits until the process exits
+sub check_proc {
+    my ($any, $proc, $wait) = @_;
+    my $pid = $proc->{pid};
+    $? = 0;
+    my $r = CORE::waitpid($pid, ($wait ? 0 : POSIX::WNOHANG()));
+
+    # FIXME: we assume that all POSIX OSs return 0 when the process is
+    # still running. That may be wrong!
+    if ($r == $pid) {
+        $proc->{rc} = $?;
+        my $native_rc = $any->_os_native_rc($proc) // $?;
+        $debug and $debug & 1024 and _debug "process $pid exited with code $?, native: $native_rc";
+        return;
+    }
+    elsif ($r <= 0) {
+        if ($r < 0) {
+            if ($! != Errno::EINTR()) {
+                if ($! == Errno::ECHILD()) {
+                    $any->_or_set_error(SSHA_REMOTE_CMD_ERROR, "child process $pid does not exist", $!);
+                    return;
+                }
+                _warn("Internal error: unexpected error (" . ($!+0) .
+                      ": $!) from waitpid($pid) = $r. Report it, please!");
+            }
+        }
+    }
+    else {
+        _warn("internal error: spurious process $r exited");
+    }
+    1;
+}
 
 1;
