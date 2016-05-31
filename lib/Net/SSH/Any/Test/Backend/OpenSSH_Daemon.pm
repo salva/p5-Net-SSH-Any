@@ -21,7 +21,10 @@ sub _validate_backend_opts {
 
     $opts->{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key") for qw(user host);
     $opts->{sshd_config_file} //= $tssh->_backend_wfile('sshd_config');
-    $opts->{user} //= $tssh->_os_current_user;
+    $opts->{user} //= $tssh->_os_current_user // do {
+        $tssh->_log("Unable to determine current user");
+        return;
+    };
 
     # ssh and sshd are resolved here so that they can be used as
     # friends by any other commands
@@ -140,7 +143,7 @@ sub _override_config {
 sub _start_and_check {
     my $tssh = shift;
 
-    $tssh->_create_all_keys;
+    $tssh->_create_all_keys or return;
 
     my $opts = $tssh->{current_opts};
     my $port = $opts->{port} //= $tssh->_find_unused_tcp_port;
@@ -178,8 +181,9 @@ sub _start_and_check {
 
     if ($^O eq 'MSWin32') {
         my $sshd_cmd = $tssh->_os_unix_path($tssh->_resolve_cmd('sshd'));
-        @cmd = ('bash', '--login', '-c',
-                scalar($tssh->_quote_args({shell => 'MSCmd'}, exec => $sshd_cmd, @sshd_args)));
+        my $bash_subcmd = $tssh->_quote_args({shell => 'MSCmd'}, exec => $sshd_cmd, @sshd_args) //
+            return;
+        @cmd = ('bash', '--login', '-c', $bash_subcmd);
     }
     else {
         @cmd = ('sshd', @sshd_args)
@@ -194,13 +198,28 @@ sub _start_and_check {
                                       user => $opts->{user},
                                       key_path => $opts->{user_key_path});
 
-    $tssh->_check_and_set_uri($uri) and return 1;
+    $tssh->_log("Waiting for SSH service to pop up");
+    for (1..20) {
+        if ($tssh->_is_server_running($uri)) {
+            $tssh->_check_and_set_uri($uri) and return 1;
+            last;
+        }
+        $tssh->_os_check_proc($tssh->{sshd_proc}) or last;
+        $tssh->_log("Retrying in 1s...");
+        sleep 1;
+    }
+    $tssh->_stop;
 
-    $tssh->_set_error(SSHA_BACKEND_ERROR, "unable to launch sshd");
+    $tssh->_or_set_error(SSHA_BACKEND_ERROR, "unable to launch sshd");
     ()
 }
 
-
+sub _stop {
+    my $tssh = shift;
+    my $proc = $tssh->{sshd_proc};
+    $tssh->_log("Stopping sshd process $proc->{pid}");
+    $tssh->_os_wait_proc($proc, 0, 1);
+}
 
 
 1;
