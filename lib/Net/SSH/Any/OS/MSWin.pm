@@ -367,26 +367,42 @@ sub validate_cmd {
 
 my @cygwin_variants = qw(Cygwin MinGW MinGW\\MSYS\\1.0);
 
+sub find_cygwin_cmd {
+    my ($any, $name) = @_;
+
+    $any->_load_module('Win32::TieRegistry') or return;
+    my %reg;
+    Win32::TieRegistry->import(TiedHash => \%reg);
+
+    my @rootdirs = grep defined,
+        $reg{'HKEY_CURRENT_USER\\SOFTWARE\\Cygwin\\setup\\rootdir'},
+        $reg{'HKEY_LOCAL_MACHINE\\SOFTWARE\\Cygwin\\setup\\rootdir'};
+
+    if (defined (my $drive = $ENV{SystemDrive})) {
+        push @rootdirs, File::Spec->catpath($drive, $_)
+            for @cygwin_variants;
+    }
+
+    for my $rootdir (@rootdirs) {
+        next unless -d $rootdir;
+        for my $bin (qw(bin sbin usr\\bin usr\\sbin)) {
+            my $cmd = $any->_os_validate_cmd(File::Spec->join($rootdir, $bin, $name));
+            return $cmd if defined $cmd;
+        }
+    }
+}
+
 sub find_cmd_by_app {
     my ($any, $name, $app) = @_;
     $app = $app->{MSWin} if ref $app;
     if (defined $app) {
-        if (lc($app) eq 'cygwin') {
-            if (defined (my $drive = $ENV{SystemDrive})) {
-                for my $bin (qw(bin sbin usr\\bin usr\\sbin)) {
-                    for my $path (@cygwin_variants) {
-                        my $cmd = $any->_os_validate_cmd(join('\\', $drive, $path, $bin, $name));
-                        return $cmd if defined $cmd;
-                    }
-                }
-            }
-        }
-        else {
-            for my $env (qw{ProgramFiles ProgramFiles(x86)}) {
-                if (defined (my $pf = $ENV{$env})) {
-                    my $cmd = $any->_os_validate_cmd(join('\\', $pf, $app, $name));
-                    return $cmd if defined $cmd;
-                }
+        lc($app) eq 'cygwin' and
+            return $any->_os_find_cygwin_cmd($name);
+
+        for my $env (qw{ProgramFiles ProgramFiles(x86)}) {
+            if (defined (my $pf = $ENV{$env})) {
+                my $cmd = $any->_os_validate_cmd(join('\\', $pf, $app, $name));
+                return $cmd if defined $cmd;
             }
         }
     }
@@ -459,5 +475,7 @@ sub DESTROY {
         $win32_close_handle->Call($handle);
     }
 }
+
+
 
 1;
