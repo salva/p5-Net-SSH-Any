@@ -31,7 +31,8 @@ sub _log_at_level {
     my ($pkg, undef, $line) = caller $level;
     my $time = sprintf "%.4f", Time::HiRes::time - $^T;
     my $text = join(': ', @_);
-    my $prefix = "$time $pkg $line|";
+    # my $prefix = "$time $pkg $line|";
+    my $prefix = sprintf "%s %s|", $time, $tssh->{backend} // 'Test';
     $text =~ s/\n$//;
     my $n;
     $text =~ s/^/$prefix.($n++?'\\':'-')/emg;
