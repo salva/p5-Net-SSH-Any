@@ -457,8 +457,11 @@ sub version {
     wantarray ? ('MSWin', $mayor, $minor, $build) : "MSWin-$mayor.$minor.$build";
 }
 
+# This method is used by Cygwin commands as most of then can not
+# handle native Windows paths correctly.
 sub unix_path {
     my ($any, $path) = @_;
+    return "/dev/null" if $path eq 'nul';
     my ($drive, @rest) = File::Spec->splitpath(File::Spec->rel2abs($path));
     $drive =~ s/:$//;
     s{\\}{/}g for @rest;
