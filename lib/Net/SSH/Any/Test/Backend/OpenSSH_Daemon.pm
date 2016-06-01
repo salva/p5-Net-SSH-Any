@@ -217,7 +217,7 @@ sub _start_and_check {
 sub _stop {
     my $tssh = shift;
     my $proc = $tssh->{sshd_proc};
-    $tssh->_log("Stopping sshd process $proc->{pid}");
+    $tssh->_log("Stopping sshd process, pid", $proc->{pid});
     $tssh->_os_wait_proc($proc, 0, 1);
 }
 
