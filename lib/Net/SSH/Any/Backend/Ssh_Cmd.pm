@@ -54,10 +54,10 @@ sub _make_cmd {
     push @args, '-C';
     push @args, -l => $be_opts->{user} if defined $be_opts->{user};
     push @args, -p => $be_opts->{port} if defined $be_opts->{port};
-    push @args, -i => $be_opts->{key_path} if defined $be_opts->{key_path};
+    push @args, -i => $any->_os_unix_path($be_opts->{key_path}) if defined $be_opts->{key_path};
     push @args, -o => 'BatchMode=yes' unless grep defined($be_opts->{$_}), qw(password passphrase);
     push @args, -o => 'StrictHostKeyChecking=no' unless $be_opts->{strict_host_key_checking};
-    push @args, -o => "UserKnownHostsFile=$be_opts->{known_hosts_path}"
+    push @args, -o => 'UserKnownHostsFile=' . $any->_os_unix_path($be_opts->{known_hosts_path})
         if defined $be_opts->{known_hosts_path};
 
     if ($any->{be_auth_type} eq 'password') {
