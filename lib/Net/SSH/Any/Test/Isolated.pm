@@ -8,42 +8,33 @@ use Carp;
 use Data::Dumper;
 use IPC::Open2 qw(open2);
 
-use Net::SSH::Any::URI;
+our $debug;
+
+use parent qw(Net::SSH::Any::Test::Isolated::_Base);
 
 sub new {
     my ($class, %opts) = @_;
-    my $perl = $opts{local_perl_cmd} // $^X // 'perl';
+    my $self = $class->SUPER::_new('client');
 
-    my $self = { perl => $perl };
-    bless $self, $class;
-
+    $self->{perl} = $opts{local_perl_cmd} // $^X // 'perl';
     $self->_bootstrap;
 
+    $self->_start(%opts);
+
     $self;
-}
-
-sub _serialize {
-    my $dump = Data::Dumper->new([@_], ['DATA']);
-    $dump->Terse(1)->Purity(1)->Indent(0)->Useqq(1);
-    return $dump->Dump;
-}
-
-sub _rpc {
-    my $self = shift;
-    my $method = shift;
-    my $args = _serialize(@_);
 }
 
 sub _bootstrap {
     my $self = shift;
     my $perl = $self->{perl} or return;
-    $self->{pid} = open2($self->{cout}, $self->{cin}, $^X);
+    $self->{pid} = open2($self->{in}, $self->{out}, $^X);
 
-    my $old = select($self->{cin});
+    my $old = select($self->{out});
     $| = 1;
     select $old;
 
     my $inc = Data::Dumper::Dumper([grep defined && !ref, @INC]);
+    my $debug_as_str = ($debug ? -1 : 'undef');
 
     my $code = <<EOC;
 
@@ -53,44 +44,56 @@ use strict;
 use warnings;
 
 use Net::SSH::Any::Test::Isolated::Server;
-Net::SSH::Any::Test::Isolated::Server->run;
+Net::SSH::Any::Test::Isolated::Server->run($debug_as_str);
 
-__DATA__
+__END__
 EOC
 
     $self->_send($code);
-
-    for (qw(foo bar doz)) {
-        $self->_wait_for_prompt;
-        $self->_send($_);
-    }
 }
+
+sub _start { shift->_rpc(start => @_) }
 
 sub _wait_for_prompt {
     my $self = shift;
-    my $out = $self->_read;
-    return $out eq 'ok!';
+    while (1) {
+        my $out = $self->_recv_packet;
+        return $out eq 'go!';
+        die "Unexpected packet $out received";
+    }
 }
 
-sub _send {
-    my ($self, $packet) = @_;
-    my $cin = $self->{cin};
-    say STDERR "master send: $packet";
-    say {$cin} $packet;
-}
-
-sub _read {
+sub _rpc {
     my $self = shift;
-    say STDERR "master waiting for data";
-    my $cout = $self->{cout};
-    chomp(my $packet = <$cout>);
-    say STDERR "master recv: $packet";
-    $packet;
+    my $method = shift;
+    $self->_wait_for_prompt;
+    $self->_send_packet($method => @_);
+    my ($head, @res) = @_;
+    if ($head eq 'response') {
+        return @res;
+    }
+    elsif ($head eq 'exception') {
+        die $res[0];
+    }
+    elsif ($head eq 'error') {
+        die $res[0];
+    }
+    else {
+        die "Internal error: unexpected response $head";
+    }
 }
 
-
-1;
-
-__DATA__
+sub AUTOLOAD {
+    our $AUTOLOAD;
+    my $name = $AUTOLOAD;
+    $name =~ s/.*://;
+    if ($name =~ /^[a-z]\w+$/i) {
+        my $sub = sub { shift->_rpc(forward => $name, @_) };
+        no strict 'refs';
+        *{$AUTOLOAD} = $sub;
+        goto &$sub;
+    }
+    die "Can't locate object method $name via package ".__PACKAGE__;
+}
 
 1;
