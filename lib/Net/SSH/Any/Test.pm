@@ -284,6 +284,9 @@ It has several backends implementing different strategies that range
 from finding an already working SSH server to installing, setting up
 and running a new temporary one.
 
+The backends are tried in turn until one is found able to provide a
+working SSH service.
+
 =head1 API
 
 =over 4
@@ -292,8 +295,7 @@ and running a new temporary one.
 
 This method creates and returns a new object.
 
-It accepts the set of options described below and also backend
-options.
+It accepts the following options:
 
 =over 4
 
@@ -355,10 +357,6 @@ The default logger prints the messages to the logger file handle.
 
 Sets the logger file handle. Defaults to C<STDERR>.
 
-=item backend_opts => { $backend_name => \%opts, ... }
-
-Per backend options.
-
 =item target => $uri
 
 =item targets => \@uris
@@ -387,6 +385,10 @@ Sets the SSH password.
 =item key_paths => \@private_key_paths
 
 Path to files containing privated keys to use for authentication.
+
+=item backend_opts => { $backend_name => \%opts, ... }
+
+Per backend specific options.
 
 =back
 
