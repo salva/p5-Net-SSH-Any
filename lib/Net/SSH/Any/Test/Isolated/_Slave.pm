@@ -1,11 +1,11 @@
-package Net::SSH::Any::Test::Isolated::_Server;
+package Net::SSH::Any::Test::Isolated::_Slave;
 
 use strict;
 use warnings;
 use feature qw(say);
 use Scalar::Util;
 
-$0 = "$^X (Net::SSH::Any::Test::Isolated::Server)";
+$0 = "$^X (Net::SSH::Any::Test::Isolated::Slave)";
 $| = 1;
 
 use parent 'Net::SSH::Any::Test::Isolated::_Base';
@@ -19,7 +19,7 @@ sub run {
 
 sub _new {
     my $class = shift;
-    $class->SUPER::_new('server', \*STDIN, \*STDOUT);
+    $class->SUPER::_new('slave', \*STDIN, \*STDOUT);
 }
 
 sub _run {
@@ -106,6 +106,13 @@ sub _do_poke {
 sub _do_eval {
     my ($self, $code) = @_;
     eval $code;
+}
+
+sub _do_stop {
+    my $self = shift;
+    $self->_check_state('running');
+    undef $self->{tssh};
+    $self->{state} = 'stopped';
 }
 
 1;

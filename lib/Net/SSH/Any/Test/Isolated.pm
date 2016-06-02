@@ -47,8 +47,8 @@ use warnings;
 
 \$Net::SSH::Any::Test::Isolated::debug = $debug_as_str;
 
-use Net::SSH::Any::Test::Isolated::_Server;
-Net::SSH::Any::Test::Isolated::_Server->run;
+use Net::SSH::Any::Test::Isolated::_Slave;
+Net::SSH::Any::Test::Isolated::_Slave->run;
 
 __END__
 EOC
@@ -70,8 +70,7 @@ sub _wait_for_prompt {
     while (1) {
         my $out = $self->_recv_packet // return;
         return $out eq 'go!';
-        $self->_disconnect;
-        die "Unexpected packet $out received";
+        $self->_fatal_error("Unexpected packet $out received");
     }
 }
 
@@ -88,19 +87,31 @@ sub _rpc {
             die $res[0];
         }
         else {
-            $self->_disconnect;
-            die "Internal error: unexpected response $head";
+            $self->_fatal_error("Internal error: unexpected response $head");
         }
     }
     else {
-        $self->_disconnect;
-        die "Connection with server lost";
+        $self->_fatal_error("Connection with slave lost")
     }
 }
 
 sub _peek { shift->_rpc(peek => @_) }
 sub _poke { shift->_rpc(poke => @_) }
 sub _eval { shift->_rpc(eval => @_) }
+
+sub _fatal_error {
+    my ($self, $exception) = @_;
+    $self->_disconnect;
+    croak $exception;
+}
+
+sub _stop {
+    my $self = shift;
+    if ($self->{state} eq 'running') {
+        $self->_rpc('stop');
+        $self->{state} = 'stopped';
+    }
+}
 
 sub _disconnect {
     my $self = shift;
@@ -109,10 +120,14 @@ sub _disconnect {
         close $self->{out};
         waitpid $pid, 0;
     }
-    $self->{state} = 'stopped';
+    $self->{state} = 'disconnected';
 }
 
-sub DESTROY { shift->_disconnect }
+sub DESTROY {
+    my $self = shift;
+    $self->_stop;
+    $self->_disconnect;
+}
 
 sub AUTOLOAD {
     our $AUTOLOAD;
@@ -128,7 +143,7 @@ sub AUTOLOAD {
         *{$AUTOLOAD} = $sub;
         goto &$sub;
     }
-    die "Can't locate object method $name via package ".__PACKAGE__;
+    croak "Can't locate object method $name via package ".__PACKAGE__;
 }
 
 1;
