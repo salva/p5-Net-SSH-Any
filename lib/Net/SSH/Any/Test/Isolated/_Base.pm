@@ -3,20 +3,22 @@ package Net::SSH::Any::Test::Isolated::_Base;
 use strict;
 use warnings;
 use feature 'say';
+use Data::Dumper;
 
 BEGIN { *debug = \$Net::SSH::Any::Test::Isolated::debug }
 our $debug;
 
 sub _debug {
     my $self = shift;
-    say STDERR "$self->{side}> ", join(': ', @_) if $debug;
+    print STDERR "$self->{side}> " . join(': ', @_) . "\n" if $debug;
 }
 
 sub _new {
     my ($class, $side, $in, $out) = @_;
     my $self = { side => $side,
                  in => $in,
-                 out => $out };
+                 out => $out,
+                 state => 'new'};
     bless $self, $class;
 }
 
@@ -30,34 +32,39 @@ sub _recv {
     my $self = shift;
     $self->_debug("waiting for data");
     my $in = $self->{in};
-    chomp(my $packet = <$in>);
+    my $packet = <$in> // return;
+    chomp $packet;
     $self->_debug(recv => $packet);
     $packet;
 }
 
 sub _serialize {
-    shift;
-    my $dump = Data::Dumper->new([@_], ['D']);
+    my $self = shift;
+    my $dump = Data::Dumper->new([\@_], ['D']);
     $dump->Terse(1)->Purity(1)->Indent(0)->Useqq(1);
-    return $dump->Dump;
+    my $data = $dump->Dump;
+    # $self->_debug("serialized $data");
+    $data;
 }
 
 sub _deserialize {
-    shift;
+    my $self = shift;
     my ($r, $err);
     do {
         local ($@, $SIG{__DIE__});
-        $r = eval $_[1];
+        # $self->_debug("deserializing $_[0]");
+        $r = eval $_[0] // [];
         $err = $@;
     };
     die $err if $err;
+    # $self->_debug("deserialized args", Dumper($r));
     wantarray ? @$r : $r->[0];
 }
 
 sub _recv_packet {
     my $self = shift;
-    my $packet = $self->_recv;
     while (1) {
+        my $packet = $self->_recv // return;
         if (my ($head, $args) = $packet =~ /^(\w+):\s+(.*)$/) {
             my @args = $self->_deserialize($args);
             if ($head eq 'log') {

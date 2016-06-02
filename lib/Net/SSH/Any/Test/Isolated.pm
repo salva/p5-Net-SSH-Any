@@ -11,6 +11,8 @@ use IPC::Open2 qw(open2);
 our $debug;
 
 use parent qw(Net::SSH::Any::Test::Isolated::_Base);
+use Net::SSH::Any::URI;
+
 
 sub new {
     my ($class, %opts) = @_;
@@ -43,8 +45,10 @@ use lib \@{$inc};
 use strict;
 use warnings;
 
-use Net::SSH::Any::Test::Isolated::Server;
-Net::SSH::Any::Test::Isolated::Server->run($debug_as_str);
+\$Net::SSH::Any::Test::Isolated::debug = $debug_as_str;
+
+use Net::SSH::Any::Test::Isolated::_Server;
+Net::SSH::Any::Test::Isolated::_Server->run;
 
 __END__
 EOC
@@ -57,7 +61,7 @@ sub _start { shift->_rpc(start => @_) }
 sub _wait_for_prompt {
     my $self = shift;
     while (1) {
-        my $out = $self->_recv_packet;
+        my $out = $self->_recv_packet // return;
         return $out eq 'go!';
         die "Unexpected packet $out received";
     }
@@ -68,18 +72,28 @@ sub _rpc {
     my $method = shift;
     $self->_wait_for_prompt;
     $self->_send_packet($method => @_);
-    my ($head, @res) = @_;
-    if ($head eq 'response') {
-        return @res;
-    }
-    elsif ($head eq 'exception') {
-        die $res[0];
-    }
-    elsif ($head eq 'error') {
-        die $res[0];
+    if (my ($head, @res) = $self->_recv_packet) {
+        if ($head eq 'response') {
+            return (wantarray ? @res : $res[0]);
+        }
+        elsif ($head eq 'exception') {
+            die $res[0];
+        }
+        else {
+            die "Internal error: unexpected response $head";
+        }
     }
     else {
-        die "Internal error: unexpected response $head";
+        die "Connection with server lost";
+    }
+}
+
+sub DESTROY {
+    my $self = shift;
+    if (my $pid = $self->{pid}) {
+        close $self->{in};
+        close $self->{out};
+        waitpid $pid, 0;
     }
 }
 
@@ -88,7 +102,7 @@ sub AUTOLOAD {
     my $name = $AUTOLOAD;
     $name =~ s/.*://;
     if ($name =~ /^[a-z]\w+$/i) {
-        my $sub = sub { shift->_rpc(forward => $name, @_) };
+        my $sub = sub { shift->_rpc(forward => $name, wantarray, @_) };
         no strict 'refs';
         *{$AUTOLOAD} = $sub;
         goto &$sub;
