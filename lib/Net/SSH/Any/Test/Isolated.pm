@@ -14,15 +14,30 @@ use parent qw(Net::SSH::Any::Test::Isolated::_Base);
 use Net::SSH::Any::URI;
 
 
+sub _default_logger {
+    my ($fh, $text) = @_;
+    print {$fh} $text;
+}
+
 sub new {
     my ($class, %opts) = @_;
     my $self = $class->SUPER::_new('client');
+
+    my $logger_fh = delete $opts{logger_fh} // \*STDERR;
+    open my $logger_fh_dup, '>>&', $logger_fh;
+    $self->{logger_fh} = $logger_fh_dup;
+    $self->{logger} = delete $opts{logger} // \&_default_logger;
 
     $self->{perl} = $opts{local_perl_cmd} // $^X // 'perl';
     $self->_bootstrap;
     $self->_start(%opts);
 
     $self;
+}
+
+sub _log {
+    my $self = shift;
+    $self->{logger}->($self->{logger_fh}, @_);
 }
 
 sub _bootstrap {
