@@ -31,7 +31,7 @@ sub _run {
         if (my ($head, @args) = $self->_recv_packet) {
             unless ($head eq 'close!') {
                 if (my $method = $self->can("_do_$head")) {
-                    $self->_debug("calling $method(@args)");
+                    #$self->_debug("calling $method(@args)");
                     my @r = eval { $self->$method(@args) };
                     if ($@) {
                         $self->_send_packet(exception => $@)
