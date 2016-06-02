@@ -115,4 +115,11 @@ sub _do_stop {
     $self->{state} = 'stopped';
 }
 
+sub _do_error {
+    my $self = shift;
+    $self->_check_state('running');
+    my $error = $self->{tssh}->error // return;
+    return ($error + 0, $error);
+}
+
 1;

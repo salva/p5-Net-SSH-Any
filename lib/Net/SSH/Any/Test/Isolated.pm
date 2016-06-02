@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use feature qw(say);
 use Carp;
-
+use Scalar::Util ();
 use Data::Dumper;
 use IPC::Open2 qw(open2);
 
@@ -113,6 +113,12 @@ sub _rpc {
 sub _peek { shift->_rpc(peek => @_) }
 sub _poke { shift->_rpc(poke => @_) }
 sub _eval { shift->_rpc(eval => @_) }
+
+sub error {
+    my $self = shift;
+    my ($num, $str) = $self->_rpc('error');
+    $num ? Scalar::Util::dualvar($num, $str) : $num;
+}
 
 sub _fatal_error {
     my ($self, $exception) = @_;
