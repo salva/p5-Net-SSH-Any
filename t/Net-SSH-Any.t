@@ -5,31 +5,29 @@ use warnings;
 
 use Test::More;
 
-my $sshd = eval {
-    require Test::SSH;
-    Test::SSH->new(run_server => ($ENV{AUTHOR_TESTING} || $ENV{AUTOMATED_TESTING}));
-};
+use Net::SSH::Any::Test::Isolated;
+use Net::SSH::Any;
 
-if (!$sshd) {
-    plan skip_all => 'Test::SSH is not installed or the module was not able to find a SSH server';
-    exit(0);
-}
+$Net::SSH::Any::Test::Isolated::debug =-1;
 
-plan tests => 2;
-use_ok('Net::SSH::Any');
-my $ssh = Net::SSH::Any->new($sshd->connection_params);
-ok($ssh, "connects ok");
-
-my $out = $ssh->capture("uname -a");
-if ($? == 0) {
-    diag "remote system runs unix";
+my $tssh = Net::SSH::Any::Test::Isolated->new(logger => 'diag');
+if (my $error = $tssh->error) {
+    diag "Unable to find or start SSH service: $error";
 }
 else {
-    $out = $ssh->capture('cmd /c ver');
+    my $ssh = Net::SSH::Any->new($tssh->uri);
+    ok($ssh, "connects ok");
+
+    my $out = $ssh->capture("uname -a");
     if ($? == 0) {
-        diag "remote system runs windows";
+        diag "remote runs some Unix based operating system";
+    }
+    else {
+        $out = $ssh->capture('cmd /c ver');
+        if ($? == 0) {
+            diag "remote system runs MS Windows";
+        }
     }
 }
 
-
-
+done_testing();
