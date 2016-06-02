@@ -257,3 +257,170 @@ sub _find_keys {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Net::SSH::Any::Test - Test SSH modules
+
+=head1 SYNOPSIS
+
+  use Net::SSH::Any::Test;
+
+  my $tssh = Net::SSH::Any::Test->new;
+  $tssh->error and die "Unable to get a working SSH service";
+
+  my $ssh = My::SSH::Module->new($tssh->uri);
+  ...
+
+=head1 DESCRIPTION
+
+C<Net::SSH::Any::Test> is a module that tries hard to provide a
+working SSH service that can be used for testing SSH client packages
+as Net::SSH::Any.
+
+It has several backends implementing different strategies that range
+from finding an already working SSH server to installing, setting up
+and running a new temporary one.
+
+=head1 API
+
+=over 4
+
+=item $tssh = Net::SSH::Any::Test->new(%opts)
+
+This method creates and returns a new object.
+
+It accepts the set of options described below and also backend
+options.
+
+=over 4
+
+=item backends => \@backends
+
+Array with the names of the backends which the module should try in
+order to provide the working SSH service.
+
+For instance:
+
+  my $tssh = Net::SSH::Any::Test->new(...,
+                                      backends => ['Cygwin']);
+
+=item run_server => 0
+
+Disables backends that may start a new SSH server in any way on the
+local machine.
+
+=item test_commands => \@cmds
+
+A set of commands that are executed on the remote server in order to
+determine if it is working properly or not. The server is considered
+good when any of the commands completes successfully.
+
+The default set includes commands for common Linux, UNIX and MS
+Windows systems.
+
+=item working_dir => $path
+
+Path to a directory where to write temporary files and logs.
+
+=item timeout => $timeout
+
+The given value is later honoured by methods doing network IO.
+
+=item logger => sub { ... }
+
+A logging function that will be used for reporting information to the
+user. The function is called with the logging file handle and the
+message as arguments.
+
+For instance, using C<diag> from L<Test::More>:
+
+  use Test::More;
+  ...
+
+  sub my_logger {
+    my ($fh, $msg) = @_;
+    # note that $fh is just not used!
+    diag $msg;
+  }
+
+  my $tssh = Net::SSH::Any::Test->new(...,
+                                      logger => \&my_logger);
+
+The default logger prints the messages to the logger file handle.
+
+=item logger_fh => $fh
+
+Sets the logger file handle. Defaults to C<STDERR>.
+
+=item backend_opts => { $backend_name => \%opts, ... }
+
+Per backend options.
+
+=item target => $uri
+
+=item targets => \@uris
+
+Set of server targets to be used by the Remote backend.
+
+The information in the targets is combined with that passed in other
+options. For instance:
+
+   my $tssh = Net::SSH::Any::Test->new(target => 'ssh://leo_caldas@10.0.3.1/',
+                                       password => $password,
+                                       port => 1022);
+
+See also L<Net::SSH::Any::URI>.
+
+=item port => $port
+
+Sets the SSH port number used when looking for running servers.
+
+=item password => $password
+
+Sets the SSH password.
+
+=item key_path => $private_key_path
+
+=item key_paths => \@private_key_paths
+
+Path to files containing privated keys to use for authentication.
+
+=back
+
+=item $uri = $tssh->uri
+
+Returns a L<Net::SSH::Any::URI> object representing a working SSH
+service.
+
+=item $error = $tssh->error
+
+Returns the last error.
+
+=item $tssh->stop
+
+Terminates any running process (i.e. any SSH server).
+
+=back
+
+=head1 BACKENDS
+
+=over4
+
+=item Remote
+
+Tries to connect to localhost or to any other given service.
+
+=item OpenSSH_Daemon
+
+Starts a new OpenSSH server.
+
+=item Cygwin
+
+In MS Windows systems, downloads and install Cygwin, including the
+OpenSSH packages, and uses it to run a SSH server.
+
+
+=back
