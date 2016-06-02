@@ -3,6 +3,7 @@ package Net::SSH::Any::Test::Isolated::_Server;
 use strict;
 use warnings;
 use feature qw(say);
+use Scalar::Util;
 
 $0 = "$^X (Net::SSH::Any::Test::Isolated::Server)";
 $| = 1;
@@ -18,7 +19,6 @@ sub run {
 
 sub _new {
     my $class = shift;
-    $debug = $dbg;
     $class->SUPER::_new('server', \*STDIN, \*STDOUT);
 }
 
@@ -50,10 +50,31 @@ sub _run {
 
 sub _send_prompt { shift->_send('go!') }
 
+sub __logger {
+    my $self = shift;
+    my $fh = shift;
+    if ($self) {
+        $self->_send_packet(log => @_);
+    }
+    else {
+        print  {$fh} @_
+    }
+}
+
 sub _do_start {
     my ($self, @opts) = @_;
+    $self->_check_state('new');
     require Net::SSH::Any::Test;
-    $self->{tssh} = Net::SSH::Any::Test->new(@opts);
+
+    open my($logger_fh), '>', File::Spec->devnull;
+    $logger_fh //= \*STDERR; # Just in case!
+
+    my $weak_self = $self;
+    Scalar::Util::weaken($weak_self);
+    $self->{tssh} = Net::SSH::Any::Test->new(@opts,
+                                             logger_fh => $logger_fh,
+                                             logger => sub { __logger($weak_self, @_) });
+    $self->{state} = 'running';
     1;
 }
 
@@ -61,6 +82,7 @@ sub _do_forward {
     my $self = shift;
     my $method = shift;
     my $wantarray = shift;
+    $self->_check_state('running');
     if ($wantarray) {
         return $self->{tssh}->$method(@_);
     }
@@ -69,5 +91,21 @@ sub _do_forward {
     }
 }
 
+sub _do_peek {
+    my ($self, $key) = @_;
+    $self->_check_state('running');
+    $self->{tssh}{$key};
+}
+
+sub _do_poke {
+    my ($self, $key, $value) = @_;
+    $self->_check_state('running');
+    $self->{tssh}{$key} = $value;
+}
+
+sub _do_eval {
+    my ($self, $code) = @_;
+    eval $code;
+}
 
 1;

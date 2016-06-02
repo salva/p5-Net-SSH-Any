@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use feature 'say';
 use Data::Dumper;
+use Carp;
 
 BEGIN { *debug = \$Net::SSH::Any::Test::Isolated::debug }
 our $debug;
@@ -41,7 +42,7 @@ sub _recv {
 sub _serialize {
     my $self = shift;
     my $dump = Data::Dumper->new([\@_], ['D']);
-    $dump->Terse(1)->Purity(1)->Indent(0)->Useqq(1);
+    $dump->Terse(1)->Indent(0)->Useqq(1);
     my $data = $dump->Dump;
     # $self->_debug("serialized $data");
     $data;
@@ -52,7 +53,7 @@ sub _deserialize {
     my ($r, $err);
     do {
         local ($@, $SIG{__DIE__});
-        # $self->_debug("deserializing $_[0]");
+        #$self->_debug("deserializing $_[0]");
         $r = eval $_[0] // [];
         $err = $@;
     };
@@ -94,7 +95,12 @@ sub _send_packet {
 
 sub _log {
     my $self = shift;
-    say STDERR join(': ', log => @_);
+    print STDERR join(': ', log => @_);
+}
+
+sub _check_state {
+    my ($self, $state) = @_;
+    $self->{state} eq $state or croak "invalid state for action, current state: $self->{state}, expected: $state";
 }
 
 1;

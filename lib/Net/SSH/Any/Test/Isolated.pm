@@ -20,7 +20,6 @@ sub new {
 
     $self->{perl} = $opts{local_perl_cmd} // $^X // 'perl';
     $self->_bootstrap;
-
     $self->_start(%opts);
 
     $self;
@@ -28,6 +27,7 @@ sub new {
 
 sub _bootstrap {
     my $self = shift;
+    $self->_check_state('new');
     my $perl = $self->{perl} or return;
     $self->{pid} = open2($self->{in}, $self->{out}, $^X);
 
@@ -54,15 +54,23 @@ __END__
 EOC
 
     $self->_send($code);
+    $self->{state} = 'bootstrapped';
 }
 
-sub _start { shift->_rpc(start => @_) }
+sub _start {
+    my $self = shift;
+    $self->_check_state('bootstrapped');
+    $self->_rpc(start => @_);
+    $self->{state} = 'running';
+}
+
 
 sub _wait_for_prompt {
     my $self = shift;
     while (1) {
         my $out = $self->_recv_packet // return;
         return $out eq 'go!';
+        $self->_disconnect;
         die "Unexpected packet $out received";
     }
 }
@@ -80,29 +88,42 @@ sub _rpc {
             die $res[0];
         }
         else {
+            $self->_disconnect;
             die "Internal error: unexpected response $head";
         }
     }
     else {
+        $self->_disconnect;
         die "Connection with server lost";
     }
 }
 
-sub DESTROY {
+sub _peek { shift->_rpc(peek => @_) }
+sub _poke { shift->_rpc(poke => @_) }
+sub _eval { shift->_rpc(eval => @_) }
+
+sub _disconnect {
     my $self = shift;
     if (my $pid = $self->{pid}) {
         close $self->{in};
         close $self->{out};
         waitpid $pid, 0;
     }
+    $self->{state} = 'stopped';
 }
+
+sub DESTROY { shift->_disconnect }
 
 sub AUTOLOAD {
     our $AUTOLOAD;
     my $name = $AUTOLOAD;
     $name =~ s/.*://;
     if ($name =~ /^[a-z]\w+$/i) {
-        my $sub = sub { shift->_rpc(forward => $name, wantarray, @_) };
+        my $sub = sub {
+            my $self = shift;
+            $self->_check_state('running');
+            $self->_rpc(forward => $name, wantarray, @_)
+        };
         no strict 'refs';
         *{$AUTOLOAD} = $sub;
         goto &$sub;
