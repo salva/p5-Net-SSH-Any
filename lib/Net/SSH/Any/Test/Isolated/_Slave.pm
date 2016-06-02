@@ -6,6 +6,8 @@ use feature qw(say);
 use Scalar::Util;
 
 $0 = "$^X (Net::SSH::Any::Test::Isolated::Slave)";
+binmode STDOUT;
+binmode STDIN;
 $| = 1;
 
 use parent 'Net::SSH::Any::Test::Isolated::_Base';
@@ -27,24 +29,27 @@ sub _run {
     while (1) {
         $self->_send_prompt;
         if (my ($head, @args) = $self->_recv_packet) {
-            if (my $method = $self->can("_do_$head")) {
-                $self->_debug("calling $method(@args)");
-                my @r = eval { $self->$method(@args) };
-                if ($@) {
-                    $self->_send_packet(exception => $@)
+            unless ($head eq 'close!') {
+                if (my $method = $self->can("_do_$head")) {
+                    $self->_debug("calling $method(@args)");
+                    my @r = eval { $self->$method(@args) };
+                    if ($@) {
+                        $self->_send_packet(exception => $@)
+                    }
+                    else {
+                        $self->_send_packet(response => @r)
+                    }
                 }
                 else {
-                    $self->_send_packet(response => @r)
+                    $self->_send_packet(exception => "Internal error: invalid method $head");
                 }
-            }
-            else {
-                $self->_send_packet(exception => "Internal error: invalid method $head");
+                next;
             }
         }
-        else {
-            # connection close;
-            return;
-        }
+
+        # connection closed;
+        $self->_debug("connection closed");
+        return;
     }
 }
 

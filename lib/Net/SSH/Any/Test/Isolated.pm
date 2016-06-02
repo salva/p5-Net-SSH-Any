@@ -19,6 +19,11 @@ sub _default_logger {
     print {$fh} $text;
 }
 
+sub _diag_logger {
+    require Test::More;
+    Test::More::diag($_[1]);
+}
+
 sub new {
     my ($class, %opts) = @_;
     my $self = $class->SUPER::_new('client');
@@ -26,8 +31,16 @@ sub new {
     my $logger_fh = delete $opts{logger_fh} // \*STDERR;
     open my $logger_fh_dup, '>>&', $logger_fh;
     $self->{logger_fh} = $logger_fh_dup;
-    $self->{logger} = delete $opts{logger} // \&_default_logger;
-
+    my $logger = delete $opts{logger} // \&_default_logger;
+    unless (ref $logger) {
+        if ($logger eq 'diag') {
+            $logger = \&_diag_logger;
+        }
+        else {
+            croak "Bad logger argument '$logger'";
+        }
+    }
+    $self->{logger} = $logger;
     $self->{perl} = $opts{local_perl_cmd} // $^X // 'perl';
     $self->_bootstrap;
     $self->_start(%opts);
@@ -130,6 +143,7 @@ sub _stop {
     my $self = shift;
     if ($self->{state} eq 'running') {
         $self->_rpc('stop');
+        $self->_send('close!');
         $self->{state} = 'stopped';
     }
 }
@@ -137,6 +151,7 @@ sub _stop {
 sub _disconnect {
     my $self = shift;
     if (my $pid = $self->{pid}) {
+        $self->_debug("closing pipes");
         close $self->{in};
         close $self->{out};
         waitpid $pid, 0;

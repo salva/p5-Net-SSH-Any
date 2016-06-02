@@ -34,7 +34,7 @@ sub _recv {
     $self->_debug("waiting for data");
     my $in = $self->{in};
     my $packet = <$in> // return;
-    chomp $packet;
+    $packet =~ s/[\r\n]+$//;
     $self->_debug(recv => $packet);
     $packet;
 }
@@ -74,13 +74,14 @@ sub _recv_packet {
             }
             return ($head, @args);
         }
-        elsif ($packet eq 'go!') {
-            return 'go!'
+        elsif ($packet =~ /^\w+!$/) {
+            return $packet
         }
         elsif ($packet =~ /^\s*(?:#.*)?$/) {
             # Ignore blank lines and comments.
         }
         else {
+            $self->_debug("unexpected data packet: $packet");
             die "Internal error: unexpected data packet $packet";
         }
     }
