@@ -30,7 +30,7 @@ sub _log_at_level {
     my $level = shift;
     my ($pkg, undef, $line) = caller $level;
     my $time = sprintf "%.4f", Time::HiRes::time - $^T;
-    my $text = join(': ', map { defined ? $_ : '<undef>' } @_);
+    my $text = join(': ', map { defined($_) ? $_ : '<undef>' } @_);
     # my $prefix = "$time $pkg $line|";
     my $prefix = sprintf "%s %s|", $time, $tssh->{backend} // 'Test';
     $text =~ s/\n$//;
