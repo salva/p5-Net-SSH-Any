@@ -262,6 +262,12 @@ sub scp_find        {
     shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Finder', @_)
 }
 
+sub autodetect {
+    my $any = shift;
+    my $auto = $any->_helper_delegate('Net::SSH::Any::Autodetector', @_) // return;
+    wantarray ? %$auto : $auto;
+}
+
 1;
 
 __END__
