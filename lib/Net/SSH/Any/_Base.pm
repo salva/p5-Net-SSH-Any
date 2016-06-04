@@ -188,8 +188,8 @@ sub _find_cmd {
     $safe_name =~ s/\W/_/g;
     return ( $any->{local_cmd}{$safe_name}             //
              $any->_find_cmd_by_friend($name, $friend) //
-             $any->_find_helper_cmd($name)             //
              $any->_find_cmd_in_path($name)            //
+             $any->_find_helper_cmd($name)             //
              $any->_os_find_cmd_by_app($name, $app)    //
              $any->_os_validate_cmd($default)          //
              $name );
