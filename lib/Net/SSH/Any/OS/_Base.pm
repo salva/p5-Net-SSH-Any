@@ -153,7 +153,7 @@ sub interactive_login {
 
 sub validate_cmd {
     my ($any, $cmd) = @_;
-    if (defined $cmd and -x $cmd) {
+    if (defined $cmd and -x $cmd and -f $cmd) {
         $debug and $debug & 1024 and _debug "file $cmd found to be executable";
         return $cmd;
     }
