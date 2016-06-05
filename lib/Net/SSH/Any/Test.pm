@@ -194,16 +194,28 @@ sub DESTROY {
     $tssh->_stop;
 }
 
+sub _make_path {
+    my ($tssh, $head, @paths) = @_;
+    for (@paths) {
+        $head = File::Spec->join($head, $_);
+        mkdir $head unless -d $head;
+        unless (do { local $!; -d $head}) {
+            $tssh->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create directory '$head'", $!);
+            return;
+        }
+    }
+    $head;
+}
+
 sub _backend_wdir {
     my $tssh = shift;
     my $backend = $tssh->{backend} // croak "Internal error: backend not set";
-    my $dir = File::Spec->join($tssh->{wdir}, $backend);
-    mkdir $dir unless -d $dir;
-    unless (do { local $!; -d $dir}) {
-        $tssh->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create directory '$dir'", $!);
-        return;
-    }
-    $dir
+    $tssh->_make_path($tssh->{wdir}, $backend);
+}
+
+sub make_wdir {
+    my $tssh = shift;
+    $tssh->_make_path($tssh->{wdir}, @_)
 }
 
 sub _backend_wfile {
@@ -213,6 +225,13 @@ sub _backend_wfile {
 }
 
 sub uri { shift->{good_uri} }
+
+sub is_localhost {
+    my ($tssh, $ssh) = @_;
+    my $ok = $tssh->_is_localhost($ssh);
+    $tssh->_log("Remote connection points to localhost", $ok);
+    $ok
+}
 
 sub _is_server_running {
     my ($tssh, $uri) = @_;
