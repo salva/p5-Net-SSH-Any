@@ -30,4 +30,25 @@ sub _start_and_check {
     ()
 }
 
+sub _is_localhost {
+    my ($tssh, $ssh) = @_;
+    my $fn = $tssh->_backend_wfile(sprintf("localhost-check-%06d", int rand 1000000));
+    $fn = File::Spec->rel2abs($fn);
+    open my($fh), '>', $fn or return;
+    print $fh "hello!\n";
+    close $fh or return;
+
+    $ssh //= $tssh->_new_ssh_client($tssh->uri) // return;
+    my %rfn = ( $fn => 1,
+               $tssh->_os_unix_path($fn) => 1 );
+    for my $rfn (keys %rfn) {
+        return 1 if $ssh->scp_get_content($rfn) =~ /hello/;
+        for my $cmd ("cat $rfn",
+                     "type $rfn") {
+            return 1 if $ssh->capture({stderr_discard => 1}, $cmd) =~ /hello/;
+        }
+    }
+    0;
+}
+
 1;
