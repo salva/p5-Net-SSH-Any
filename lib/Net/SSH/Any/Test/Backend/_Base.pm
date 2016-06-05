@@ -15,24 +15,29 @@ sub _stop { 1 }
 my $dev_null = File::Spec->devnull;
 sub _dev_null { $dev_null }
 
+sub _new_ssh_client {
+    my ($tssh, $uri) = @_;
+    $tssh->_log("Trying to connect to server at ".$uri->uri);
+    my $ssh = Net::SSH::Any->new($uri,
+                                 batch_mode => 1,
+                                 timeout => $tssh->{timeout},
+                                 backends => $tssh->{any_backends},
+                                 strict_host_key_checking => 0,
+                                 known_hosts_path => $tssh->_dev_null);
+    if ($ssh->error) {
+        $tssh->_log("Unable to establish SSH connection", $ssh->error, uri => $uri->as_string);
+        return;
+    }
+    $ssh
+}
+
 sub _check_and_set_uri {
     my ($tssh, $uri) = @_;
+    $uri //= $tssh->uri // return;
     $tssh->_log("Checking URI ".$uri->uri);
     my $ssh;
     for my $cmd (@{$tssh->{test_commands}}) {
-        unless ($ssh) {
-            $tssh->_log("Trying to connect to server at ".$uri->uri);
-            $ssh = Net::SSH::Any->new($uri,
-                                      batch_mode => 1,
-                                      timeout => $tssh->{timeout},
-                                      backends => $tssh->{any_backends},
-                                      strict_host_key_checking => 0,
-                                      known_hosts_path => $tssh->_dev_null);
-            if ($ssh->error) {
-                $tssh->_log("Unable to establish SSH connection", $ssh->error, uri => $uri->as_string);
-                return;
-            }
-        }
+        $ssh //= $tssh->_new_ssh_client($uri) // return;
         my ($out, $err) = $ssh->capture2($cmd);
         if (my $error = $ssh->error) {
             $tssh->_log("Running command '$cmd' failed, rc: $?, error: $error");
@@ -86,5 +91,7 @@ sub _resolve_cmd {
     my ($tssh, $name) = @_;
     $tssh->_find_cmd($name);
 }
+
+sub _is_localhost { 0 }
 
 1;
