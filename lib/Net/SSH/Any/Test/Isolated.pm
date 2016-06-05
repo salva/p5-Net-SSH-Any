@@ -133,6 +133,13 @@ sub error {
     $num ? Scalar::Util::dualvar($num, $str) : $num;
 }
 
+sub is_localhost {
+    my $self = shift;
+    # avoid passing the client object around.
+    $self->_check_state('running');
+    $self->_rpc(forward => 'is_localhost', wantarray)
+}
+
 sub _fatal_error {
     my ($self, $exception) = @_;
     $self->_disconnect;
