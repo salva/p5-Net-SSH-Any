@@ -44,57 +44,46 @@ sub which {
     };
 }
 
-my %detect_os_cmds = ( windows => ['cmd /c ver'],
-                       unix    => ['uname -a'] );
-
 my $tssh = Net::SSH::Any::Test::Isolated->new(logger => 'diag');
 if (my $error = $tssh->error) {
     diag "Unable to find or start SSH service: $error";
+    goto DONE;
 }
-else {
-    for my $be (qw(Net_SSH2 Net_OpenSSH Ssh_Cmd)) {
-        diag "Testing backend $be";
 
-        my %opts = ( backend => $be,
-                     timeout => 30,
-                     strict_host_key_checking => 0,
-                     batch_mode => 1,
-                     backend_opts => { Net_OpenSSH => { strict_mode => 0 } } );
 
-        my $ssh = Net::SSH::Any->new($tssh->uri, %opts);
+for my $be (qw(Net_SSH2 Net_OpenSSH Ssh_Cmd)) {
+    diag "Testing backend $be";
 
-        ok($ssh, "constructor returns an object");
-        if (my $error = $ssh->error) {
-            is ($error+0, SSHA_NO_BACKEND_ERROR+0, "no backend available")
-                or diag "error: $error";
-            next;
-        }
-        ok(1, "no constructor error");
+    my %opts = ( backend => $be,
+                 timeout => 30,
+                 strict_host_key_checking => 0,
+                 batch_mode => 1,
+                 backend_opts => { Net_OpenSSH => { strict_mode => 0 } } );
 
-        my $os;
-    OUTER: for my $detect (qw(unix windows)) {
-            for my $cmd (@{$detect_os_cmds{$detect}}) {
-                my $out = $ssh->capture($cmd);
-                if ($? == 0) {
-                    $os = $detect;
-                    chomp $out;
-                    diag "remote operating system is $os ($out)";
-                    last OUTER;
-                }
-            }
-        }
+    my $ssh = Net::SSH::Any->new($tssh->uri, %opts);
 
-        ok($os, "OS detected");
-
-        chomp(my $rshell = $ssh->capture(echo => \\'$SHELL'));
-        ssh_ok($ssh);
-        diag "Remote shell is $rshell";
-        my $rshell_is_csh = ($rshell =~ /\bt?csh$/);
-        diag "Remote shell is " . ($rshell_is_csh ? "" : "not ") . "csh";
-
-        my $cat = which($ssh, 'cat');
-
+    ok($ssh, "constructor returns an object");
+    if (my $error = $ssh->error) {
+        ok ($error == SSHA_NO_BACKEND_ERROR, "no backend available")
+            or diag "error: $error";
+        next;
     }
+    ok(1, "no constructor error");
+
+    my %auto = $ssh->autodetect();
+    ssh_ok($ssh, "autodetect") or next;
+
+    ok(defined $auto{os}, "OS detected") or next;
+    diag "Remote OS is $auto{os}";
+
+    ok ($auto{shell}, "shell detected");
+    diag "remote shell is $auto{shell}" if defined $auto{shell};
+    diag "remote shell is csh" if $auto{csh_shell};
+
+    my $wdir = $tssh->make_wdir('Net-SSH-Any');
+    my $islh = $tssh->is_localhost($ssh);
+    ok (defined $islh, "is_localhost returns a defined value");
+    $islh or next;
 }
 
 done_testing();
