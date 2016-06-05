@@ -160,7 +160,8 @@ sub _test_shell {
     $shell =~ s|.*/|| // return;
     $self->{any}{remote_shell} = $shell
         if $self->{opts}{apply};
-    {}
+    my $csh_shell = $shell =~ (/\bt?csh$/);
+    { csh_shell => $csh_shell }
 }
 
 sub _test_linux_os_release {
