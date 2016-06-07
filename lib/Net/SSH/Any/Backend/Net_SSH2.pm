@@ -106,7 +106,7 @@ sub __check_host_key {
     unless (defined $known_hosts_path) {
         my $config_dir;
         if ($windows) {
-            _load_module('Win32') or return;
+            $any->_load_module('Win32') or return;
             my $appdata = Win32::GetFolderPath(Win32::CSIDL_APPDATA());
             unless (defined $appdata) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, "unable to determine directory for user application data");
