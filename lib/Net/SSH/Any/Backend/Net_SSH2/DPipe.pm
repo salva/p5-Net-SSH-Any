@@ -70,6 +70,8 @@ sub READ {
         $len = 34000;
     }
 
+    $ext //= 0;
+
     my $bytes;
     if ($off) {
         $_[1] = '' unless defined $_[1];
