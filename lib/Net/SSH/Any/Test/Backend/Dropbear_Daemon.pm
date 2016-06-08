@@ -24,12 +24,12 @@ sub _validate_backend_opts {
 my $key_type = 'rsa';
 
 sub _extract_publickey_from_log {
-    my ($self, $log, $filename) = @_;
-    my $pubkey;
-    if (open my($in), '<', $log_fn) {
+    my ($tssh, $log, $pubkey_path) = @_;
+    if (open my($in), '<', $log) {
+        local $_;
         while (<$in>) {
             if (/^ssh-$key_type\s+/) {
-                if (open my($out), '>', $filename) {
+                if (open my($out), '>', $pubkey_path) {
                     print $out $_;
                     close $out and return 1;
                 }
@@ -43,16 +43,19 @@ sub _extract_publickey_from_log {
 
 sub _create_key {
     my ($tssh, $path) = @_;
-    my $path_pub = "$path.pub";
-    -f $path and -f $path_pub and return 1;
+    -f "$path.dbk" and -f "$path.pub" and return 1;
     my $tmppath = join('.', $path, $$, int(rand(9999999)));
     my $log_fn = $tssh->_log_fn('dropbearkey');
-    if ($tssh->_run_cmd({stdout_file => $log_fn}, 'dropbearkey', -t => $key_type, -s => 1024, -f => $tmppath)) {
-        $tssh->_extract_publickey_from_log($log_fn, "$tmppath.pub") or return;
+    if ($tssh->_run_cmd({stdout_file => $log_fn}, 'dropbearkey', -t => $key_type, -s => 1024, -f => "$tmppath.dbk") and
+        $tssh->_run_cmd({}, 'dropbearconvert', 'dropbear', 'openssh', "$tmppath.dbk", $tmppath) and
+        $tssh->_extract_publickey_from_log($log_fn, "$tmppath.pub")) {
         unlink $path;
-        unlink $path_pub;
+        unlink "$path.pub";
+        unlink "$path.dbk";
+        chmod 0644, "$tmppath.pub";
         if (rename $tmppath, $path and
-            rename "$tmppath.pub", $path_pub) {
+            rename "$tmppath.pub", "$path.pub" and
+            rename "$tmppath.dbk", "$path.dbk") {
             $tssh->_log("key generated $path");
             return 1;
         }
@@ -81,7 +84,8 @@ sub _start_and_check {
     my $opts = $tssh->{current_opts};
     $tssh->{daemon_proc} = $tssh->_run_cmd({async => 1},
                                            'dropbear', '-E', '-s',
-                                           -r => $tssh->{host_key_path},
+                                           -r => "$opts->{host_key_path}.dbk",
+                                           -U => "$opts->{user_key_path}.pub",
                                            -p => "localhost:$opts->{port}",
                                            -P => $tssh->_backend_wfile('dropbear.pid'));
 
