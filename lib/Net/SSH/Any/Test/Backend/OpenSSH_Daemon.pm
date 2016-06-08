@@ -6,37 +6,19 @@ use warnings;
 use Net::SSH::Any;
 use Net::SSH::Any::Constants qw(SSHA_BACKEND_ERROR);
 
-use parent 'Net::SSH::Any::Test::Backend::_Base';
+use parent 'Net::SSH::Any::Test::Backend::_Daemon';
 
 sub _validate_backend_opts {
     my $tssh = shift;
     $tssh->SUPER::_validate_backend_opts or return;
 
-    unless ($tssh->{run_server}) {
-        $tssh->_log("Skipping OpenSSH_Daemon backend as run_server is unset");
-        return
-    }
-
     my $opts = $tssh->{current_opts};
-
-    $opts->{"${_}_key_path"} //= $tssh->_backend_wfile("${_}_key") for qw(user host);
     $opts->{sshd_config_file} //= $tssh->_backend_wfile('sshd_config');
-    $opts->{user} //= $tssh->_os_current_user // do {
-        $tssh->_log("Unable to determine current user");
-        return;
-    };
 
     # ssh and sshd are resolved here so that they can be used as
     # friends by any other commands
     $opts->{local_ssh_cmd} //= $tssh->_resolve_cmd('ssh');
     $opts->{local_sshd_cmd} //= $tssh->_resolve_cmd('sshd');
-    1;
-}
-
-sub _create_all_keys {
-    my $tssh = shift;
-    $tssh->_create_key($tssh->{current_opts}{"${_}_key_path"}) or return
-        for qw(user host);
     1;
 }
 
@@ -58,14 +40,6 @@ sub _create_key {
     return;
 }
 
-my $log_ix;
-
-sub _log_fn {
-    my ($tssh, $name) = @_;
-    my $fn = sprintf "%d-%s.log", ++$log_ix, $name;
-    $tssh->_backend_wfile($fn);
-}
-
 sub _resolve_cmd {
     my ($tssh, $name) = @_;
     my $opts = $tssh->{current_opts};
@@ -76,22 +50,6 @@ sub _resolve_cmd {
                          $opts->{local_ssh_cmd},
                          { POSIX => 'OpenSSH',
                            MSWin => 'Cygwin' });
-}
-
-sub _find_unused_tcp_port {
-    my $tssh = shift;
-    $tssh->_log("looking for an unused TCP port");
-    for (1..32) {
-        my $port = 5000 + int rand 27000;
-        unless (IO::Socket::INET->new(PeerAddr => "localhost:$port",
-                                      Proto => 'tcp',
-                                      Timeout => $tssh->{timeout})) {
-            $tssh->_log("port $port is available");
-            return $port;
-        }
-    }
-    $tssh->_set_error(SSHA_BACKEND_ERROR, "Can't find free TCP port for SSH server");
-    return;
 }
 
 sub _user_key_path_quoted {
@@ -146,7 +104,7 @@ sub _start_and_check {
     $tssh->_create_all_keys or return;
 
     my $opts = $tssh->{current_opts};
-    my $port = $opts->{port} //= $tssh->_find_unused_tcp_port;
+    my $port = $opts->{port};
     my $sftp_server = $tssh->_resolve_cmd('sftp-server');
 
     my $user = $opts->{user};
@@ -189,38 +147,15 @@ sub _start_and_check {
         @cmd = ('sshd', @sshd_args)
     }
 
-    $tssh->{sshd_proc} = $tssh->_run_cmd({out_name => 'sshd',
-                                          async => 1 },
-                                         @cmd) or return;
+    $tssh->{daemon_proc} = $tssh->_run_cmd({out_name => 'sshd',
+                                            async => 1 },
+                                           @cmd) or return;
 
-    my $uri = Net::SSH::Any::URI->new(host => "localhost",
-                                      port => $port,
-                                      user => $opts->{user},
-                                      key_path => $opts->{user_key_path});
-
-    $tssh->_log("Waiting for SSH service to pop up");
-    for (1..20) {
-        if ($tssh->_is_server_running($uri)) {
-            $tssh->_check_and_set_uri($uri) and return 1;
-            last;
-        }
-        $tssh->_os_check_proc($tssh->{sshd_proc}) or last;
-        $tssh->_log("Retrying in 1s...");
-        sleep 1;
-    }
+    $tssh->_check_daemon_and_set_uri and return 1;
     $tssh->_stop;
-
-    $tssh->_or_set_error(SSHA_BACKEND_ERROR, "unable to launch sshd");
     ()
 }
 
-sub _stop {
-    my $tssh = shift;
-    my $proc = $tssh->{sshd_proc};
-    $tssh->_log("Stopping sshd process, pid", $proc->{pid});
-    $tssh->_os_wait_proc($proc, 0, 1);
-}
-
-sub _is_localhost { 1 }
+sub _daemon_name { 'sshd' }
 
 1;
