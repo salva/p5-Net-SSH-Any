@@ -70,7 +70,7 @@ sub _run_cmd {
     my ($tssh, $opts, $cmd, @args) = @_;
     $tssh->_log("Running cmd: $cmd @args");
     my $name = $opts->{out_name} // $tssh->_cmd_to_name($cmd);
-    my $out_fn = $tssh->_log_fn($name);
+    my $out_fn = $opts->{stdout_file} // $tssh->_log_fn($name);
     my $resolved_cmd = ($opts->{find} // 1
                         ? $tssh->_resolve_cmd($cmd)
                         : $cmd);
