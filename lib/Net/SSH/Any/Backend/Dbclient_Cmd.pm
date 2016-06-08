@@ -17,9 +17,13 @@ sub _validate_backend_opts {
     defined $be_opts{host} or croak "host argument missing";
     my ($auth_type, $interactive_login);
 
-    $be_opts{local_dbclient_cmd} //= $any->_find_cmd('dbclient');
-    $be_opts{local_dropbearconvert_cmd} //= $any->_find_cmd(dropbearconvert => defined $be_opts{host}, undef,
-                                                         '/usr/lib/dropbear/dropbearconvert');
+    $be_opts{local_dbclient_cmd} //= $any->_find_cmd(dbclient => undef,
+                                                     { POSIX => 'Dropbear',
+                                                       MSWin => 'Cygwin' });
+    $be_opts{local_dropbearconvert_cmd} //= $any->_find_cmd(dropbearconvert => $be_opts{local_dbclient_cmd},
+                                                            { POSIX => 'Dropbear',
+                                                              MSWin => 'Cygwin' },
+                                                            '/usr/lib/dropbear/dropbearconvert');
     if (defined $be_opts{password}) {
         # $auth_type = 'password';
         # $interactive_login = 1;
@@ -40,6 +44,7 @@ sub _validate_backend_opts {
                        'openssh', 'dropbear',
                        $key, $dbk);
             $debug and $debug & 1024 and _debug "generating dbk file with command '".join("', '", @cmd)."'";
+            # FIXME: redirect command stderr to /dev/null
             if (system @cmd) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'dropbearconvert failed, rc: ' . ($? >> 8));
                 return
@@ -52,6 +57,22 @@ sub _validate_backend_opts {
     }
     else {
         $auth_type = 'default';
+    }
+
+    $be_opts{dbclient_opt_y} = 1
+        unless $be_opts{strict_host_key_checking};
+
+    if (defined (my $knp = $be_opts{known_hosts_path})) {
+        if (!$be_opts{strict_host_key_checking} and
+            $any->_os_unix_path($knp) eq '/dev/null') {
+            $be_opts{dbclient_opt_yy} = 1;
+        }
+        else {
+            $any->_set_error(SSHA_CONNECTION_ERROR,
+                             "dbclient does not support the given combination of " .
+                             "strict_host_key_checking and known_hosts_path options");
+            return;
+        }
     }
 
     $any->{be_opts} = \%be_opts;
@@ -72,6 +93,9 @@ sub _make_cmd {
 
     push @args, _array_or_scalar_to_list($be_opts->{dbclient_opts})
         if defined $be_opts->{dbclient_opts};
+
+    push @args, '-y' if $be_opts->{dbclient_opt_y};
+    push @args, '-y' if $be_opts->{dbclient_opt_yy};
 
     push @args, '-s' if delete $cmd_opts->{subsystem};
     push @args, $be_opts->{host};
