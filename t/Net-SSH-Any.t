@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use Test::More;
+use File::Spec;
 
 use Net::SSH::Any::Test::Isolated;
 use Net::SSH::Any;
@@ -44,7 +45,7 @@ sub which {
     };
 }
 
-my $tssh = Net::SSH::Any::Test::Isolated->new(logger => 'diag');
+our $tssh = Net::SSH::Any::Test::Isolated->new(logger => 'diag');
 if (my $error = $tssh->error) {
     diag "Unable to find or start SSH service: $error";
     goto DONE;
@@ -52,8 +53,10 @@ if (my $error = $tssh->error) {
 
 
 subtest "$_ backend" => \&test_backend, $_
-    for qw(Net_SSH2 Net_OpenSSH Ssh_Cmd);
+    for qw(Net_SSH2 Net_OpenSSH Ssh_Cmd Dbclient_Cmd);
 
+
+DONE:
 done_testing();
 
 
@@ -62,6 +65,7 @@ sub test_backend {
     my %opts = ( backend => $be,
                  timeout => 30,
                  strict_host_key_checking => 0,
+                 known_hosts_path => File::Spec->devnull,
                  batch_mode => 1,
                  backend_opts => { Net_OpenSSH => { strict_mode => 0 } } );
 
