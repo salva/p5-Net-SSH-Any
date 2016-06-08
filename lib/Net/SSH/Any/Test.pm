@@ -14,7 +14,7 @@ use Net::SSH::Any::Constants qw(SSHA_NO_BACKEND_ERROR SSHA_REMOTE_CMD_ERROR SSHA
 
 our @ISA = qw(Net::SSH::Any::_Base);
 
-my @default_backends = qw(Remote OpenSSH_Daemon);
+my @default_backends = qw(Remote OpenSSH_Daemon Dropbear_Daemon);
 
 my @default_test_commands = ('true', 'exit', 'echo foo', 'date',
                              'cmd /c ver', 'cmd /c echo foo');
