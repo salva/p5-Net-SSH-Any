@@ -24,6 +24,9 @@ sub _validate_backend_opts {
                                                             { POSIX => 'Dropbear',
                                                               MSWin => 'Cygwin' },
                                                             '/usr/lib/dropbear/dropbearconvert');
+
+    $be_opts{dbk_path} //= "$be_opts{key_path}.dbk" if defined $be_opts{key_path};
+
     if (defined $be_opts{password}) {
         # $auth_type = 'password';
         # $interactive_login = 1;
@@ -34,11 +37,21 @@ sub _validate_backend_opts {
                          "password authentication is not supported by the Dbclient_Cmd backend");
         return
     }
-    elsif (defined (my $key = $be_opts{key_path})) {
+    elsif (defined (my $dbk = $be_opts{dbk_path})) {
         $auth_type = 'publickey';
-        my $dbk = "$key.dbk";
-        $be_opts{dbk_path} = $dbk;
         unless (-e $dbk) {
+            my $key = $be_opts{key_path} // do {
+                $dbk =~ /^(.+)\.dbk$/ or do {
+                    $any->_set_error(SSHA_CONNECTION_ERROR, 'cannot generate dropbear key file');
+                    return;
+                };
+                $1;
+            };
+            unless (-e $key) {
+                $any->_set_error(SSHA_CONNECTION_ERROR, "key file '$key' does not exists");
+                return;
+            }
+
             local $?;
             my @cmd = ($be_opts{local_dropbearconvert_cmd},
                        'openssh', 'dropbear',
