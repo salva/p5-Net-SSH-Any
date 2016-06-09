@@ -198,7 +198,7 @@ sub _make_path {
     my ($tssh, $head, @paths) = @_;
     for (@paths) {
         $head = File::Spec->join($head, $_);
-        mkdir $head unless -d $head;
+        mkdir $head, 0755 unless -d $head;
         unless (do { local $!; -d $head}) {
             $tssh->_set_error(SSHA_LOCAL_IO_ERROR, "Unable to create directory '$head'", $!);
             return;
