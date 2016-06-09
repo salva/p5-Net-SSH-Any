@@ -1116,6 +1116,11 @@ automating testing environments as CPAN Testers or Travis CI.
 
 A subset of L<Expect> adapted to work on top of Net::SSH::Any.
 
+=item * Gateway support
+
+I am still not sure about how viable it would be, but I would like to
+get something like Net::OpenSSH::Gateway available for Net::SSH::Any.
+
 =back
 
 =head1 COPYRIGHT AND LICENSE
