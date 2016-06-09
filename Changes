@@ -2,7 +2,7 @@ Revision history for Perl extension Net::SSH::Any.
 
 0.05  Jun 9, 2016
 
-        * There is a long history behind this module.
+        * There is a long history behind this module:
 
           In order to get it to work correctly I ended becoming the
           de-facto main maintainer of Net::SSH2, rewriting large parts
@@ -40,6 +40,10 @@ Revision history for Perl extension Net::SSH::Any.
           the same but using Dropbear and Cygwin that on Windows is
           able to install the Cygwin OpenSSH package and use it to
           start a local server.
+
+        - Net::SSH::Any::Test::Isolated which runs Net::SSH::Any::Test
+          in an isolated process so that there are not interferences
+          between the tested module and the test server provider.
 
         - Net::SSH::Any::Autodetector which is able to find out
           several properties about the remote machine as operating
