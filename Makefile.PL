@@ -9,7 +9,7 @@ my %prereq_pm = ($ENV{AUTHOR_TESTING} ? ('Test::SSH' => '0.03') : ());
 
 if ($^O eq 'MSWin32') {
     $prereq_pm{'Win32::API'} = '0.77';
-    $prereq_pm{'Win32::TieRegistry'} => '0';
+    $prereq_pm{'Win32::TieRegistry'} = '0';
 }
 
 WriteMakefile( NAME          => 'Net::SSH::Any',
