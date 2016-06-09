@@ -58,7 +58,7 @@ sub _validate_backend_opts {
                        $key, $dbk);
             $debug and $debug & 1024 and _debug "generating dbk file with command '".join("', '", @cmd)."'";
             # FIXME: redirect command stderr to /dev/null
-            if (system @cmd) {
+            if (do { no warnings 'exec'; system @cmd}) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'dropbearconvert failed, rc: ' . ($? >> 8));
                 return
             }
