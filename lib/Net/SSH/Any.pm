@@ -296,6 +296,10 @@ Net::SSH::Any - SSH client module
   *** NOTE: This is an early release that may contain bugs.  ***
   *** The API is not stable and may change between releases. ***
   ***                                                        ***
+  *** Also, the module tests are quite aggresive, containing ***
+  *** checks for experimental features, and may fail even if ***
+  *** the module mostly works.                               ***
+  ***                                                        ***
   **************************************************************
 
 C<Net::SSH::Any> is a SSH client module providing a high level and
@@ -985,6 +989,15 @@ system or C<undef> in case of failure.
 
 =back
 
+=item %data = $ssh->autodetect(@tests)
+
+Calls L<Net::SSH::Any::Autodetect>, which implements tests and
+heuristics that allow one to discover several properties about the
+remote machine as for instance its operating system or the user shell.
+
+That module is still highly experimental and the way it is used or the
+format of the returned data may change in future releases.
+
 =back
 
 =head1 FAQ
@@ -1016,7 +1029,7 @@ In example:
   my $ssh = Net::SSH::Any->new($host,
                                strict_host_key_checking => 0,
                                known_hosts_path => ($^O =~ /^Win/
-                                                    ? 'NUL:'
+                                                    ? 'nul'
                                                     : '/dev/null'));
 
 I am not making that easier on purpose!
@@ -1083,9 +1096,31 @@ Amazon Wish List: L<http://amzn.com/w/1WU1P6IR5QZ42>.
 Also consider contributing to the OpenSSH project this module builds
 upon: L<http://www.openssh.org/donations.html>.
 
+=head1 TODO
+
+Thinks that I would like to add in this module in the future:
+
+=over 4
+
+=item * Host key checking policies
+
+ I.e. strict, tofu, ask, advisory.
+
+=item * Install client software automatically
+
+Add infrastructure to download, maybe compile and install client
+software from the internet. This will be used to test the module in
+automating testing environments as CPAN Testers or Travis CI.
+
+=item * Expect like functionality
+
+A subset of L<Expect> adapted to work on top of Net::SSH::Any.
+
+=back
+
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2015 by Salvador FandiE<ntilde>o, E<lt>sfandino@yahoo.comE<gt>
+Copyright (C) 2011-2016 by Salvador FandiE<ntilde>o, E<lt>sfandino@yahoo.comE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.12.4 or,

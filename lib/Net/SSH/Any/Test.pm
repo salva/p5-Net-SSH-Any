@@ -428,20 +428,39 @@ Terminates any running process (i.e. any SSH server).
 
 =head1 BACKENDS
 
+The following backends are currently available.
+
+They lack proper documentation as this is a work in progress yet.
+
 =over4
 
 =item Remote
 
 Tries to connect to localhost or to any other given service.
 
+See L<Net::SSH::Any::Test::Backend::Remote>.
+
 =item OpenSSH_Daemon
 
 Starts a new OpenSSH server.
 
+See L<Net::SSH::Any::Test::Backend::OpenSSH_Daemon>.
+
+=item Dropbear_Daemon
+
+Starts a new Dropbear server.
+
+Note: requires a patched version of dropbear installed
+(L<https://github.com/salva/dropbear>).
+
+See L<Net::SSH::Any::Test::Backend::Dropbear_Daemon>.
+
 =item Cygwin
 
 In MS Windows systems, downloads and install Cygwin, including the
-OpenSSH packages, and uses it to run a SSH server.
+OpenSSH packages, and uses then to run a SSH server.
 
+See L<Net::SSH::Any::Test::Backend::Cygwin>.
 
 =back
+

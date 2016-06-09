@@ -1,10 +1,56 @@
 Revision history for Perl extension Net::SSH::Any.
 
-0.05
-        - capture method was broken on the Net::OpenSSH backend
-        - add new experimental backend SSH_Cmd that opens a new
-          connection every time
-        - several files where missing from MANIFEST in version 0.04
+0.05  Jun 9, 2016
+
+        * There is a long history behind this module.
+
+          In order to get it to work correctly I ended becoming the
+          de-facto main maintainer of Net::SSH2, rewriting large parts
+          of it and also fixing lots of bugs in libssh2. That took me
+          two years and a half.
+
+          In the meantime I have keep adding features to Net::SSH::Any...
+
+        - Ssh_Cmd backend which runs on top of any ssh binary
+          supporting command line flags compatible with the OpenSSH
+          one which are not good enough for Net::OpenSSH as for
+          instance Oracle SSH or the Cygwin openssh package.
+
+        - Plink_Cmd backend which uses the "plink" executable (part of
+          the PuTTY project).
+
+        - Sexec_Cmd backend which uses Bitwise Tunnelier "sexec"
+          utility.
+
+        - Dbclient_Cmd backend which uses the dropbear client
+          "dbclient".
+
+        - Sshg3_Cmd backend which uses the Tectia command line SSH
+          client "sshg3".
+
+        - dpipe support, providing an object able to talk to the
+          remote process both ways.
+
+        - Net::SSH::Any::Test framework which anyhow is able to
+          provide the details of a running SSH server that could be
+          used for testing. This module replaces my old Test::SSH
+          package and includes the backends Remote which tries to
+          connect to localhost; OpenSSH_Daemon which starts a local
+          SSH server in some spare port; Dropbead_Daemon which does
+          the same but using Dropbear and Cygwin that on Windows is
+          able to install the Cygwin OpenSSH package and use it to
+          start a local server.
+
+        - Net::SSH::Any::Autodetector which is able to find out
+          several properties about the remote machine as operating
+          system and the user shell.
+
+        - Integration with Net::OpenSSH quoters.
+
+        - Documentation is still a WIP.
+
+        - And lots and lots of issues fixed...
+
 
 0.04  Sep 25, 2013
         - add support for SCP
