@@ -45,22 +45,29 @@ sub which {
     };
 }
 
-our $tssh = Net::SSH::Any::Test::Isolated->new(logger => 'diag');
-if (my $error = $tssh->error) {
-    diag "Unable to find or start SSH service: $error";
-    goto DONE;
-}
+subtest "Test $_ backend" => \&test_test_backend, $_
+    for qw(Remote OpenSSH_Daemon Dropbear_Daemon);
 
-
-subtest "$_ backend" => \&test_backend, $_
-    for qw(Net_SSH2 Net_OpenSSH Ssh_Cmd Dbclient_Cmd);
-
-
-DONE:
 done_testing();
 
 
+sub test_test_backend {
+    my $backend = shift;
+    diag "Testing with Test backend " . ($backend // '<any>');
+    my $tssh = Net::SSH::Any::Test::Isolated->new(logger => 'diag',
+                                                  backend => $backend);
+    ok ($tssh, "new returns an object");
+    if (my $error = $tssh->error) {
+        diag "Unable to find or start SSH service: $error";
+        return;
+    }
+
+    subtest "$_ backend" => \&test_backend, $tssh, $_
+        for qw(Net_SSH2 Net_OpenSSH Ssh_Cmd Dbclient_Cmd);
+}
+
 sub test_backend {
+    my $tssh = shift;
     my $be = shift;
     my %opts = ( backend => $be,
                  timeout => 30,
