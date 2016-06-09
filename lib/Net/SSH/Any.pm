@@ -373,7 +373,7 @@ See L<Net::SSH::Any::Backend::Ssh_Cmd>.
 This backend uses the C<plink> utility, part of the
 L<PuTTY|http://www.chiark.greenend.org.uk/~sgtatham/putty/> package.
 
-It supports password authentication, but in a somwaht insecure manner,
+It supports password authentication, but in a somewhat insecure manner,
 as passwords are given to putty as a command line argument. Anybody
 (user or program) logged on the machine would be able to see them.
 
@@ -1104,7 +1104,7 @@ Thinks that I would like to add in this module in the future:
 
 =item * Host key checking policies
 
- I.e. strict, tofu, ask, advisory.
+I.e. strict, tofu, ask, advisory.
 
 =item * Install client software automatically
 
