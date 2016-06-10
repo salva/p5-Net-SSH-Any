@@ -93,10 +93,15 @@ sub test_backend {
     my %auto = $ssh->autodetect();
     ssh_ok($ssh, "autodetect") or return;
 
-    ok(defined $auto{os}, "OS detected") or return;
+    ok(defined $auto{os}, "OS detected") or do {
+        diag "autodetect: ", explain(\%auto);
+        return;
+    };
     diag "Remote OS is $auto{os}";
 
-    ok ($auto{shell}, "shell detected");
+    ok ($auto{shell}, "shell detected") or
+        diag "autodetect: ", explain(\%auto);
+
     diag "remote shell is $auto{shell}" if defined $auto{shell};
     diag "remote shell is csh" if $auto{csh_shell};
 
