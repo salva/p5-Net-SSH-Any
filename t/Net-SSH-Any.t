@@ -69,6 +69,13 @@ sub test_test_backend {
 sub test_backend {
     my $tssh = shift;
     my $be = shift;
+
+    my $uri = $tssh->uri;
+    ok (defined $uri, "uri is defined") or do {
+        diag "tssh: ", explain $tssh;
+        return;
+    };
+
     my %opts = ( backend => $be,
                  timeout => 30,
                  strict_host_key_checking => 0,
@@ -76,7 +83,7 @@ sub test_backend {
                  batch_mode => 1,
                  backend_opts => { Net_OpenSSH => { strict_mode => 0 } } );
 
-    my $ssh = Net::SSH::Any->new($tssh->uri, %opts);
+    my $ssh = Net::SSH::Any->new($uri, %opts);
 
     ok($ssh, "constructor returns an object");
     if (my $error = $ssh->error) {
