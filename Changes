@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.06  Jun 10, 2016
+        - Improve diagnostic messages for autodetect failures in tests.
+
 0.05  Jun 9, 2016
 
         * There is a long history behind this module:
