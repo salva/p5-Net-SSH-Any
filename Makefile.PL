@@ -1,11 +1,11 @@
 
 use strict;
 use warnings;
-use 5.008;
+use 5.010;
 
 use ExtUtils::MakeMaker;
 
-my %prereq_pm = ($ENV{AUTHOR_TESTING} ? ('Test::SSH' => '0.03') : ());
+my %prereq_pm = ( 'Test::More' => '1.302026' };
 
 if ($^O eq 'MSWin32') {
     $prereq_pm{'Win32::API'} = '0.77';
