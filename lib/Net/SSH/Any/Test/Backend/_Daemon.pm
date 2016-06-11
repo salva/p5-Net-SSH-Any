@@ -100,7 +100,4 @@ sub _stop {
     $tssh->_os_wait_proc($proc, 0, 1);
 }
 
-
-
-
 1;
