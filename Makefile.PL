@@ -16,5 +16,9 @@ WriteMakefile( NAME          => 'Net::SSH::Any',
                VERSION_FROM  => 'lib/Net/SSH/Any.pm',
                PREREQ_PM     => \%prereq_pm,
                ABSTRACT_FROM => 'lib/Net/SSH/Any.pm',
-               AUTHOR        => 'Salvador Fandiño <sfandino@yahoo.com>' );
+               AUTHOR        => 'Salvador Fandiño <sfandino@yahoo.com>',
+               META_MERGE    => {
+                   resources => {
+                       repository => 'https://github.com/salva/p5-Net-SSH-Any', } },
+             );
 
