@@ -70,6 +70,8 @@ sub test_backend {
     my $tssh = shift;
     my $be = shift;
 
+    ok ($tssh, "subtests get their arguments") or return;
+
     my $uri = $tssh->uri;
     ok (defined $uri, "uri is defined") or do {
         diag "tssh: ", explain $tssh;
