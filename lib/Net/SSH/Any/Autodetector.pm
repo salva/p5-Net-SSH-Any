@@ -5,7 +5,7 @@ use warnings;
 
 use Net::SSH::Any::Util qw($debug _debug _array_or_scalar_to_list);
 
-my @default_tests = qw(os shell);
+my @default_tests = qw(os shell uname_all);
 
 sub _new {
     my ($class, $any, $opts, @tests) = @_;
@@ -26,12 +26,24 @@ sub run {
     $self->{acu};
 }
 
+sub _lookup_test {
+    my ($self, $test) = @_;
+    if (my $sub = $self->can("_test_$test")) {
+        return $sub
+    }
+
+    if ($test =~ /^uname_(.*)$/) {
+        return sub { shift->_test_uname($1) }
+    }
+    undef
+}
+
 sub _run_test {
     my ($self, $test) = @_;
     my $ok = $self->{result}{$test} //= do {
         $debug and $debug & 65536 and _debug("running test $test");
         my $result;
-        if (my $method = $self->can("_test_$test")) {
+        if (my $method = $self->_lookup_test($test)) {
             if ($result = $self->$method) {
                 @{$self->{acu}}{keys %$result} = values %$result;
                 $result->{ok} //= 1;
@@ -101,38 +113,19 @@ sub _capture_uname {
     $self->_capture([uname => $long], "uname $flag");
 }
 
-sub _test_posix_uname {
-    my $self = shift;
+sub _test_uname {
+    my ($self, $name) = @_;
     my $any = $self->{any};
-    $self->_capture_uname($_) for keys %uname_long2flag;
+    my @keys = (defined($name) ? $name : keys %uname_long2flag);
+    $self->_capture_uname($_) for @keys;
     {}
 }
 
 sub _test_os_windows {
     my $self = shift;
     my $out = $self->_capture([windows_cmd => 'ver'], 'cmd /c ver') // return;
-    $out =~ /\bMicrosoft\s+Windows\b(?:\s+\[Version\s+([^\s\]]+)\])?/i or return;
-    { windows => 1, windows_version => $1 }
-}
-
-sub _test_os_posix {
-    my $self = shift;
-    $self->_capture_uname('all') // return;
-    { posix => 1 }
-}
-
-sub _test_os_cygwin {
-    my $self = shift;
-    my $all = $self->_capture_uname('all') // return;
-    $all =~ /cygwin/i or return;
-    { cygwin => 1}
-}
-
-sub _test_os_linux {
-    my $self = shift;
-    my $kernel_name = $self->_capture_uname('kernel_name') // return;
-    $kernel_name eq 'Linux' or return;
-    { linux => 1 }
+    $out =~ /\b(Microsoft\s+Windows)\b(?:\s+\[Version\s+([^\s\]]+)\])?/i or return;
+    { windows => $1, windows_version => $2 }
 }
 
 sub _test_posix_env_shell {
@@ -144,13 +137,15 @@ sub _test_posix_env_shell {
 
 sub _test_os {
     my $self = shift;
-    my @oss = qw(windows cygwin linux);
-    my $os;
-    for my $entry (@oss) {
-        $os = $entry if $self->_run_test("os_$entry");
-    }
-    $os // return;
-    { os => $os }
+    $self->_run_test('os_posix') and return {};
+    $self->_run_test('os_windows') and return {};
+    ()
+}
+
+sub _test_os_posix {
+    my $self = shift;
+    my $os = $self->_capture_uname('operating_system') // return;
+    { os => $os, posix => 1 };
 }
 
 sub _test_shell {
