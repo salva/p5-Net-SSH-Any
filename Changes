@@ -1,5 +1,9 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.09  Jun 11, 2016
+       - Require a recent version of Test::More for testing.
+       - Add pointer to git repository in module meta info.
+
 0.08  Jun 11, 2016
        - Improve remote OS autodetection.
 
