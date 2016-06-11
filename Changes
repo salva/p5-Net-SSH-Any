@@ -1,5 +1,8 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.08  Jun 11, 2016
+       - Improve remote OS autodetection.
+
 0.07  Jun 10, 2016
         - Improve diagnostic messages for Net::SSH::Any::Test
           failures.
