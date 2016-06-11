@@ -13,3 +13,5 @@
 ^MYMETA\.
 ^c/
 ^lib/Net/SSH/Any/CopyId.pm\z
+^t/pods.t\z
+^t/pod-spell.t\z
