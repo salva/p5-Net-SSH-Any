@@ -144,7 +144,8 @@ sub _test_os {
 
 sub _test_os_posix {
     my $self = shift;
-    my $os = $self->_capture_uname('operating_system') // return;
+    my $os = $self->_capture_uname('operating_system') //
+        $self->_capture_uname('kernel_name') // return;
     { os => $os, posix => 1 };
 }
 
