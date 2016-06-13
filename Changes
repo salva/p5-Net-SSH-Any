@@ -1,5 +1,10 @@
 Revision history for Perl extension Net::SSH::Any.
 
+0.10  Jun 13, 2016
+       - Make local command lookup strict by default and add support
+         for the relaxed_command_lookup flag.
+       - Fix several documentation errors.
+
 0.09  Jun 11, 2016
        - Require a recent version of Test::More for testing.
        - Add pointer to git repository in module meta info.

@@ -1,6 +1,6 @@
 package Net::SSH::Any;
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 use strict;
 use warnings;
@@ -1120,6 +1120,13 @@ A subset of L<Expect> adapted to work on top of Net::SSH::Any.
 
 I am still not sure about how viable it would be, but I would like to
 get something like Net::OpenSSH::Gateway available for Net::SSH::Any.
+
+=item * Move to Moo+Moo::Role or Role::Tiny
+
+The ad-hoc composition model used internally by Net::SSH::Any has
+several quirks that would be gone using the dynamic inheritance model
+provided by L<Role::Tiny>, though that would probably be a huge
+effort.
 
 =back
 
