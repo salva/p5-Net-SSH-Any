@@ -44,9 +44,12 @@ sub _validate_backend_opts {
     $any->SUPER::_validate_backend_opts(%be_opts) or return;
 
     my $instance = $be_opts{instance} // do {
-        for (qw(ssh rsync sshfs scp)) {
+
+        my $be_opts{ssh_cmd} //= delete $be_opts{local_ssh_cmd} // $any->_find_cmd($_, $be_opts{ssh_cmd}, 'OpenSSH');
+
+        for (qw(rsync sshfs scp)) {
             $be_opts{"${_}_cmd"} //= delete $be_opts{"local_${_}_cmd"} //
-                $any->_find_cmd($_, $be_opts{ssh_cmd}, 'OpenSSH');
+                $any->_find_cmd({relaxed => 1}, $_, $be_opts{ssh_cmd}, 'OpenSSH');
         }
         my @master_opts = _array_or_scalar_to_list delete $be_opts{master_opts};
         my $strict_host_key_checking = delete $be_opts{strict_host_key_checking};

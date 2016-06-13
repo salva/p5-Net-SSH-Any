@@ -19,11 +19,7 @@ sub _validate_backend_opts {
 
     $be_opts{local_dbclient_cmd} //= $any->_find_cmd(dbclient => undef,
                                                      { POSIX => 'Dropbear',
-                                                       MSWin => 'Cygwin' });
-    $be_opts{local_dropbearconvert_cmd} //= $any->_find_cmd(dropbearconvert => $be_opts{local_dbclient_cmd},
-                                                            { POSIX => 'Dropbear',
-                                                              MSWin => 'Cygwin' },
-                                                            '/usr/lib/dropbear/dropbearconvert');
+                                                       MSWin => 'Cygwin' }) // return;
 
     $be_opts{dbk_path} //= "$be_opts{key_path}.dbk" if defined $be_opts{key_path};
 
@@ -52,10 +48,14 @@ sub _validate_backend_opts {
                 return;
             }
 
+
+            my $convert_cmd = $be_opts{local_dropbearconvert_cmd} //=
+                $any->_find_cmd(dropbearconvert => $be_opts{local_dbclient_cmd},
+                                { POSIX => 'Dropbear',
+                                  MSWin => 'Cygwin' },
+                                '/usr/lib/dropbear/dropbearconvert') // return;
             local $?;
-            my @cmd = ($be_opts{local_dropbearconvert_cmd},
-                       'openssh', 'dropbear',
-                       $key, $dbk);
+            my @cmd = ($convert_cmd, 'openssh', 'dropbear', $key, $dbk);
             $debug and $debug & 1024 and _debug "generating dbk file with command '".join("', '", @cmd)."'";
             # FIXME: redirect command stderr to /dev/null
             if (do { no warnings 'exec'; system @cmd}) {

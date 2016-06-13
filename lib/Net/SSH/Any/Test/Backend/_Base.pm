@@ -71,8 +71,8 @@ sub _run_cmd {
     my $name = $opts->{out_name} // $tssh->_cmd_to_name($cmd);
     my $out_fn = $opts->{stdout_file} // $tssh->_log_fn($name);
     my $resolved_cmd = ($opts->{find} // 1
-                        ? $tssh->_resolve_cmd($cmd)
-                        : $cmd);
+                        ? $tssh->_be_find_cmd($cmd)
+                        : $cmd) // return;
 
     $tssh->_log("Running cmd: $resolved_cmd @args");
 
@@ -89,9 +89,20 @@ sub _run_cmd {
     ()
 }
 
-sub _resolve_cmd {
-    my ($tssh, $name) = @_;
-    $tssh->_find_cmd($name);
+# _be_find_cmd first checks if the user has given us the exact command
+# location as a backend argument:
+
+sub _be_find_cmd {
+    my $tssh = shift;
+    my $opts = $tssh->{current_opts};
+
+    # if we have the opts argument, name is at $_[1], otherwise it is
+    # at $_[0]:
+    my $safe_name = (ref $_[0] ? $_[1] : $_[0]);
+    $safe_name =~ s/\W/_/g;
+
+    $opts->{"local_${safe_name}_cmd"} //=
+        $tssh->_find_cmd(@_);
 }
 
 sub _is_localhost { 0 }

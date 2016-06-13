@@ -24,6 +24,8 @@ sub _new {
         /^local_(.*)_extra_args$/ and $local_extra_args{$1} = $opts->{$_};
     }
 
+    my $relaxed_command_lookup = delete $opts->{relaxed_command_lookup};
+
     my $self = { os => $os,
                  error => 0,
                  error_prefix => [],
@@ -32,6 +34,7 @@ sub _new {
                  local_cmd => \%local_cmd,
                  remote_extra_args => \%remote_extra_args,
                  local_extra_args => \%local_extra_args,
+                 relaxed_cmd_lookup => $relaxed_command_lookup,
                };
 
     my $encoding = $self->{encoding} = delete $opts->{encoding} // 'utf8';
@@ -183,16 +186,21 @@ sub _find_cmd_in_path {
 }
 
 sub _find_cmd {
-    my ($any, $name, $friend, $app, $default) = @_;
+    my $any = shift;
+    my $opts = (ref $_[0] ? shift : {});
+    my ($name, $friend, $app, $default) = @_;
     my $safe_name = $name;
     $safe_name =~ s/\W/_/g;
-    return ( $any->{local_cmd}{$safe_name}             //
-             $any->_find_cmd_by_friend($name, $friend) //
-             $any->_find_cmd_in_path($name)            //
-             $any->_find_helper_cmd($name)             //
-             $any->_os_find_cmd_by_app($name, $app)    //
-             $any->_os_validate_cmd($default)          //
-             $name );
+    my $cmd = ( $any->{local_cmd}{$safe_name}             //
+                $any->_find_cmd_by_friend($name, $friend) //
+                $any->_find_cmd_in_path($name)            //
+                $any->_find_helper_cmd($name)             //
+                $any->_os_find_cmd_by_app($name, $app)    //
+                $any->_os_validate_cmd($default) );
+    return $cmd if defined $cmd;
+    return $name if $opts->{relaxed} or $any->{relaxed_cmd_lookup};
+    $any->_or_set_error(SSHA_BACKEND_ERROR, "Unable to find command '$name'");
+    ()
 }
 
 sub _find_helper_cmd {

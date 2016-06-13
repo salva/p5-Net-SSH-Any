@@ -17,8 +17,8 @@ sub _validate_backend_opts {
 
     # ssh and sshd are resolved here so that they can be used as
     # friends by any other commands
-    $opts->{local_ssh_cmd} //= $tssh->_resolve_cmd('ssh');
-    $opts->{local_sshd_cmd} //= $tssh->_resolve_cmd('sshd');
+    $tssh->_be_find_cmd({relaxed => 1}, 'ssh');
+    $tssh->_be_find_cmd('sshd') // return;
     1;
 }
 
@@ -40,16 +40,16 @@ sub _create_key {
     return;
 }
 
-sub _resolve_cmd {
-    my ($tssh, $name) = @_;
+sub _be_find_cmd {
+    my $tssh = shift;
+    my $find_opts = (ref($_[0]) ? shift : {});
+    my ($name, $friend, $app, $default) = @_;
     my $opts = $tssh->{current_opts};
-    my $safe_name = $name;
-    $safe_name =~ s/\W/_/g;
-    $opts->{"local_${safe_name}_cmd"} //=
-        $tssh->_find_cmd($name,
-                         $opts->{local_ssh_cmd},
-                         { POSIX => 'OpenSSH',
-                           MSWin => 'Cygwin' });
+    $tssh->SUPER::_be_find_cmd($find_opts,
+                               $name,
+                               $friend // $opts->{local_ssh_cmd},
+                               $app    // { POSIX => 'OpenSSH', MSWin => 'Cygwin' },
+                               $default);
 }
 
 sub _user_key_path_quoted {
@@ -105,7 +105,7 @@ sub _start_and_check {
 
     my $opts = $tssh->{current_opts};
     my $port = $opts->{port};
-    my $sftp_server = $tssh->_resolve_cmd('sftp-server');
+    my $sftp_server = $tssh->_be_find_cmd({relaxed => 1}, 'sftp-server');
 
     my $user = $opts->{user};
     $user =~ s/\s/?/g;
@@ -127,7 +127,7 @@ sub _start_and_check {
                                        UseDNS             => 'no',
                                        StrictModes        => 'no',
                                        UsePrivilegeSeparation => 'no',
-                                       Subsystem          => "sftp $sftp_server");
+                                       Subsystem          => "sftp $sftp_server" );
     $tssh->_write_config(@cfg) or return;
 
     $tssh->_log("Starting sshd at localhost:$port");
@@ -138,7 +138,7 @@ sub _start_and_check {
                       '-f', $tssh->_os_unix_path($opts->{sshd_config_file}) );
 
     if ($^O eq 'MSWin32') {
-        my $sshd_cmd = $tssh->_os_unix_path($tssh->_resolve_cmd('sshd'));
+        my $sshd_cmd = $tssh->_os_unix_path($tssh->_be_find_cmd('sshd'));
         my $bash_subcmd = $tssh->_quote_args({shell => 'MSCmd'}, exec => $sshd_cmd, @sshd_args) //
             return;
         @cmd = ('bash', '--login', '-c', $bash_subcmd);

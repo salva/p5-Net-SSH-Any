@@ -17,17 +17,21 @@ sub _validate_backend_opts {
     $be_opts{local_sshg3_cmd} //=
         $any->_find_cmd(sshg3 => undef,
                         { POSIX => 'tectia',
-                          MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Client' });
+                          MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Client' }) // return;
     my $out = $any->_local_capture($be_opts{local_sshg3_cmd}, '-V');
     if ($?) {
         $any->_set_error(SSHA_CONNECTION_ERROR, 'sshg3 not found or bad version, rc: ', ($? >> 8));
         return;
     }
 
-    $be_opts{local_ssh_broker_g3_cmd} //=
-        $any->_find_cmd('ssh-broker-g3', $be_opts{local_sshg3_cmd},
-                        { POSIX => 'tectia',
-                          MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Broker' });
+    $be_opts{run_broker} //= 0;
+
+    if ($be_opts{run_broker}) {
+        $be_opts{local_ssh_broker_g3_cmd} //=
+            $any->_find_cmd('ssh-broker-g3', $be_opts{local_sshg3_cmd},
+                            { POSIX => 'tectia',
+                              MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Broker' }) // return;
+    }
 
     $be_opts{local_sshg3_extra_args} = $any->_find_local_extra_args(sshg3 => \%be_opts);
     $be_opts{local_ssh_broker_g3_extra_args} = $any->_find_local_extra_args(ssh_broker_g3 => \%be_opts);
@@ -70,8 +74,6 @@ sub _validate_backend_opts {
             $debug and $debug & 1024 and _debug "Leaving exclusive mode disabled";
         }
     }
-
-    $be_opts{run_broker} //= 0;
 
     $debug and $debug & 1024 and _debug_dump be_opts => \%be_opts;
 

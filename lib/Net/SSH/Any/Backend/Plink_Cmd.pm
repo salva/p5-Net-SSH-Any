@@ -12,8 +12,7 @@ sub _validate_backend_opts {
     my ($any, %be_opts) = @_;
     $any->SUPER::_validate_backend_opts(%be_opts) or return;
 
-    $be_opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, { MSWin => 'PuTTY' });
-    $be_opts{local_puttygen_cmd} //= $any->_find_cmd(puttygen => $be_opts{local_pink_cmd}, { MSWin => 'PuTTY' });
+    $be_opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, 'PuTTY') // return;
 
     my $out = $any->_local_capture($be_opts{local_plink_cmd}, '-V');
     if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Pre-release|Release)\s*(.*?)\s*$/mi) {
@@ -39,7 +38,9 @@ sub _validate_backend_opts {
             $be_opts{ppk_key_path} = $ppk;
             unless (-e $ppk) {
                 local $?;
-                my $puttygen = $be_opts{local_puttygen_cmd};
+                my $puttygen = $be_opts{local_puttygen_cmd} //=
+                    $any->_find_cmd(puttygen => $be_opts{local_pink_cmd}, 'PuTTY') // return;
+
                 my @cmd = ($puttygen, -O => 'private', -o => $ppk, $key);
                 $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
                 my $out = $any->_local_capture(@cmd);

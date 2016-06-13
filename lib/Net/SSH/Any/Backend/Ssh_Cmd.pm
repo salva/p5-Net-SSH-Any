@@ -11,7 +11,10 @@ sub _validate_backend_opts {
     my ($any, %be_opts) = @_;
     $any->SUPER::_validate_backend_opts(%be_opts) or return;
 
-    $be_opts{local_ssh_cmd} //= $any->_find_cmd(ssh => undef, { MSWin => 'Cygwin' });
+    $be_opts{local_ssh_cmd} //= $any->_find_cmd('ssh',
+                                                undef,
+                                                { MSWin => 'Cygwin', POSIX => 'OpenSSH' },
+                                                '/usr/bin/ssh') // return;
     my $out = $any->_local_capture($be_opts{local_ssh_cmd}, '-V');
     if ($?) {
         $out =~ s/\s+/ /gs; $out =~ s/ $//;

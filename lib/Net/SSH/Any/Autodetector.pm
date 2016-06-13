@@ -71,7 +71,7 @@ sub _try_cmd {
     $out
 }
 
-sub _find_cmd {
+sub _find_remote_cmd {
     my ($self, $cmd) = @_;
     # FIXME: be clever!
     return $cmd;
@@ -163,7 +163,7 @@ sub _test_shell {
 sub _test_linux_os_release {
     my $self = shift;
     $self->_run_test('os_linux') // return;
-    my $cat = $self->_find_cmd('cat');
+    my $cat = $self->_find_remote_cmd('cat');
     if (my @out = $self->_try_cmd("$cat /etc/os-release")) {
         my %output;
         for (@out) {

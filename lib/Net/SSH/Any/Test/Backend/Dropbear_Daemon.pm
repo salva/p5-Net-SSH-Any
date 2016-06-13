@@ -16,8 +16,10 @@ sub _validate_backend_opts {
     # dropbear and dbclient are resolved here so that they can be used
     # as friends by any other commands
     my $opts = $tssh->{current_opts};
-    $opts->{local_dropbear_cmd} //= $tssh->_resolve_cmd('dropbear');
-    $opts->{local_dbclient_cmd} //= $tssh->_resolve_cmd('dbclient');
+    $tssh->_be_find_cmd('dropbear') // return;
+    $tssh->_be_find_cmd('dropbearconvert') // return;
+    $tssh->_be_find_cmd('dropbearkey') // return;
+
     1;
 }
 
@@ -60,20 +62,20 @@ sub _create_key {
             return 1;
         }
     }
-    $tssh->_set_error(SSHA_BACKEND_ERROR, "key generation failed");
+    $tssh->_or_set_error(SSHA_BACKEND_ERROR, "key generation failed");
     return;
 }
 
-sub _resolve_cmd {
-    my ($tssh, $name) = @_;
+sub _be_find_cmd {
+    my $tssh = shift;
+    my $find_opts = (ref($_[0]) ? shift : {});
+    my ($name, $friend, $app, $default) = @_;
     my $opts = $tssh->{current_opts};
-    my $safe_name = $name;
-    $safe_name =~ s/\W/_/g;
-    $opts->{"local_${safe_name}_cmd"} //=
-        $tssh->_find_cmd($name,
-                         $opts->{local_dropbear_cmd},
-                         { POSIX => 'Dropbear',
-                           MSWin => 'Cygwin' });
+    $tssh->SUPER::_be_find_cmd($find_opts,
+                               $name,
+                               $friend // $opts->{local_dropbear_cmd},
+                               $app    // { POSIX => 'Dropbear', MSWin => 'Cygwin' },
+                               $default);
 }
 
 sub _start_and_check {
