@@ -118,7 +118,7 @@ This module implements a Net::SSH::Any backend using PuTTY's plink
 utility.
 
 It is probably the easiest way to get a working, password
-authenticated SSH connection on Windows. Unfortuntelly, it is not
+authenticated SSH connection on Windows. Unfortunately, it is not
 completely secure as the password is passed to plink on the command
 line and anybody with access to the local computer may eavesdrop it.
 
@@ -148,7 +148,8 @@ For instance:
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2014 by Salvador Fandiño, E<lt>sfandino@yahoo.comE<gt>
+Copyright (C) 2011-2014 by Salvador FandiE<ntilde>o,
+E<lt>sfandino@yahoo.comE<gt>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.12.4 or,

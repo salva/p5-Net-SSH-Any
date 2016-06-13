@@ -306,7 +306,7 @@ C<Net::SSH::Any> is a SSH client module providing a high level and
 powerful API.
 
 It can run remote commands and redirect its output or capture it, and
-perform file transfers using SCP or SFTP easyly.
+perform file transfers using SCP or SFTP easily.
 
 Net::SSH::Any does not implement the SSH protocol itself. Instead, it
 has a plugable architecture allowing it to delegate that task to
@@ -342,13 +342,13 @@ Uses the perl module Net::SSH2 which is a wrapper for the libssh2 C
 library, a fast and portable implementation of the client side
 of the SSH version 2 protocol.
 
-L<Net::SSH2> is an actively maintaned module that works on both
+L<Net::SSH2> is an actively maintained module that works on both
 Unix/Linux an Windows systems (don't known about VMS). Compiling it
 may be a hard task, specially on Windows, but PPM packages are
 available from the Internet.
 
 That was intended to be main backend for Net::SSH::Any when used on
-Windows. Unfortunatelly, the current stable version of libssh2 is
+Windows. Unfortunately, the current stable version of libssh2 is
 still somewhat buggy, causing this backend to be unreliable.
 
 See L<Net::SSH::Any::Backend::Net_SSH2>.
@@ -358,7 +358,7 @@ See L<Net::SSH::Any::Backend::Net_SSH2>.
 This backend uses any binary <c>ssh</c> client available on the box
 that accepts the same command line arguments as the OpenSSH one. In
 practice that means SSH clients forked from old versions of OpenSSH as
-for instance, the one bundled in Solaris and other comercial unixen.
+for instance, the one bundled in Solaris and other commercial unixen.
 
 Password authentication is only supported on Linux/UNIX and it
 requires the additional module IO::Pty. It may work under Cygwin too.
@@ -540,7 +540,7 @@ instance:
 
   $ssh->system({remote_shell => 'MSWin'}, dir => $directory);
 
-For unsuported shells or systems such as VMS, you will have to perform
+For unsupported shells or systems such as VMS, you will have to perform
 any quoting yourself:
 
   # for VMS
@@ -553,8 +553,8 @@ that aborts the remote command when the given time lapses without any
 data arriving via SSH.
 
 In order to stop some remote process when it times out, the ideal
-aproach would be to send appropriate signals through the SSH
-connection , but unfortunatelly, this is a feature of the standard
+approach would be to send appropriate signals through the SSH
+connection , but unfortunately, this is a feature of the standard
 that most SSH implementations do not support.
 
 As a less than perfect alternative solution, in order to force
@@ -608,7 +608,7 @@ Password for user authentication.
 Path to file containing the private key to be used for
 user authentication.
 
-Some backends (i.e. Net::SSH2), require the pulic key to be
+Some backends (i.e. Net::SSH2), require the public key to be
 stored in a file of the same name with C<.pub> appended.
 
 =item passphrase => $passphrase
@@ -617,7 +617,7 @@ Passphrase to be used to unlock the private key.
 
 =item batch_mode => 1
 
-Dissable any authentication method requiring user interaction.
+Disable any authentication method requiring user interaction.
 
 =item timeout => $seconds
 
@@ -630,7 +630,7 @@ The encoding used for the commands and arguments sent to the remote stream.
 =item stream_encoding => $encoding
 
 On operation interchanging data between perl and the remote commands
-(as oposed to operations redirecting the remote commands output to the
+(as opposed to operations redirecting the remote commands output to the
 file system) the encoding to be used.
 
 =item encoding => $encoding
@@ -758,7 +758,7 @@ When called in list context this method returns the output split in
 lines.
 
 In case of error the partial output is returned. The C<error> method
-should be used to check that no error hapenned even when output has
+should be used to check that no error happened even when output has
 been returned.
 
 The set of options accepted by this method is as follows:
@@ -873,7 +873,7 @@ Selectively copy the permissions or the timestamps.
 =item update => $bool
 
 If the target file already exists locally, it is only copied when the
-timestamp of the remote version is newier. If the file doesn't exist
+timestamp of the remote version is newer. If the file doesn't exist
 locally, it is unconditionally copied.
 
 =item numbered => $bool
@@ -902,7 +902,7 @@ The accepted options are as follows:
 
 =item glob => $bool
 
-Allows willcard expansion when selecting the files to copy.
+Allows wildcard expansion when selecting the files to copy.
 
 =item recursive => $bool
 
@@ -929,7 +929,7 @@ Retrieves the contents of some file or files via SCP.
 
 =item glob => $bool
 
-Allows willcard expansion on the remote host when selecting the files
+Allows wildcard expansion on the remote host when selecting the files
 to transfer.
 
 =item recursive => $bool

@@ -403,7 +403,7 @@ Sets the SSH password.
 
 =item key_paths => \@private_key_paths
 
-Path to files containing privated keys to use for authentication.
+Path to files containing private keys to use for authentication.
 
 =item backend_opts => { $backend_name => \%opts, ... }
 

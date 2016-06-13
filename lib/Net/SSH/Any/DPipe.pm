@@ -14,6 +14,6 @@ __END__
 
 =head1 NAME
 
-Net::SSH::Any::DPipe - bidirectional comunication with remote process
+Net::SSH::Any::DPipe - bidirectional communication with remote process
 
 
