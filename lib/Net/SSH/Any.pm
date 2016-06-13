@@ -851,8 +851,8 @@ The accepted set of options are as follow:
 
 =item glob => $bool
 
-Allows to expand wildcards on the remote machine when selecting the
-files to download.
+Allows the remote shell to expand wildcards when selecting the files
+to download.
 
 =item recursive => $bool
 
