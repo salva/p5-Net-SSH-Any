@@ -40,28 +40,37 @@ sub __check_and_copy_error {
 }
 
 sub _validate_backend_opts {
-    my ($any, %be_opts) = @_;
-    $any->SUPER::_validate_backend_opts(%be_opts) or return;
+    my $any = shift;
 
-    my $instance = $be_opts{instance} // do {
+    $any->SUPER::_validate_backend_opts or return;
 
-        my $be_opts{ssh_cmd} //= delete $be_opts{local_ssh_cmd} // $any->_find_cmd($_, $be_opts{ssh_cmd}, 'OpenSSH');
+    my $be = $any->{be};
+    my $instance = $be->{instance} // do {
+        $be->{local_ssh_cmd} //= $any->_find_cmd($_, $be->{ssh_cmd}, 'OpenSSH') // return;
+
+        my @master_opts = _array_or_scalar_to_list $be->{master_opts};
+        my $shkc = ($be->{strict_host_key_checking} ? 'yes' : 'no');
+        push @master_opts, -o => "StrictHostKeyChecking=$shkc";
+        push @master_opts, -o => "UserKnownHostsFile=$be->{$known_hosts_path}"
+            if defined $be->{known_hosts_path};
+        push @master_opts, '-C' if $be->{compress};
+
+        my %args = (master_opts => \@master_opts,
+                    ssh_cmd => $be->{local_ssh_cmd} );
+
+        for (qw(host port user password passphrase key_path timeout
+                known_hosts_path compress batch_mode)) {
+            $args{$_} = $be->{$_} if defined $be->{$_};
+        }
 
         for (qw(rsync sshfs scp)) {
-            $be_opts{"${_}_cmd"} //= delete $be_opts{"local_${_}_cmd"} //
-                $any->_find_cmd({relaxed => 1}, $_, $be_opts{ssh_cmd}, 'OpenSSH');
+            $args{"${_}_cmd"} = $be->{"local_${_}_cmd"} //=
+                $any->_find_cmd({relaxed => 1}, $_, $be->{ssh_cmd}, 'OpenSSH');
         }
-        my @master_opts = _array_or_scalar_to_list delete $be_opts{master_opts};
-        my $strict_host_key_checking = delete $be_opts{strict_host_key_checking};
-        push @master_opts, -o => 'StrictHostKeyChecking='.($strict_host_key_checking ? 'yes' : 'no');
-        my $known_hosts_path = delete $be_opts{known_hosts_path};
-        push @master_opts, -o => "UserKnownHostsFile=$known_hosts_path"
-            if defined $known_hosts_path;
-        push @master_opts, '-C' if delete $be_opts{compress};
-        delete $be_opts{io_timeout};
-        Net::OpenSSH->new(%be_opts, master_opts => \@master_opts, connect => 0);
+
+        Net::OpenSSH->new(%args, connect => 0);
     };
-    $any->{be_opts} = \%be_opts;
+
     $any->{be_ssh} = $instance;
     __check_and_copy_error($any);
 }

@@ -53,11 +53,11 @@ sub current_user {
 
 sub interactive_login {
     my ($any, $pty, $proc) = @_;
-    my $opts = $any->{be_opts}; # FIXME. This shouldn't be here!
-    my $user = $opts->{user};
-    my $password = $opts->{password};
-    my $password_prompt = $opts->{password_prompt};
-    my $asks_username_at_login = $opts->{asks_username_at_login};
+    my $be = $any->{be}; # FIXME. This shouldn't be here!
+    my $user = $be->{user};
+    my $password = $be->{password};
+    my $password_prompt = $be->{password_prompt};
+    my $asks_username_at_login = $be->{asks_username_at_login};
 
     if (defined $password_prompt) {
         unless (ref $password_prompt eq 'Regexp') {

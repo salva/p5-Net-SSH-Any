@@ -90,7 +90,7 @@ sub __copy_error {
 sub __check_host_key {
     my $any = shift;
     my $ssh2 = $any->{be_ssh2} or croak "internal error: be_ssh2 is not set";
-    my $be_opts = $any->{be_opts};
+    my $be = $any->{be};
 
     my $hostkey_method = $ssh2->can('remote_hostkey');
     unless ($hostkey_method) {
@@ -102,7 +102,7 @@ sub __check_host_key {
 
     my ($key, $type) = $hostkey_method->($ssh2);
 
-    my $known_hosts_path = $be_opts->{known_hosts_path};
+    my $known_hosts_path = $be->{known_hosts_path};
     unless (defined $known_hosts_path) {
         my $config_dir;
         if ($windows) {
@@ -161,7 +161,7 @@ sub __check_host_key {
                      $C{KNOWNHOST_KEYENC_RAW} |
                      (($type + 1) << $C{KNOWNHOST_KEY_SHIFT}) );
 
-    my $check = $kh->check($be_opts->{host}, $be_opts->{port}, $key, $key_type);
+    my $check = $kh->check($be->{host}, $be->{port}, $key, $key_type);
 
     if ($check == $C{KNOWNHOST_CHECK_MATCH}) {
         $debug and $debug & 1024 and _debug("host key matched");
@@ -169,19 +169,19 @@ sub __check_host_key {
     }
     elsif ($check == $C{KNOWNHOST_CHECK_MISMATCH}) {
         $debug and $debug & 1024 and _debug("host key found but did not match");
-        $any->_set_error(SSHA_CONNECTION_ERROR, "The host key for '$be_opts->{host}' has changed");
+        $any->_set_error(SSHA_CONNECTION_ERROR, "The host key for '$be->{host}' has changed");
         return;
     }
     elsif ($check == $C{KNOWNHOST_CHECK_NOTFOUND}) {
         $debug and $debug & 1024 and _debug("host key not found in known_hosts");
-        if ($be_opts->{strict_host_key_checking}) {
-            $any->_set_error(SSHA_CONNECTION_ERROR, "the authenticity of host '$be_opts->{host}' can't be established");
+        if ($be->{strict_host_key_checking}) {
+            $any->_set_error(SSHA_CONNECTION_ERROR, "the authenticity of host '$be->{host}' can't be established");
             return;
         }
         else {
             $debug and $debug & 1024 and _debug "saving host key to '$known_hosts_path'";
             eval {
-                $kh->add($be_opts->{host}, '', $key, "added by Perl module Net::SSH::Any (Net::SSH2 backend)", $key_type);
+                $kh->add($be->{host}, '', $key, "added by Perl module Net::SSH::Any (Net::SSH2 backend)", $key_type);
                 $kh->writefile($known_hosts_path);
             };
             return 1;
@@ -194,7 +194,12 @@ sub __check_host_key {
 }
 
 sub _validate_backend_opts {
-    my ($any, %be_opts) = @_;
+    my $any = shift;
+
+    # $any->SUPER::_validate_backend_opts or return;
+
+    my $be = $any->{be};
+
     my $mod_ver = do { no warnings; 0 + $Net::SSH2::VERSION };
     if ($mod_ver < 0.59) {
         $any->_set_error(SSHA_CONNECTION_ERROR,
@@ -218,26 +223,25 @@ sub _validate_backend_opts {
     }
     $debug and $debug & 2048 and $ssh2->trace(~0); #~$C{TRACE_TRANS});
 
-    $ssh2->timeout(1000 * ($be_opts{timeout} // $be_opts{io_timeout}));
+    $ssh2->timeout(1000 * ($be->{timeout} // $be->{io_timeout}));
 
-    if ($be_opts{compress}) {
+    if ($be->{compress}) {
         if (defined(my $flag_method = $ssh2->can('flag'))) {
             $debug and $debug & 1024 and _debug "enabling compression";
             $flag_method->($ssh2, $C{FLAG_COMPRESS}, 1);
         }
     }
 
-    $any->{be_opts} = \%be_opts;
     1;
 }
 
 sub _connect {
     my $any = shift;
     my $ssh2 = $any->{be_ssh2} or return;
-    my $be_opts = $any->{be_opts};
-    my $socket = IO::Socket::INET->new(PeerHost => $be_opts->{host},
-                                       PeerPort => ($be_opts->{port} || 22),
-                                       ($be_opts->{timeout} ? (Timeout => $be_opts->{timeout}) : ()));
+    my $be = $any->{be};
+    my $socket = IO::Socket::INET->new(PeerHost => $be->{host},
+                                       PeerPort => ($be->{port} || 22),
+                                       ($be->{timeout} ? (Timeout => $be->{timeout}) : ()));
     if ($socket) {
         $socket->sockopt(SO_LINGER, pack(SS => 0, 0));
         $socket->sockopt(SO_KEEPALIVE, 1);
@@ -250,12 +254,12 @@ sub _connect {
     __check_host_key($any) or return;
 
     my %aa;
-    $aa{username} = _first_defined($be_opts->{user},
+    $aa{username} = _first_defined($be->{user},
                                    eval { (getpwuid $<)[0] },
                                    eval { getlogin() });
-    $aa{password} = $be_opts->{password} if defined $be_opts->{password};
-    $aa{passphrase} = $be_opts->{passphrase} if defined $be_opts->{passphrase};
-    if (defined (my $private = $be_opts->{key_path})) {
+    $aa{password} = $be->{password} if defined $be->{password};
+    $aa{passphrase} = $be->{passphrase} if defined $be->{passphrase};
+    if (defined (my $private = $be->{key_path})) {
         unless (-f $private) {
             $any->_set_error(SSHA_CONNECTION_ERROR, "Private key '$private' does not exist on file system");
             return;
@@ -272,7 +276,7 @@ sub _connect {
 
     $debug and $debug & 1024 and _debug_dump "Net::SSH2 authentication args", \%aa;
 
-    $ssh2->auth(%aa, interact => !$be_opts->{batch_mode});
+    $ssh2->auth(%aa, interact => !$be->{batch_mode});
     unless ($ssh2->auth_ok) {
         $any->_set_error(SSHA_CONNECTION_ERROR, "Authentication failed");
         return;

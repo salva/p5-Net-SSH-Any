@@ -9,64 +9,67 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_CHANNEL_ERROR SSHA_RE
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_backend_opts {
-    my ($any, %be_opts) = @_;
-    $any->SUPER::_validate_backend_opts(%be_opts) or return;
+    my $any = shift;
 
-    defined $be_opts{host} or croak "host argument missing";
+    $any->SUPER::_validate_backend_opts or return;
 
-    $be_opts{local_sshg3_cmd} //=
+    my $be = $any->{be};
+
+    defined $be->{host} or croak "host argument missing";
+
+    $be->{local_sshg3_cmd} //=
         $any->_find_cmd(sshg3 => undef,
                         { POSIX => 'tectia',
                           MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Client' }) // return;
-    my $out = $any->_local_capture($be_opts{local_sshg3_cmd}, '-V');
+    my $out = $any->_local_capture($be->{local_sshg3_cmd}, '-V');
     if ($?) {
         $any->_set_error(SSHA_CONNECTION_ERROR, 'sshg3 not found or bad version, rc: ', ($? >> 8));
         return;
     }
 
-    $be_opts{run_broker} //= 0;
+    $be->{run_broker} //= 0;
 
-    if ($be_opts{run_broker}) {
-        $be_opts{local_ssh_broker_g3_cmd} //=
-            $any->_find_cmd('ssh-broker-g3', $be_opts{local_sshg3_cmd},
+    if ($be->{run_broker}) {
+        $be->{local_ssh_broker_g3_cmd} //=
+            $any->_find_cmd('ssh-broker-g3', $be->{local_sshg3_cmd},
                             { POSIX => 'tectia',
                               MSWin => 'SSH Communications Security\\SSH Tectia\\SSH Tectia Broker' }) // return;
     }
 
-    $be_opts{local_sshg3_extra_args} = $any->_find_local_extra_args(sshg3 => \%be_opts);
-    $be_opts{local_ssh_broker_g3_extra_args} = $any->_find_local_extra_args(ssh_broker_g3 => \%be_opts);
+    $be->{local_sshg3_extra_args} = $any->_find_local_extra_args(sshg3 => $be);
+    $be->{local_ssh_broker_g3_extra_args} = $any->_find_local_extra_args(ssh_broker_g3 => $be);
 
     my @auth_type;
-    if (defined $be_opts{password}) {
+    if (defined $be->{password}) {
         $any->{be_password_path} = # save it here to ensure it can be unlinked on destruction
-            $any->_os_create_secret_file("sshg3-pwd.txt", $be_opts{password}) // return;
+            $any->_os_create_secret_file("sshg3-pwd.txt", $be->{password}) // return;
         push @auth_type, 'password';
     }
-    elsif (defined (my $key = $be_opts{key_path})) {
+    elsif (defined (my $key = $be->{key_path})) {
         push @auth_type, 'publickey';
-        croak "pubkey authentication not supported yet by Sshg3_Cmd backend";
+        # croak "pubkey authentication not supported yet by Sshg3_Cmd backend";
     }
 
-    if (delete $be_opts{strict_host_key_checking}) {
-        $be_opts{hostkey_policy} = 'strict';
+    if (delete $be->{strict_host_key_checking}) {
+        $be->{hostkey_policy} = 'strict';
     }
     else {
-        my $known_hosts_path = delete $be_opts{known_hosts_path};
+        my $known_hosts_path = delete $be->{known_hosts_path};
         if (defined $known_hosts_path and $known_hosts_path eq '/dev/null') {
-            $be_opts{hostkey_policy} = 'advisory';
+            $be->{hostkey_policy} = 'advisory';
         }
         else {
-            $be_opts{hostkey_policy} = 'tofu';
+            $be->{hostkey_policy} = 'tofu';
         }
     }
 
     # Work around bug on Tectia/Windows affecting only old Windows versions, apparently.
     my ($os, $mayor, $minor) = $any->_os_version;
-    if ($os eq 'MSWin' and not $be_opts{exclusive}) {
+    if ($os eq 'MSWin' and not $be->{exclusive}) {
         $debug and $debug & 1024 and _debug "OS version is $os $mayor.$minor";
         if ($mayor < 6 or ($mayor == 6 and $minor < 1)) { # < Win7
-            $be_opts{exclusive} //= 1;
-            $debug and $debug & 1024 and _debug($be_opts{exclusive}
+            $be->{exclusive} //= 1;
+            $debug and $debug & 1024 and _debug($be->{exclusive}
                                                 ? "Exclusive mode enabled"
                                                 : "Exclusive mode disabled by user explicitly");
         }
@@ -75,9 +78,8 @@ sub _validate_backend_opts {
         }
     }
 
-    $debug and $debug & 1024 and _debug_dump be_opts => \%be_opts;
+    $debug and $debug & 1024 and _debug_dump be => $be;
 
-    $any->{be_opts} = \%be_opts;
     $any->{be_auth_type} = join(',', @auth_type);
     $any->{be_interactive_login} = 0;
 
@@ -86,14 +88,14 @@ sub _validate_backend_opts {
 
 sub _connect{
     my $any = shift;
-    my $be_opts = $any->{be_opts};
+    my $be = $any->{be};
 
-    if ($be_opts->{run_broker}) {
-        if (defined (my $broker = $be_opts->{local_ssh_broker_g3_cmd})) {
+    if ($be->{run_broker}) {
+        if (defined (my $broker = $be->{local_ssh_broker_g3_cmd})) {
             local $?; # ignore errors here;
-            my @args = @{$be_opts->{local_ssh_broker_g3_extra_args}};
-            push @args, -a => $be_opts->{broker_address}
-                if defined $be_opts->{broker_address};
+            my @args = @{$be->{local_ssh_broker_g3_extra_args}};
+            push @args, -a => $be->{broker_address}
+                if defined $be->{broker_address};
             system $broker $broker, @args;
         }
     }
@@ -102,28 +104,29 @@ sub _connect{
 
 sub _make_cmd {
     my ($any, $cmd_opts, $cmd) = @_;
-    my $be_opts = $any->{be_opts};
+    my $be = $any->{be};
 
     # FIXME: the environment variable should only be set when running
     # the sshg3 command, not globally!
-    if (defined (my $broker_address = $be_opts->{broker_address})) {
+    if (defined (my $broker_address = $be->{broker_address})) {
         $any->_os_setenv(SSH_SECSH_BROKER => $broker_address);
     }
 
-    my @args = ( $be_opts->{local_sshg3_cmd},
-                 @{$be_opts->{local_sshg3_extra_args}},
+    my @args = ( $be->{local_sshg3_cmd},
+                 @{$be->{local_sshg3_extra_args}},
                  '-B', '-enone', '-q',
-                 "--hostkey-policy=$be_opts->{hostkey_policy}");
+                 "--hostkey-policy=$be->{hostkey_policy}");
 
-    push @args, '--exclusive' if $be_opts->{exclusive};
-    push @args, "-l$be_opts->{user}" if defined $be_opts->{user};
-    push @args, "-p$be_opts->{port}" if defined $be_opts->{port};
+    push @args, '--exclusive' if $be->{exclusive};
+    push @args, "-l$be->{user}" if defined $be->{user};
+    push @args, "-p$be->{port}" if defined $be->{port};
     push @args, "-Pfile://$any->{be_password_path}" if defined $any->{be_password_path};
+    push @args, "-K$be->{key_path}" if defined $be->{key_path};
 
     return (@args,
             ( delete $cmd_opts->{subsystem}
-              ? (-s => $cmd, $be_opts->{host})
-              : ($be_opts->{host}, $cmd)));
+              ? (-s => $cmd, $be->{host})
+              : ($be->{host}, $cmd)));
 }
 
 sub DESTROY {

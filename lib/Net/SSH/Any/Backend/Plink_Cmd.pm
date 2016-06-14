@@ -9,12 +9,14 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR);
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_backend_opts {
-    my ($any, %be_opts) = @_;
-    $any->SUPER::_validate_backend_opts(%be_opts) or return;
+    my $any = shift;
+    $any->SUPER::_validate_backend_opts or return;
 
-    $be_opts{local_plink_cmd} //= $any->_find_cmd(plink => undef, 'PuTTY') // return;
+    my $be = $any->{be};
 
-    my $out = $any->_local_capture($be_opts{local_plink_cmd}, '-V');
+    $be->{local_plink_cmd} //= $any->_find_cmd(plink => undef, 'PuTTY') // return;
+
+    my $out = $any->_local_capture($be->{local_plink_cmd}, '-V');
     if ($out =~ /plink:\s*(?:Unidentified\s+build\s*,|Pre-release|Release)\s*(.*?)\s*$/mi) {
         $any->{be_plink_version} = $1;
     }
@@ -26,20 +28,20 @@ sub _validate_backend_opts {
 
     my ($auth_type, $interactive_login);
 
-    if (defined $be_opts{password}) {
+    if (defined $be->{password}) {
         $auth_type = 'password';
-        if (my @too_much = grep defined($be_opts{$_}), qw(key_path passphrase)) {
+        if (my @too_much = grep defined($be->{$_}), qw(key_path passphrase)) {
             croak "option(s) '".join("', '", @too_much)."' can not be used together with 'password'"
         }
     }
     else {
-        if (defined (my $key = $be_opts{key_path})) {
+        if (defined (my $key = $be->{key_path})) {
             my $ppk = "$key.ppk";
-            $be_opts{ppk_key_path} = $ppk;
+            $be->{ppk_key_path} = $ppk;
             unless (-e $ppk) {
                 local $?;
-                my $puttygen = $be_opts{local_puttygen_cmd} //=
-                    $any->_find_cmd(puttygen => $be_opts{local_pink_cmd}, 'PuTTY') // return;
+                my $puttygen = $be->{local_puttygen_cmd} //=
+                    $any->_find_cmd(puttygen => $be->{local_pink_cmd}, 'PuTTY') // return;
 
                 my @cmd = ($puttygen, -O => 'private', -o => $ppk, $key);
                 $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
@@ -52,7 +54,7 @@ sub _validate_backend_opts {
             }
             # fallback
         }
-        if (defined (my $ppk = $be_opts{ppk_key_path})) {
+        if (defined (my $ppk = $be->{ppk_key_path})) {
             unless (-e $ppk) {
                 $any->_set_error(SSHA_CONNECTION_ERROR, 'puttygen failed to convert key to PPK format');
                 return
@@ -64,7 +66,6 @@ sub _validate_backend_opts {
         }
     }
 
-    $any->{be_opts} = \%be_opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = 0;
     1;
@@ -72,27 +73,27 @@ sub _validate_backend_opts {
 
 sub _make_cmd {
     my ($any, $cmd_opts, $cmd) = @_;
-    my $be_opts = $any->{be_opts};
+    my $be = $any->{be};
 
-    my @args = ( $be_opts->{local_plink_cmd},
+    my @args = ( $be->{local_plink_cmd},
                  '-ssh',
                  '-batch' );
 
-    push @args, '-C' if $be_opts->{compress};
-    push @args, -l => $be_opts->{user} if defined $be_opts->{user};
-    push @args, -P => $be_opts->{port} if defined $be_opts->{port};
-    push @args, -i => $be_opts->{ppk_key_path} if defined $be_opts->{ppk_key_path};
+    push @args, '-C' if $be->{compress};
+    push @args, -l => $be->{user} if defined $be->{user};
+    push @args, -P => $be->{port} if defined $be->{port};
+    push @args, -i => $be->{ppk_key_path} if defined $be->{ppk_key_path};
 
     if ($any->{be_auth_type} eq 'password') {
         # Add some guard here, user should allow this thing explicitly!
-        push @args, -pw => $be_opts->{password};
+        push @args, -pw => $be->{password};
     }
 
-    push @args, _array_or_scalar_to_list($be_opts->{plink_opts})
-        if defined $be_opts->{plink_opts};
+    push @args, _array_or_scalar_to_list($be->{plink_opts})
+        if defined $be->{plink_opts};
 
     push @args, '-s' if delete $cmd_opts->{subsystem};
-    push @args, $be_opts->{host};
+    push @args, $be->{host};
 
     return (@args, $cmd);
 }

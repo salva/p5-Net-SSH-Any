@@ -69,19 +69,19 @@ sub _new {
     for my $backend (@backends) {
         $any->{error} = 0;
         if ($any->_load_backend_module(__PACKAGE__, $backend, $REQUIRED_BACKEND_VERSION)) {
-            $any->{backend} or croak "internal error: backend not set";
-            my %backend_opts = map { $_ => $any->{$_} // scalar($uri->get($_)) }
+            $any->{backend_name} or croak "internal error: backend not set";
+            my %be = map { $_ => $any->{$_} // scalar($uri->get($_)) }
                 qw(host port user password passphrase key_path timeout io_timeout
                    strict_host_key_checking known_hosts_path compress batch_mode);
 
-
             if (my $extra = $any->{backend_opts}{$backend}) {
-                @backend_opts{keys %$extra} = values %$extra;
+                @be{keys %$extra} = values %$extra;
             }
-            defined $backend_opts{$_} or delete $backend_opts{$_}
-                for keys %backend_opts;
+            defined $be{$_} or delete $be{$_}
+                for keys %be;
 
-            if ($any->_validate_backend_opts(%backend_opts)) {
+            $any->{be} = \%be;
+            if ($any->_validate_backend_opts) {
                 $any->_connect;
                 return $any;
             }

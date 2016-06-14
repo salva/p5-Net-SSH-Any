@@ -63,7 +63,7 @@ sub test_test_backend {
     }
 
     subtest "$_ backend" => \&test_backend, $tssh, $_
-        for qw(Net_SSH2 Net_OpenSSH Ssh_Cmd Dbclient_Cmd);
+        for qw(Net_SSH2 Net_OpenSSH Ssh_Cmd Dbclient_Cmd Sshg3_Cmd);
 }
 
 sub test_backend {

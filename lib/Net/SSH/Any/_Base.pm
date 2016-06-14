@@ -47,17 +47,18 @@ sub _new {
 
 sub _log_error_and_reset_backend {
     my $self = shift;
-    push @{$self->{backend_log}}, "$self->{backend}: [".($self->{error}+0)."] $self->{error}";
+    push @{$self->{backend_log}}, "$self->{backend_name}: [".($self->{error}+0)."] $self->{error}";
     $self->{error} = 0;
-    delete $self->{backend};
+    delete $self->{backend_name};
     delete $self->{backend_module};
+    delete $self->{be};
     ()
 }
 
 sub _load_backend_module {
     my ($self, $class, $backend, $required_version) = @_;
     $backend =~ /^\w+$/ or croak "Bad backend name '$backend' for class '$class'";
-    $self->{backend} = $backend;
+    $self->{backend_name} = $backend;
     my $module = $self->{backend_module} = "${class}::Backend::${backend}";
 
     local ($@, $SIG{__DIE__});

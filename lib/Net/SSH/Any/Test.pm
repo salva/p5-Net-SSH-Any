@@ -32,7 +32,7 @@ sub _log_at_level {
     my $time = sprintf "%.4f", Time::HiRes::time - $^T;
     my $text = join(': ', map { defined($_) ? $_ : '<undef>' } @_);
     # my $prefix = "$time $pkg $line|";
-    my $prefix = sprintf "%s %s|", $time, $tssh->{backend} // 'Test';
+    my $prefix = sprintf "%s %s|", $time, $tssh->{backend_name} // 'Test';
     $text =~ s/\n$//;
     my $n;
     $text =~ s/^/$prefix.($n++?'\\':'-')/emg;
@@ -209,7 +209,7 @@ sub _make_path {
 
 sub _backend_wdir {
     my $tssh = shift;
-    my $backend = $tssh->{backend} // croak "Internal error: backend not set";
+    my $backend = $tssh->{backend_name} // croak "Internal error: backend not set";
     $tssh->_make_path($tssh->{wdir}, $backend);
 }
 

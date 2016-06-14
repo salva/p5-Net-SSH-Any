@@ -8,14 +8,16 @@ use Net::SSH::Any::Constants qw(SSHA_CHANNEL_ERROR SSHA_REMOTE_CMD_ERROR SSHA_CO
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_backend_opts {
-    my ($any, %be_opts) = @_;
-    $any->SUPER::_validate_backend_opts(%be_opts) or return;
+    my $any = shift;
 
-    $be_opts{local_ssh_cmd} //= $any->_find_cmd('ssh',
+    $any->SUPER::_validate_backend_opts or return;
+
+    my $be = $any->{be};
+    $be->{local_ssh_cmd} //= $any->_find_cmd('ssh',
                                                 undef,
                                                 { MSWin => 'Cygwin', POSIX => 'OpenSSH' },
                                                 '/usr/bin/ssh') // return;
-    my $out = $any->_local_capture($be_opts{local_ssh_cmd}, '-V');
+    my $out = $any->_local_capture($be->{local_ssh_cmd}, '-V');
     if ($?) {
         $out =~ s/\s+/ /gs; $out =~ s/ $//;
         $any->_set_error(SSHA_CONNECTION_ERROR, 'ssh not found or bad version, rc: '.($? >> 8)." output: $out");
@@ -24,16 +26,16 @@ sub _validate_backend_opts {
 
     my ($auth_type, $interactive_login);
 
-    if (defined $be_opts{password}) {
+    if (defined $be->{password}) {
         $auth_type = 'password';
         $interactive_login = 1;
-        if (my @too_more = grep defined($be_opts{$_}), qw(key_path passphrase)) {
+        if (my @too_more = grep defined($be->{$_}), qw(key_path passphrase)) {
             croak "option(s) '".join("', '", @too_more)."' can not be used together with 'password'"
         }
     }
-    elsif (defined $be_opts{key_path}) {
+    elsif (defined $be->{key_path}) {
         $auth_type = 'publickey';
-        if (defined $be_opts{passphrase}) {
+        if (defined $be->{passphrase}) {
             $auth_type .= ' with passphrase';
             $interactive_login = 1;
         }
@@ -42,7 +44,6 @@ sub _validate_backend_opts {
         $auth_type = 'default';
     }
 
-    $any->{be_opts} = \%be_opts;
     $any->{be_auth_type} = $auth_type;
     $any->{be_interactive_login} = $interactive_login;
     1;
@@ -50,18 +51,18 @@ sub _validate_backend_opts {
 
 sub _make_cmd {
     my ($any, $cmd_opts, $cmd) = @_;
-    my $be_opts = $any->{be_opts};
+    my $be = $any->{be};
 
-    my @args = ( $be_opts->{local_ssh_cmd},
-                 $be_opts->{host} );
+    my @args = ( $be->{local_ssh_cmd},
+                 $be->{host} );
     push @args, '-C';
-    push @args, -l => $be_opts->{user} if defined $be_opts->{user};
-    push @args, -p => $be_opts->{port} if defined $be_opts->{port};
-    push @args, -i => $any->_os_unix_path($be_opts->{key_path}) if defined $be_opts->{key_path};
-    push @args, -o => 'BatchMode=yes' unless grep defined($be_opts->{$_}), qw(password passphrase);
-    push @args, -o => 'StrictHostKeyChecking=no' unless $be_opts->{strict_host_key_checking};
-    push @args, -o => 'UserKnownHostsFile=' . $any->_os_unix_path($be_opts->{known_hosts_path})
-        if defined $be_opts->{known_hosts_path};
+    push @args, -l => $be->{user} if defined $be->{user};
+    push @args, -p => $be->{port} if defined $be->{port};
+    push @args, -i => $any->_os_unix_path($be->{key_path}) if defined $be->{key_path};
+    push @args, -o => 'BatchMode=yes' unless grep defined($be->{$_}), qw(password passphrase);
+    push @args, -o => 'StrictHostKeyChecking=no' unless $be->{strict_host_key_checking};
+    push @args, -o => 'UserKnownHostsFile=' . $any->_os_unix_path($be->{known_hosts_path})
+        if defined $be->{known_hosts_path};
 
     if ($any->{be_auth_type} eq 'password') {
         push @args, ( -o => 'PreferredAuthentications=keyboard-interactive,password',
@@ -73,8 +74,8 @@ sub _make_cmd {
 
     push @args, '-s' if delete $cmd_opts->{subsystem};
 
-    push @args, _array_or_scalar_to_list($be_opts->{ssh_opts})
-        if defined $be_opts->{ssh_opts};
+    push @args, _array_or_scalar_to_list($be->{ssh_opts})
+        if defined $be->{ssh_opts};
 
     return (@args, '--', $cmd);
 }

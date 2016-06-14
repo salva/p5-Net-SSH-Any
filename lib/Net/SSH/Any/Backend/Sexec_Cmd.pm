@@ -9,27 +9,29 @@ use Net::SSH::Any::Constants qw(SSHA_CONNECTION_ERROR SSHA_CHANNEL_ERROR SSHA_RE
 use parent 'Net::SSH::Any::Backend::_Cmd';
 
 sub _validate_backend_opts {
-    my ($any, %opts) = @_;
-    $any->SUPER::_validate_backend_opts(%opts) or return;
+    my $any = shift;
+    $any->SUPER::_validate_backend_opts or return;
 
-    grep defined $opts{$_}, qw(profile_path host)
+    my $current = $any->{current};
+
+    grep defined $current->{$_}, qw(profile_path host)
         or croak "host argument missing";
 
     my @auth_type;
-    if (defined $opts{password}) {
+    if (defined $current->{password}) {
         push @auth_type, 'password';
-        #if (my @too_much = grep defined($opts{$_}), qw(key_path passphrase)) {
+        #if (my @too_much = grep defined($current->{$_}), qw(key_path passphrase)) {
         #    croak "option(s) '".join("', '", @too_much)."' can not be used together with 'password'"
         #}
     }
-    elsif (defined (my $key = $opts{key_path})) {
+    elsif (defined (my $key = $current->{key_path})) {
         push @auth_type, 'publickey';
         croak "pubkey authentication not support yet by Sexec_Cmd backend";
         # my $ppk = "$key.ppk";
-        # $opts{ppk_path} = $ppk;
+        # $current->{ppk_path} = $ppk;
         # unless (-e $ppk) {
         #     local $?;
-        #     my $cmd = _first_defined $opts{local_puttygen_cmd},
+        #     my $cmd = _first_defined $current->{local_puttygen_cmd},
         #         $any->{local_cmd}{puttygen}, 'puttygen';
         #     my @cmd = ($cmd, -O => 'private', -o => $ppk, $key);
         #     $debug and $debug & 1024 and _debug "generating ppk file with command '".join("', '", @cmd)."'";
@@ -47,8 +49,8 @@ sub _validate_backend_opts {
         # $auth_type = 'default';
     }
 
-    $opts{local_sexec_cmd} = _first_defined $opts{local_sexec_cmd}, $any->{local_cmd}{sexec}, 'sexec';
-    $any->{be_opts} = \%opts;
+    # FIXME: use _find_cmd!
+    $current->{local_sexec_cmd} //= _first_defined $current->{local_sexec_cmd}, $any->{local_cmd}{sexec}, 'sexec';
     $any->{be_auth_type} = join(',', @auth_type);
     $any->{be_interactive_login} = 0;
     1;
@@ -56,10 +58,10 @@ sub _validate_backend_opts {
 
 sub _make_cmd {
     my ($any, $cmd_opts, $cmd) = @_;
-    my $be_opts = $any->{be_opts};
+    my $current = $any->{current};
 
     my ($sexec, $host, $profile_path, $user, $password, $port) =
-        @{$be_opts}{qw(local_sexec_cmd host profile_path user password port)};
+        @{$current}{qw(local_sexec_cmd host profile_path user password port)};
 
     my @args = ($sexec, "-unat=y");
     if (defined $profile_path) {
@@ -73,8 +75,8 @@ sub _make_cmd {
     push @args, "-port=$port" if defined $port;
     push @args, "-pw=$password" if defined $password;
 
-    push @args, _array_or_scalar_to_list($be_opts->{sexec_opts})
-        if defined $be_opts->{sexec_opts};
+    push @args, _array_or_scalar_to_list($current->{sexec_opts})
+        if defined $current->{sexec_opts};
 
     delete $cmd_opts->{subsystem} and croak "running subsystems is not supported by backend";
 
