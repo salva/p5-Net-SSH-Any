@@ -1121,6 +1121,10 @@ A subset of L<Expect> adapted to work on top of Net::SSH::Any.
 I am still not sure about how viable it would be, but I would like to
 get something like Net::OpenSSH::Gateway available for Net::SSH::Any.
 
+=item * scp_tar and scp_untar
+
+Allow to tar and untar files transferred through scp on the fly.
+
 =item * Move to Moo+Moo::Role or Role::Tiny
 
 The ad-hoc composition model used internally by Net::SSH::Any has
