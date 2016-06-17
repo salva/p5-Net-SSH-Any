@@ -46,12 +46,12 @@ sub _validate_backend_opts {
 
     my $be = $any->{be};
     my $instance = $be->{instance} // do {
-        $be->{local_ssh_cmd} //= $any->_find_cmd($_, $be->{ssh_cmd}, 'OpenSSH') // return;
+        $be->{local_ssh_cmd} //= $any->_find_cmd('ssh', $be->{ssh_cmd}, 'OpenSSH') // return;
 
         my @master_opts = _array_or_scalar_to_list $be->{master_opts};
         my $shkc = ($be->{strict_host_key_checking} ? 'yes' : 'no');
         push @master_opts, -o => "StrictHostKeyChecking=$shkc";
-        push @master_opts, -o => "UserKnownHostsFile=$be->{$known_hosts_path}"
+        push @master_opts, -o => "UserKnownHostsFile=$be->{known_hosts_path}"
             if defined $be->{known_hosts_path};
         push @master_opts, '-C' if $be->{compress};
 
@@ -59,7 +59,7 @@ sub _validate_backend_opts {
                     ssh_cmd => $be->{local_ssh_cmd} );
 
         for (qw(host port user password passphrase key_path timeout
-                known_hosts_path compress batch_mode)) {
+                known_hosts_path batch_mode)) {
             $args{$_} = $be->{$_} if defined $be->{$_};
         }
 
