@@ -94,6 +94,7 @@ sub _pop_action {
 sub _set_error {
     my ($self, $action, $origin, $error) = @_;
     unless (defined ($action->{error})) {
+        $debug and $debug & 4096 and _debug "_set_error error: $error, origin: $origin";
         $action->{error} = $error;
         $action->{error_origin} = $origin;
         $self->{error_count}++;
