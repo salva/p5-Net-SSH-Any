@@ -256,6 +256,7 @@ sub scp_get_content { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Conte
 sub scp_mkdir       { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
 sub scp_put         { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
 sub scp_put_content { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Content',  @_) }
+sub scp_put_untar   { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Untar',    @_) }
 
 sub scp_find        {
     _warn("this feature is not finished yet");

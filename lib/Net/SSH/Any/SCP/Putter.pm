@@ -40,7 +40,7 @@ sub _open {
         return 1;
     }
     else {
-        $p->set_local_error($action, "unable to open directory or file for $action->{path}");
+        $p->set_local_error($action, "unable to open directory or file for '$action->{local_path}', type: $action->{type}");
         return
     }
 }
@@ -51,29 +51,37 @@ sub _close {
     my ($p, $action) = @_;
     my $method = "close_$action->{type}";
     $p->$method($action, delete $action->{_handle}) and return 1;
-    $p->set_local_error($action, "unable to close directory or file $action->{path}");
-    return
+    $p->set_local_error($action, "unable to close directory or file '$action->{path}'");
+    ()
 }
 
 sub _read_file {
     my ($p, $action, $len) = @_;
-    $debug and $debug & 4096 and _debug_dump "_read_file action", $action;
+    $debug and $debug & 4096 and _debug_dump "_read_file len: $len, action", $action;
     $p->read_file($action, $action->{_handle}, $len);
+}
+
+sub _broken_dpipe {
+    my ($p, $action) = @_;
+    $p->set_remote_error($action, "broken dpipe");
+    $p->abort;
+    ()
 }
 
 sub _send_line_and_get_response {
     my ($p, $dpipe, $action, $line) = @_;
     $debug and $debug & 4096 and
-        _debug_hexdump("writting line", $line);
-    my ($fatal, $error) = ( $dpipe->print($line)
-                            ? $p->_read_response($dpipe)
-                            : (2, "broken dpipe"));
+        _debug_hexdump("writing line", $line);
+    $dpipe->print($line)
+        or return $p->_broken_dpipe($action);
+
+    my ($fatal, $error) = $p->_read_response($dpipe);
     if ($fatal) {
         $p->set_remote_error($action, $error);
-        $fatal > 1 and $p->abort;
-        return;
+        $p->abort if $fatal > 1;
+        return
     }
-    return 1;
+    1
 }
 
 sub _remote_open {
@@ -84,7 +92,7 @@ sub _remote_open {
                croak "bad action type $action->{type}");
     $perm = (defined $perm ? $perm : 0777) & 0777;
     $debug and $debug & 4096 and
-        _debugf("remote_open type: %s, perm: 0%o, size: %d, name: %s", $type, $perm, $size, $name);
+        _debugf("remote_open type: %s, perm: 0%o, size: %s, name: %s", $type, $perm, $size, $name);
     _scp_escape_name($name);
     $p->_send_line_and_get_response($dpipe, $action, sprintf("%s%04o %d %s\x0A", $cmd, $perm, $size, $name));
 }
@@ -160,7 +168,8 @@ sub _send_file {
             }
         }
         $debug and $debug & 4096 and _debug_hexdump("sending data (failed: $failed)", $data);
-        $dpipe->print($data) or last OUT;
+        $dpipe->print($data)
+            or return $p->_broken_pipe($action);
         $remaining -= length $data;
     }
     $p->_close($action) or $failed = 1;
@@ -188,7 +197,23 @@ sub run {
 	return;
     }
 
- OUT: while (not $p->{aborted}) {
+    $p->loop($dpipe);
+
+    $dpipe->close;
+
+    $p->_clean_actions;
+
+    $p->on_end_of_put or
+        $p->_or_set_error(SSHA_SCP_ERROR, "SCP transfer not completely successful");
+
+    not $any->error
+}
+
+sub loop {
+    my ($p, $dpipe) = @_;
+    my $any = $p->{any};
+
+    while (not $p->{aborted}) {
         my $line;
         my $current_dir_action = $p->{actions}[-1];
         if (my $action = $p->_read_dir($current_dir_action)) {
@@ -207,19 +232,24 @@ sub run {
                     }
                     else {
                         if ($p->_open($action)) {
-                            if ($p->_send_time($dpipe, $action)) {
-                                if ($p->_remote_open($dpipe, $action)) {
+                            if ($action->{skip}) {
+                                next if $type eq 'dir';
+                                $p->_close($action);
+                            }
+                            else {
+                                if ($p->_send_time($dpipe, $action) and
+                                    $p->_remote_open($dpipe, $action)) {
                                     if ($type eq 'dir') {
                                         # do not pop the action from the actions stack;
                                         next;
                                     }
                                     elsif ($type eq 'file') {
-                                        $p->_send_file($dpipe, $action);
+                                        $p->_send_file($dpipe, $action) or last;
                                     }
                                 }
-                            }
-                            else {
-                                $p->_close($action);
+                                else {
+                                    $p->_close($action);
+                                }
                             }
                         }
                     }
@@ -230,18 +260,10 @@ sub run {
         else { # close dir
             my $action = $p->_pop_action('dir', 1) or last;
             $p->_close($action);
-            $p->_send_line_and_get_response($dpipe, $action, "E\x0A");
+            $p->_send_line_and_get_response($dpipe, $action, "E\x0A")
+                unless $action->{skip};
         }
     }
-
-    $dpipe->close;
-
-    $p->_clean_actions;
-
-    $p->on_end_of_put or
-        $p->_or_set_error(SSHA_SCP_ERROR, "SCP transfer not completely successful");
-
-    not $any->error
 }
 
 1;
