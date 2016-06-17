@@ -423,11 +423,11 @@ sub __open_channel_and_exec {
 
     if (my $channel = $ssh2->channel("session", $window_size)) {
         my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
-        if ($any->_channel_do($channel, 1,
-                              'process',
-                              ( (defined $cmd and length $cmd)
-                                ? ( ($subsystem ? 'subsystem' : 'exec') => $cmd)
-                                : 'shell'))) {
+        my @args = ( (defined $cmd and length $cmd)
+                     ? ( ($subsystem ? 'subsystem' : 'exec') => $cmd)
+                     : 'shell' );
+        $debug and $debug & 1024 and _debug_dump process => \@args;
+        if ($any->_channel_do($channel, 1, process => @args)) {
             return ($channel, @fhs);
         }
     }
