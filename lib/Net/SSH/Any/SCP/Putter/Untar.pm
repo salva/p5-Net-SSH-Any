@@ -34,8 +34,9 @@ sub _read_chunk {
     my $offset = 0;
 
     unless (defined $fh) {
-        _debug_dump "undef fh, action" => $action;
-        Carp::confess("fh is undefined");
+        $p->set_local_error($action, "Internal error: tar file handler is undefined");
+        $p->abort;
+        return;
     }
 
     while ($offset < $size) {
@@ -60,7 +61,7 @@ sub _read_chunk {
             }
         }
     }
-    $debug and $debug & 4096 and _debug_hexdump '_read_chunk' => $buf;
+    # $debug and $debug & 4096 and _debug_hexdump '_read_chunk' => $buf;
     return $buf;
 }
 
@@ -102,7 +103,7 @@ sub read_dir {
                      path => '.',
                      perm => 0755,
                      size => 0,
-                     skip => 1,
+                     only_local => 1,
                      local_path => $tar,
                      eot => 0 };
         }
@@ -148,10 +149,10 @@ sub read_dir {
 
             $_ = oct $_ for ($mode, $uid, $gid, $size, $mtime, $chksum, $devmayor, $devminor);
 
-            _debug_dump "tar header" => [ $path, $mode, $uid, $gid, $size,
-                                          $mtime, $chksum, $typeflag, $linkname,
-                                          $magic, $version, $uname, $gname,
-                                          $devmayor, $devminor, $prefix ];
+            $debug and $debug & 4096 and _debug_dump "tar header" => [ $path, $mode, $uid, $gid, $size,
+                                                                       $mtime, $chksum, $typeflag, $linkname,
+                                                                       $magic, $version, $uname, $gname,
+                                                                       $devmayor, $devminor, $prefix ];
 
             my $type = $typeflag2type{$typeflag} // "unknown-type-$typeflag";
 
@@ -177,7 +178,7 @@ sub read_dir {
                          atime => $mtime,
                          mtime => $mtime,
                          type => $type,
-                         typeflag => $typeflag }
+                         typeflag => $typeflag };
         }
 
         my @parts = split /\/+/, $action->{path};
@@ -212,18 +213,24 @@ sub read_dir {
 
         # parent path is actually my parent!
         $action->{name} = $name;
-        return $action if defined $action->{type};
 
-        # skip unhandled data
-        my $remaining = $action->{size};
-        if (my $round = $remaining % 512) {
-            $remaining += 512 - $round;
+        my $type = $action->{type};
+        unless ($type eq 'file' or $type eq 'dir') {
+            $action->{skip} = 1;
+            $p->set_local_error($action, "unsupported object type '$type'");
+
+            # skip unhandled data
+            my $remaining = $action->{size};
+            if (my $round = $remaining % 512) {
+                $remaining += 512 - $round;
+            }
+            while ($remaining) {
+                my $chunk = ($remaining > 16 * 1024 ? 16 * 1024 : $remaining);
+                $p->_read_chunk($tar_action, $fh, $chunk) // return;
+                $remaining -= $chunk;
+            }
         }
-        while ($remaining) {
-            my $chunk = ($remaining > 16 * 1024 ? 16 * 1024 : $remaining);
-            $p->_read_chunk($tar_action, $fh, $chunk) // return;
-            $remaining -= $chunk;
-        }
+        return $action
     }
     ()
 }

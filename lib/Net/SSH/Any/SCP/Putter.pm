@@ -231,24 +231,26 @@ sub loop {
                         $p->set_local_error($action, "not a regular file");
                     }
                     else {
-                        if ($p->_open($action)) {
-                            if ($action->{skip}) {
-                                next if $type eq 'dir';
-                                $p->_close($action);
-                            }
-                            else {
-                                if ($p->_send_time($dpipe, $action) and
-                                    $p->_remote_open($dpipe, $action)) {
-                                    if ($type eq 'dir') {
-                                        # do not pop the action from the actions stack;
-                                        next;
-                                    }
-                                    elsif ($type eq 'file') {
-                                        $p->_send_file($dpipe, $action) or last;
-                                    }
+                        unless ($action->{skip}) {
+                            if ($p->_open($action)) {
+                                if ($action->{only_local}) {
+                                    next if $type eq 'dir';
+                                    $p->_close($action);
                                 }
                                 else {
-                                    $p->_close($action);
+                                    if ($p->_send_time($dpipe, $action) and
+                                        $p->_remote_open($dpipe, $action)) {
+                                        if ($type eq 'dir') {
+                                            # do not pop the action from the actions stack;
+                                            next;
+                                        }
+                                        elsif ($type eq 'file') {
+                                            $p->_send_file($dpipe, $action) or last;
+                                        }
+                                    }
+                                    else {
+                                        $p->_close($action);
+                                    }
                                 }
                             }
                         }
@@ -261,7 +263,7 @@ sub loop {
             my $action = $p->_pop_action('dir', 1) or last;
             $p->_close($action);
             $p->_send_line_and_get_response($dpipe, $action, "E\x0A")
-                unless $action->{skip};
+                unless $action->{only_local};
         }
     }
 }
