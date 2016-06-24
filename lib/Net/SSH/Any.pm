@@ -253,6 +253,7 @@ sub _wait_ssh_proc {
 
 sub scp_get         { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Standard', @_) }
 sub scp_get_content { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Content',  @_) }
+sub scp_get_tar     { shift->_helper_delegate('Net::SSH::Any::SCP::Getter::Tar',      @_) }
 sub scp_mkdir       { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::DirMaker', @_) }
 sub scp_put         { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Standard', @_) }
 sub scp_put_content { shift->_helper_delegate('Net::SSH::Any::SCP::Putter::Content',  @_) }
