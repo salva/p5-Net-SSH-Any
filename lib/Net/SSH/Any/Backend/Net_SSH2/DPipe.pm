@@ -43,9 +43,10 @@ our @ISA = qw(Tie::Handle);
 sub TIEHANDLE {
     my ($class, $any, $channel) = @_;
     my $dpipe = { any => $any,
-                 channel => $channel,
-                 blocking => 1,
-                 error => 0 };
+                  channel => $channel,
+                  blocking => 1,
+                  ssh_error => 0,
+                  error => 0 };
     bless $dpipe, $class;
 }
 
@@ -152,6 +153,12 @@ sub PRINT {
     }
 }
 
+sub SAY {
+    my $dpipe = shift;
+    $dpipe->PRINT(@_);
+    $dpipe->PRINT("\n");
+}
+
 sub PRINTF {
     my $dpipe = shift;
     my $str = sprintf(@_);
@@ -210,9 +217,10 @@ sub _check_error {
         $! = Errno::EAGAIN();
     }
     else {
-        $dpipe->{error} = $dpipe->{any}->error or return 0; # EOF!
+        $dpipe->{ssh_error} = $dpipe->{any}->error or return 0; # EOF!
         $! = Errno::EIO();
     }
+    $self->{error} = $!;
     return
 }
 
@@ -221,8 +229,34 @@ sub _check_error {
 *getc = \&GETC;
 *close = \&CLOSE;
 *print = \&PRINT;
+*printflush = \&PRINT;
 *printf = \&PRINTF;
+*eof = \&EOF;
+*getline = \&READLINE;
+*fileno = \&FILENO;
+*say = \&SAY;
+
+sub opened { 1 }
+sub autoflush { 1 }
+
+sub flush { "0 but true" }
+sub sync  { "0 but true" }
+
+sub ungetc { croak "ungetc method is not supported by ".ref(shift)." objects" }
+sub input_file_number { croak "input_file_number is not supported by ".ref(shift)." objects" }
 
 sub error { shift->{error} }
+sub clearerr { shift->{error} = 0 }
+sub ssh_error { shift->{ssh_error} }
+
+sub getlines {
+    my $dpipe = shift;
+    wantarray or croak "getlines called in scalar context";
+    my @lines;
+    while (<$dpipe>) {
+        push @lines, $_;
+    }
+    @lines;
+}
 
 1;
