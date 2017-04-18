@@ -59,7 +59,7 @@ sub _validate_backend_opts {
                     ssh_cmd => $be->{local_ssh_cmd} );
 
         for (qw(host port user password passphrase key_path timeout
-                known_hosts_path batch_mode)) {
+                batch_mode)) {
             $args{$_} = $be->{$_} if defined $be->{$_};
         }
 
