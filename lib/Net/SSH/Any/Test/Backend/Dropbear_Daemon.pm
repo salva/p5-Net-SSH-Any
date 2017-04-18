@@ -85,7 +85,7 @@ sub _start_and_check {
 
     my $opts = $tssh->{current_opts};
     $tssh->{daemon_proc} = $tssh->_run_cmd({async => 1},
-                                           'dropbear', '-E', '-s',
+                                           'dropbear', '-E', '-s', '-F',
                                            -r => "$opts->{host_key_path}.dbk",
                                            -U => "$opts->{user_key_path}.pub",
                                            -p => "localhost:$opts->{port}",
