@@ -162,7 +162,7 @@ sub _test_shell {
 
 sub _test_linux_os_release {
     my $self = shift;
-    $self->_run_test('os_linux') // return;
+    $self->_run_test('os_posix') // return;
     my $cat = $self->_find_remote_cmd('cat');
     if (my @out = $self->_try_cmd("$cat /etc/os-release")) {
         my %output;
