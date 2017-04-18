@@ -26,6 +26,11 @@ sub _validate_backend_opts {
         $any->_set_error(SSHA_CONNECTION_ERROR, 'sshg3 not found or bad version, rc: ', ($? >> 8));
         return;
     }
+    my $out = $any->_local_capture($be->{local_sshg3_cmd});
+    if ($out =~ /No valid license files are installed./) {
+        $any->_set_error(SSHA_CONNECTION_ERROR, 'missing license for sshg3, rc: ', ($? >> 8));
+        return;
+    }
 
     $be->{run_broker} //= 0;
 
