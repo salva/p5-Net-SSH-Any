@@ -35,6 +35,6 @@ sub close {
     return $ok;
 }
 
-sub error { shift->_any->error }
+sub ssh_error { shift->_any->error }
 
 1;

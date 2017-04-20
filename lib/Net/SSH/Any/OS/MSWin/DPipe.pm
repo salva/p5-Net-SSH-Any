@@ -51,4 +51,21 @@ sub send_eof {
     1
 }
 
+sub error {
+    my $dpipe = shift;
+    $dpipe->SUPER::error // $dpipe->_in->error;
+}
+
+sub clearerr {
+    my $dpipe = shift;
+    $dpipe->SUPER::clearerr;
+    $dpipe->_in->clearerr;
+}
+
+sub blocking {
+    my $dpipe = shift;
+    $dpipe->SUPER::blocking(@_);
+    $dpipe->_in->blocking(@_);
+}
+
 1;
