@@ -208,6 +208,17 @@ sub dpipe {
     $any->_dpipe(\%opts, $cmd);
 }
 
+_sub_options pty => qw(stderr_to_stdout stderr_discard subsystem);
+sub pty {
+    my $any = shift;
+    $any->_clear_error or return undef;
+    my %opts = (ref $_[0] eq 'HASH' ? %{shift()} : ());
+    my $cmd = $any->_quote_args(\%opts, @_) // return;
+    _croak_bad_options %opts;
+     $any->_pty(\%opts, $cmd);
+
+}
+
 _sub_options sftp => qw(fs_encoding timeout block_size queue_size autoflush write_delay
                         read_ahead late_set_perm autodie remote_sftp_server_cmd ssh1);
 sub sftp {

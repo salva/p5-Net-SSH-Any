@@ -186,6 +186,12 @@ sub _find_cmd_in_path {
     ()
 }
 
+sub _set_be_default_friend_cmd {
+    my $any = shift;
+    $debug and $debug & 1024 and _debug "setting default command friend to $_[0]";
+    $any->{_be_default_friend_cmd} = shift;
+}
+
 sub _find_cmd {
     my $any = shift;
     my $opts = (ref $_[0] ? shift : {});
@@ -193,7 +199,8 @@ sub _find_cmd {
     my $safe_name = $name;
     $safe_name =~ s/\W/_/g;
     my $cmd = ( $any->{local_cmd}{$safe_name}             //
-                $any->_find_cmd_by_friend($name, $friend) //
+                $any->_find_cmd_by_friend($name,
+                                          $friend // $any->{_be_default_friend_cmd}) //
                 $any->_find_cmd_in_path($name)            //
                 $any->_find_helper_cmd($name)             //
                 $any->_os_find_cmd_by_app($name, $app)    //

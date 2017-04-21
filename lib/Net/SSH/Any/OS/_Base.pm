@@ -36,6 +36,8 @@ sub set_file_inherit_flag { 1 }
 
 sub has_working_socketpair { }
 
+sub has_working_pty { }
+
 sub io3_check_and_clean_data {
     my ($any, $in, $data) = @_;
     my @data = grep { defined and length } _array_or_scalar_to_list $data;

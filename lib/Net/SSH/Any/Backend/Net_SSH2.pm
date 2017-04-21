@@ -422,6 +422,7 @@ sub __open_channel_and_exec {
     croak "subsystem name missing" if $subsystem and not defined $cmd;
 
     if (my $channel = $ssh2->channel("session", $window_size)) {
+        $channel->pty('vt100', { echo => 0 }) if delete $opts->{tty};
         my @fhs = __parse_fh_opts($any, $opts, $channel) or return;
         my @args = ( (defined $cmd and length $cmd)
                      ? ( ($subsystem ? 'subsystem' : 'exec') => $cmd)
@@ -665,6 +666,14 @@ sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     my ($channel) = __open_channel_and_exec($any, $opts, $cmd) or return;
     # TODO: do something with the parsed options?
+    require Net::SSH::Any::Backend::Net_SSH2::DPipe;
+    Net::SSH::Any::Backend::Net_SSH2::DPipe->_make($any, $channel);
+}
+
+sub _pty {
+    my ($any, $opts, $cmd) = @_;
+    $opts->{tty} = 1;
+    my ($channel) = __open_channel_and_exec($any, $opts, $cmd) or return;
     require Net::SSH::Any::Backend::Net_SSH2::DPipe;
     Net::SSH::Any::Backend::Net_SSH2::DPipe->_make($any, $channel);
 }

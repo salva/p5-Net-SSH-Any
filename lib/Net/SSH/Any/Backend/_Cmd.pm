@@ -36,8 +36,23 @@ sub _run_cmd {
     my $data = $opts->{stdin_data};
     $opts->{stdin_pipe} = 1 if defined $data;
 
-    my $dpipe = delete $opts->{stdinout_dpipe};
-    if ($dpipe) {
+    my $stdinout_pty = delete $opts->{stdinout_pty};
+    my $stdinout_dpipe;
+    my $pty;
+    if ($stdinout_pty) {
+        if ($any->_os_has_working_pty) {
+            $pty = $any->_os_pty;
+            $pipes[0] = $pipes[1] = $pty;
+            $fhs[0] = $fhs[1] = $pty->slave;
+        }
+        else {
+            $stdinout_dpipe = 1;
+        }
+    }
+    else {
+        $stdinout_dpipe = delete $opts->{stdinout_dpipe};
+    }
+    if ($stdinout_dpipe) {
         if ($any->_os_has_working_socketpair) {
             ($fhs[0], $pipes[0]) = $any->_os_socketpair($fhs[0], $pipes[0]) or return;
             $fhs[1] = $fhs[0];
@@ -83,6 +98,7 @@ sub _run_cmd {
 
     my @too_many = grep { /^std(?:in|out|err)_/ and
                           $_ ne 'stdin_data'    and
+                          $_ ne 'tty'           and
                           defined $opts->{$_} } keys %$opts;
     @too_many and croak "unsupported options or bad combination ('".join("', '", @too_many)."')";
 
@@ -95,18 +111,20 @@ sub _run_cmd {
     };
 
     $debug and $debug & 1024 and _debug("launching cmd: '", join("', '", @cmd), "'");
-    my $pty = ($any->{be_interactive_login} ? $any->_os_pty($any) : undef);
+    $pty //= $any->_os_pty if $any->{be_interactive_login};
     my $proc = $any->_os_open4(\@fhs, \@pipes, $pty, $stderr_to_stdout, @cmd) or return;
 
     $debug and $debug & 1024 and _debug("pid: $proc->{pid}");
 
     if ($pty) {
-        $any->_os_interactive_login($pty, $proc) or return undef;
+        if ($any->{be_interactive_login}) {
+            $any->_os_interactive_login($pty, $proc) or return undef;
+        }
         $any->{be_pty} = $pty;
         $pty->close_slave;
     }
 
-    if ($dpipe) {
+    if ($stdinout_dpipe || $stdinout_pty) {
         $pipes[0] = $any->_os_make_dpipe($proc, @pipes[0, 1]) or return;
         $pipes[1] = undef;
         $debug and $debug & 1024 and _debug "fh upgraded to dpipe $pipes[0]";
@@ -158,6 +176,14 @@ sub _capture2 {
 sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     $opts->{stdinout_dpipe} = 1;
+    my (undef, $dpipe) = $any->_run_cmd($opts, $cmd) or return;
+    $dpipe;
+}
+
+sub _pty {
+    my ($any, $opts, $cmd) = @_;
+    $opts->{stdinout_pty} = 1;
+    $opts->{tty} = 1;
     my (undef, $dpipe) = $any->_run_cmd($opts, $cmd) or return;
     $dpipe;
 }

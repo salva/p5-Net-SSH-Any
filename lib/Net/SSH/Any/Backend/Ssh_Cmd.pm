@@ -14,9 +14,10 @@ sub _validate_backend_opts {
 
     my $be = $any->{be};
     $be->{local_ssh_cmd} //= $any->_find_cmd('ssh',
-                                                undef,
-                                                { MSWin => 'Cygwin', POSIX => 'OpenSSH' },
-                                                '/usr/bin/ssh') // return;
+                                             undef,
+                                             { MSWin => 'Cygwin', POSIX => 'OpenSSH' },
+                                             '/usr/bin/ssh') // return;
+    $any->_set_be_default_friend_cmd($be->{local_ssh_cmd});
     my $out = $any->_local_capture($be->{local_ssh_cmd}, '-V');
     if ($?) {
         $out =~ s/\s+/ /gs; $out =~ s/ $//;
@@ -73,6 +74,7 @@ sub _make_cmd {
     }
 
     push @args, '-s' if delete $cmd_opts->{subsystem};
+    push @args, '-tt' if delete $cmd_opts->{tty};
 
     push @args, _array_or_scalar_to_list($be->{ssh_opts})
         if defined $be->{ssh_opts};

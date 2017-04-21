@@ -365,7 +365,7 @@ sub validate_cmd {
         $any->SUPER::validate_cmd("$cmd.EXE");
 }
 
-my @cygwin_variants = qw(Cygwin MinGW MinGW\\MSYS\\1.0);
+my @cygwin_variants = qw(Cygwin MSYS64 MinGW MinGW\\MSYS\\1.0);
 
 sub find_cygwin_cmd {
     my ($any, $name) = @_;
@@ -379,7 +379,7 @@ sub find_cygwin_cmd {
         $reg{'HKEY_LOCAL_MACHINE\\SOFTWARE\\Cygwin\\setup\\rootdir'};
 
     if (defined (my $drive = $ENV{SystemDrive})) {
-        push @rootdirs, File::Spec->catpath($drive, $_)
+        push @rootdirs, File::Spec->catpath($drive, '\\'.$_)
             for @cygwin_variants;
     }
 
@@ -462,10 +462,28 @@ sub version {
 sub unix_path {
     my ($any, $path) = @_;
     return "/dev/null" if $path eq 'nul';
-    my ($drive, @rest) = File::Spec->splitpath(File::Spec->rel2abs($path));
-    $drive =~ s/:$//;
-    s{\\}{/}g for @rest;
-    return "/cygdrive/$drive" . join('/', @rest);
+    my $cygpath = $any->_find_cmd('cygpath', undef, 'cygwin');
+    if (defined($cygpath)) {
+        $debug and $debug & 1024 and Net::SSH::Any::Util::_debug("cygpath resolved to '$cygpath'");
+
+        if (open my $fh, '-|', $cygpath, $path) {
+            my $unix_path = do { local $/; <$fh> };
+            close $fh;
+            if ($? == 0) {
+                chomp $unix_path;
+                return $unix_path;
+            }
+        }
+        $any->_or_set_error(SSHA_LOCAL_IO_ERROR,
+                            "Unable to resolve path '$path' to unix style path");
+        return;
+    }
+    else {
+        my ($drive, @rest) = File::Spec->splitpath(File::Spec->rel2abs($path));
+        $drive =~ s/:$//;
+        s{\\}{/}g for @rest;
+        return "/cygdrive/$drive" . join('/', @rest);
+    }
 }
 
 our $debug; # make debug visible below
