@@ -220,7 +220,7 @@ sub _check_error {
         $dpipe->{ssh_error} = $dpipe->{any}->error or return 0; # EOF!
         $! = Errno::EIO();
     }
-    $self->{error} = $!;
+    $dpipe->{error} = $!;
     return
 }
 
