@@ -31,6 +31,8 @@ sub _fileno_dup_over {
 
 sub has_working_socketpair { 1 }
 
+sub has_working_pty { 1 }
+
 sub socketpair {
     my $any = shift;
     my ($a, $b);
