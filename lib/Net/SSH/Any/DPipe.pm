@@ -6,6 +6,12 @@ use warnings;
 use Carp;
 our @CARP_NOT = qw(Net::SSH::Any);
 
+sub expecter {
+    my $dpipe = shift;
+    $dpipe->_any->_load_module('Net::SSH::Any::Expect') or return;
+    Net::SSH::Any::Expect->_new($dpipe, @_);
+}
+
 1;
 
 __END__
