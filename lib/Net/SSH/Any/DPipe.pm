@@ -9,7 +9,7 @@ our @CARP_NOT = qw(Net::SSH::Any);
 sub expecter {
     my $dpipe = shift;
     $dpipe->_any->_load_module('Net::SSH::Any::Expect') or return;
-    Net::SSH::Any::Expect->_new($dpipe, @_);
+    Net::SSH::Any::Expect->_new($dpipe->_any, $dpipe, @_);
 }
 
 1;
