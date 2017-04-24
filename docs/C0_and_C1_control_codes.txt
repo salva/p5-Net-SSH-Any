@@ -1,0 +1,510 @@
+C0 and C1 control codes
+
+*** From Wikipedia, the free encyclopedia ***
+
+https://en.wikipedia.org/wiki/C0_and_C1_control_codes
+
+
+The C0 and C1 control code or control character sets define control codes for
+use in text by computer systems that use the ISO/IEC 2022 system of specifying
+control and graphic characters. Most character encodings, in addition to
+representing printable characters, also have characters such as these that
+represent additional information about the text, such as the position of a
+cursor, an instruction to start a new line, or a message that the text has been
+received.
+
+The C0 set defines codes in the range 00[HEX]–1F[HEX] and the C1 set defines
+codes in the range 80[HEX]–9F[HEX]. The default C0 set was originally defined
+in ISO 646 (ASCII), while the default C1 set was originally defined in ECMA-48
+(harmonized later with ISO 6429). While other C0 and C1 sets are available for
+specialized applications, they are rarely used.
+
+Encoding interoperability
+
+While the C1 control characters are used in conjunction with the ISO/IEC 8859
+series of graphical character sets among others, they are rarely used directly,
+except on specific platforms such as OpenVMS. When they turn up in documents,
+Web pages, e-mail messages, etc., which are ostensibly in an ISO-8859-n
+encoding, their code positions generally refer instead to the characters at
+that position in a proprietary, system-specific encoding such as Windows-1252
+or the Apple Macintosh (Mac OS Roman) character set that use the codes provided
+for representation of the C1 set with a single 8-bit byte to instead provide
+additional graphic characters, though this is technically invalid under the ISO
+encodings.
+
+Unicode sets aside 65 code points for compatibility with ISO/IEC 2022. The
+Unicode control characters cover U+0000—U+001F (C0 controls), U+007F (delete),
+and U+0080—U+009F (C1 controls). Unicode only specifies semantics for
+U+001C—U+001F, U+0009—U+000D, and U+0085. The rest of the control characters
+are transparent to Unicode and their meanings are left to higher-level
+protocols. The C1 characters in Unicode require 2 bytes to be encoded in UTF-8
+(for instance CSI at U+009B is encoded as the bytes 0xC2, 0x9B in UTF-8). Thus
+the corresponding control functions are more commonly accessed using the
+equivalent two byte escape sequence intended for use with systems that have
+only 7-bit bytes.
+
+Protocol interoperability and use
+
+Computer applications dealing with plain text only need to concern themselves
+with the six format effectors (0x08 through 0x0D) in the default C0 set. Only
+HT, LF, and CR are universally well handled. Occasionally BS is used to
+overprint two characters, and VT and FF are sometimes handled. On the other
+hand, the C1 control character NEL intended as a single byte substitute for the
+common two-byte sequence CR LF is often accepted by plain text applications.
+Very few applications interpret the other C0 and C1 control codes, as they are
+not needed for plain text.
+
+The ESC code is used extensively to introduce commands to control printing and
+display devices, for instance in the ANSI escape codes, and Printer Command
+Language (PCL), the printer language from Hewlett-Packard printers and
+compatibles.
+
+NUL has the meaning of "end of string" in the programming language C and
+derivatives such as C++. This meaning is usually not intended in a text stream,
+but the result is that NUL often cannot be assigned any other meaning.
+
+In addition, some transmission protocols such as ANPA-1312 do make extensive
+use of control characters SOH, STX, ETX and EOT. Other well known but now
+nearly obsolete ones are BEL, ACK, NAK and SYN.
+
+The official English language names of some control codes were revised in the
+most recent edition of the standard for control codes in general (ISO 6429:1992
+or ECMA-48:1991) to be neutral with respect to the graphic characters used with
+them, and to not assume that, as in the Latin script, lines are written on a
+page from top to bottom and that characters are written on a line from left to
+right. The abbreviations used were not changed, as the standard had already
+specified that those would remain unchanged when the standard is translated to
+other languages. Where the name has been changed, the original name from which
+the abbreviation was derived is also given in small type in the tables below.
+
+C0 (ASCII and derivatives)
+
+These are the standard ASCII control codes. If using the ISO/IEC 2022 extension
+mechanism, they are designated as the active C0 control character set with the
+octet sequence 0x1B 0x21 0x40 (ESC ! @).
+
+┌───┬───┬───┬───────┬──────┬────────────┬───┬───────────────────────────────┬┬┐
+│Seq│Dec│Hex│Acronym│Symbol│    Name    │ C │          Description          │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Originally used to allow gaps  │││
+│   │   │   │       │      │            │   │to be left on paper tape for   │││
+│   │   │   │       │      │            │   │edits. Later used for padding  │││
+│   │   │   │       │      │            │   │after a code that might take a │││
+│^@ │00 │00 │NUL    │␀     │Null        │\0 │terminal some time to process  │││
+│   │   │   │       │      │            │   │(e.g. a carriage return or line│││
+│   │   │   │       │      │            │   │feed on a printing terminal).  │││
+│   │   │   │       │      │            │   │Now often used as a string     │││
+│   │   │   │       │      │            │   │terminator, especially in the  │││
+│   │   │   │       │      │            │   │programming language C.        │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│^A │01 │01 │SOH    │␁     │Start of    │   │First character of a message   │││
+│   │   │   │       │      │Heading     │   │header.                        │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │Start of    │   │First character of message     │││
+│^B │02 │02 │STX    │␂     │Text        │   │text, and may be used to       │││
+│   │   │   │       │      │            │   │terminate the message heading. │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Often used as a "break"        │││
+│^C │03 │03 │ETX    │␃     │End of Text │   │character (Ctrl-C) to interrupt│││
+│   │   │   │       │      │            │   │or terminate a program or      │││
+│   │   │   │       │      │            │   │process.                       │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│^D │04 │04 │EOT    │␄     │End of      │   │Often used on Unix to indicate │││
+│   │   │   │       │      │Transmission│   │end-of-file on a terminal.     │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Signal intended to trigger a   │││
+│^E │05 │05 │ENQ    │␅     │Enquiry     │   │response at the receiving end, │││
+│   │   │   │       │      │            │   │to see if it is still present. │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Response to an ENQ, or an      │││
+│^F │06 │06 │ACK    │␆     │Acknowledge │   │indication of successful       │││
+│   │   │   │       │      │            │   │receipt of a message.          │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Originally used to sound a bell│││
+│   │   │   │       │      │            │   │on the terminal. Later used for│││
+│^G │07 │07 │BEL    │␇     │Bell        │\a │a beep on systems that didn't  │││
+│   │   │   │       │      │            │   │have a physical bell. May also │││
+│   │   │   │       │      │            │   │quickly turn on and off inverse│││
+│   │   │   │       │      │            │   │video (a visual bell).         │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Move the cursor one position   │││
+│   │   │   │       │      │            │   │leftwards. On input, this may  │││
+│   │   │   │       │      │            │   │delete the character to the    │││
+│   │   │   │       │      │            │   │left of the cursor. On output, │││
+│   │   │   │       │      │            │   │where in early computer        │││
+│   │   │   │       │      │            │   │technology a character once    │││
+│   │   │   │       │      │            │   │printed could not be erased,   │││
+│   │   │   │       │      │            │   │the backspace was sometimes    │││
+│   │   │   │       │      │            │   │used to generate accented      │││
+│   │   │   │       │      │            │   │characters in ASCII. For       │││
+│^H │08 │08 │BS     │␈     │Backspace   │\b │example, à could be produced   │││
+│   │   │   │       │      │            │   │using the three character      │││
+│   │   │   │       │      │            │   │sequence a BS ` (or, using the │││
+│   │   │   │       │      │            │   │characters’ hex values, 0x61   │││
+│   │   │   │       │      │            │   │0x08 0x60). This usage is now  │││
+│   │   │   │       │      │            │   │deprecated and generally not   │││
+│   │   │   │       │      │            │   │supported. To provide          │││
+│   │   │   │       │      │            │   │disambiguation between the two │││
+│   │   │   │       │      │            │   │potential uses of backspace,   │││
+│   │   │   │       │      │            │   │the cancel character control   │││
+│   │   │   │       │      │            │   │code was made part of the      │││
+│   │   │   │       │      │            │   │standard C1 control set.       │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │Character   │   │                               │││
+│^I │09 │09 │HT     │␉     │Tabulation, │\t │Position to the next character │││
+│   │   │   │       │      │Horizontal  │   │tab stop.                      │││
+│   │   │   │       │      │Tabulation  │   │                               │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │On typewriters, printers, and  │││
+│   │   │   │       │      │            │   │some terminal emulators, moves │││
+│   │   │   │       │      │            │   │the cursor down one row without│││
+│   │   │   │       │      │            │   │affecting its column position. │││
+│^J │10 │0A │LF     │␊     │Line Feed   │\n │On Unix, used to mark          │││
+│   │   │   │       │      │            │   │end-of-line. In DOS, Windows,  │││
+│   │   │   │       │      │            │   │and various network standards, │││
+│   │   │   │       │      │            │   │LF is used following CR as part│││
+│   │   │   │       │      │            │   │of the end-of-line mark.       │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │Line        │   │                               │││
+│^K │11 │0B │VT     │␋     │Tabulation, │\v │Position the form at the next  │││
+│   │   │   │       │      │Vertical    │   │line tab stop.                 │││
+│   │   │   │       │      │Tabulation  │   │                               │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │On printers, load the next     │││
+│   │   │   │       │      │            │   │page. Treated as whitespace in │││
+│   │   │   │       │      │            │   │many programming languages, and│││
+│   │   │   │       │      │            │   │may be used to separate logical│││
+│^L │12 │0C │FF     │␌     │Form Feed   │\f │divisions in code. In some     │││
+│   │   │   │       │      │            │   │terminal emulators, it clears  │││
+│   │   │   │       │      │            │   │the screen. It still appears in│││
+│   │   │   │       │      │            │   │some common plain text files as│││
+│   │   │   │       │      │            │   │a page break character, such as│││
+│   │   │   │       │      │            │   │the RFCs published by IETF.    │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Originally used to move the    │││
+│   │   │   │       │      │            │   │cursor to column zero while    │││
+│   │   │   │       │      │            │   │staying on the same line. On   │││
+│   │   │   │       │      │            │   │classic Mac OS (pre-Mac OS X), │││
+│   │   │   │       │      │            │   │as well as in earlier systems  │││
+│   │   │   │       │      │            │   │such as the Apple II and       │││
+│   │   │   │       │      │            │   │Commodore 64, used to mark     │││
+│   │   │   │       │      │Carriage    │   │end-of-line. In DOS, Windows,  │││
+│^M │13 │0D │CR     │␍     │Return      │\r │and various network standards, │││
+│   │   │   │       │      │            │   │it is used preceding LF as part│││
+│   │   │   │       │      │            │   │of the end-of-line mark. The   │││
+│   │   │   │       │      │            │   │Enter or Return key on a       │││
+│   │   │   │       │      │            │   │keyboard will send this        │││
+│   │   │   │       │      │            │   │character, but it may be       │││
+│   │   │   │       │      │            │   │converted to a different       │││
+│   │   │   │       │      │            │   │end-of-line sequence by a      │││
+│   │   │   │       │      │            │   │terminal program.              │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│^N │14 │0E │SO     │␎     │Shift Out   │   │Switch to an alternative       │││
+│   │   │   │       │      │            │   │character set.                 │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│^O │15 │0F │SI     │␏     │Shift In    │   │Return to regular character set│││
+│   │   │   │       │      │            │   │after Shift Out.               │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Cause the following octets to  │││
+│   │   │   │       │      │            │   │be interpreted as raw data, not│││
+│^P │16 │10 │DLE    │␐     │Data Link   │   │as control codes or graphic    │││
+│   │   │   │       │      │Escape      │   │characters. Returning to normal│││
+│   │   │   │       │      │            │   │usage would be implementation  │││
+│   │   │   │       │      │            │   │dependent.                     │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │Device      │   │These four control codes are   │││
+│^Q │17 │11 │DC1    │␑     │Control One │   │reserved for device control,   │││
+│   │   │   │       │      │(XON)       │   │with the interpretation        │││
+│   │   │   │       │      │            │   │dependent upon the device they │││
+├───┼───┼───┼───────┼──────┼────────────┼───┤were connected. DC1 and DC2    ├┼┤
+│   │   │   │       │      │Device      │   │were intended primarily to     │││
+│^R │18 │12 │DC2    │␒     │Control Two │   │indicate activating a device   │││
+│   │   │   │       │      │            │   │while DC3 and DC4 were intended│││
+├───┼───┼───┼───────┼──────┼────────────┼───┤primarily to indicate pausing  ├┼┤
+│   │   │   │       │      │Device      │   │or turning off a device. In    │││
+│^S │19 │13 │DC3    │␓     │Control     │   │actual practice DC1 and DC3    │││
+│   │   │   │       │      │Three (XOFF)│   │(known also as XON and XOFF    │││
+│   │   │   │       │      │            │   │respectively in this usage)    │││
+├───┼───┼───┼───────┼──────┼────────────┼───┤quickly became the de facto    ├┼┤
+│   │   │   │       │      │Device      │   │standard for software flow     │││
+│^T │20 │14 │DC4    │␔     │Control Four│   │control.                       │││
+│   │   │   │       │      │            │   │                               │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Sent by a station as a negative│││
+│   │   │   │       │      │            │   │response to the station with   │││
+│   │   │   │       │      │            │   │which the connection has been  │││
+│   │   │   │       │      │            │   │set up. In binary synchronous  │││
+│   │   │   │       │      │            │   │communication protocol, the NAK│││
+│   │   │   │       │      │Negative    │   │is used to indicate that an    │││
+│^U │21 │15 │NAK    │␕     │Acknowledge │   │error was detected in the      │││
+│   │   │   │       │      │            │   │previously received block and  │││
+│   │   │   │       │      │            │   │that the receiver is ready to  │││
+│   │   │   │       │      │            │   │accept retransmission of that  │││
+│   │   │   │       │      │            │   │block. In multipoint systems,  │││
+│   │   │   │       │      │            │   │the NAK is used as the         │││
+│   │   │   │       │      │            │   │not-ready reply to a poll.     │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Used in synchronous            │││
+│   │   │   │       │      │            │   │transmission systems to provide│││
+│   │   │   │       │      │            │   │a signal from which synchronous│││
+│^V │22 │16 │SYN    │␖     │Synchronous │   │correction may be achieved     │││
+│   │   │   │       │      │Idle        │   │between data terminal          │││
+│   │   │   │       │      │            │   │equipment, particularly when no│││
+│   │   │   │       │      │            │   │other character is being       │││
+│   │   │   │       │      │            │   │transmitted.                   │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Indicates the end of a         │││
+│   │   │   │       │      │End of      │   │transmission block of data when│││
+│^W │23 │17 │ETB    │␗     │Transmission│   │data are divided into such     │││
+│   │   │   │       │      │Block       │   │blocks for transmission        │││
+│   │   │   │       │      │            │   │purposes.                      │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Indicates that the data        │││
+│^X │24 │18 │CAN    │␘     │Cancel      │   │preceding it are in error or   │││
+│   │   │   │       │      │            │   │are to be disregarded.         │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Intended as means of indicating│││
+│^Y │25 │19 │EM     │␙     │End of      │   │on paper or magnetic tapes that│││
+│   │   │   │       │      │medium      │   │the end of the usable portion  │││
+│   │   │   │       │      │            │   │of the tape had been reached.  │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Originally intended for use as │││
+│   │   │   │       │      │            │   │a transmission control         │││
+│   │   │   │       │      │            │   │character to indicate that     │││
+│   │   │   │       │      │            │   │garbled or invalid characters  │││
+│   │   │   │       │      │            │   │had been received. It has often│││
+│   │   │   │       │      │            │   │been put to use for other      │││
+│   │   │   │       │      │            │   │purposes when the in-band      │││
+│   │   │   │       │      │            │   │signaling of errors it provides│││
+│   │   │   │       │      │            │   │is unneeded, especially where  │││
+│   │   │   │       │      │            │   │robust methods of error        │││
+│^Z │26 │1A │SUB    │␚     │Substitute  │   │detection and correction are   │││
+│   │   │   │       │      │            │   │used, or where errors are      │││
+│   │   │   │       │      │            │   │expected to be rare enough to  │││
+│   │   │   │       │      │            │   │make using the character for   │││
+│   │   │   │       │      │            │   │other purposes advisable. In   │││
+│   │   │   │       │      │            │   │DOS, Windows and other CP/M    │││
+│   │   │   │       │      │            │   │derivatives, it is used to     │││
+│   │   │   │       │      │            │   │indicate the end of file, both │││
+│   │   │   │       │      │            │   │when typing on the terminal,   │││
+│   │   │   │       │      │            │   │and sometimes in text files    │││
+│   │   │   │       │      │            │   │stored on disk.                │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │The Esc key on the keyboard    │││
+│   │   │   │       │      │            │   │will cause this character to be│││
+│   │   │   │       │      │            │   │sent on most systems. It can be│││
+│   │   │   │       │      │            │   │used in software user          │││
+│   │   │   │       │      │            │   │interfaces to exit from a      │││
+│   │   │   │       │      │            │   │screen, menu, or mode, or in   │││
+│   │   │   │       │      │            │   │device-control protocols (e.g.,│││
+│^[ │27 │1B │ESC    │␛     │Escape      │\e^│printers and terminals) to     │││
+│   │   │   │       │      │            │[1]│signal that what follows is a  │││
+│   │   │   │       │      │            │   │special command sequence rather│││
+│   │   │   │       │      │            │   │than normal text. In systems   │││
+│   │   │   │       │      │            │   │based on ISO/IEC 2022, even if │││
+│   │   │   │       │      │            │   │another set of C0 control codes│││
+│   │   │   │       │      │            │   │are used, this octet is        │││
+│   │   │   │       │      │            │   │required to always represent   │││
+│   │   │   │       │      │            │   │the escape character.          │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│^\ │28 │1C │FS     │␜     │File        │   │                               │││
+│   │   │   │       │      │Separator   │   │Can be used as delimiters to   │││
+├───┼───┼───┼───────┼──────┼────────────┼───┤mark fields of data structures.├┼┤
+│^] │29 │1D │GS     │␝     │Group       │   │If used for hierarchical       │││
+│   │   │   │       │      │Separator   │   │levels, US is the lowest level │││
+├───┼───┼───┼───────┼──────┼────────────┼───┤(dividing plain-text data      ├┼┤
+│^^ │30 │1E │RS     │␞     │Record      │   │items), while RS, GS, and FS   │││
+│   │   │   │       │      │Separator   │   │are of increasing level to     │││
+├───┼───┼───┼───────┼──────┼────────────┼───┤divide groups made up of items ├┼┤
+│^_ │31 │1F │US     │␟     │Unit        │   │of the level beneath it.       │││
+│   │   │   │       │      │Separator   │   │                               │││
+├───┴───┴───┴───────┴──────┴────────────┴───┴───────────────────────────────┴┴┤
+│While not technically part of the C0 control character range, the following  │
+│two characters are defined in ISO/IEC 2022 as always being available         │
+│regardless of which sets of control characters and graphics characters have  │
+│been registered. They can be thought of as having some characteristics of    │
+│control characters.                                                          │
+├───┬───┬───┬───────┬──────┬────────────┬───┬───────────────────────────────┬┬┤
+│   │   │   │       │      │            │   │Space is a graphic character.  │││
+│   │   │   │       │      │            │   │It has a visual representation │││
+│   │   │   │       │      │            │   │consisting of the absence of a │││
+│   │   │   │       │      │            │   │graphic symbol. It causes the  │││
+│   │32 │20 │SP     │␠     │Space       │   │active position to be advanced │││
+│   │   │   │       │      │            │   │by one character position. In  │││
+│   │   │   │       │      │            │   │some applications, Space can be│││
+│   │   │   │       │      │            │   │considered a lowest-level "word│││
+│   │   │   │       │      │            │   │separator" to be used with the │││
+│   │   │   │       │      │            │   │adjacent separator characters. │││
+├───┼───┼───┼───────┼──────┼────────────┼───┼───────────────────────────────┼┼┤
+│   │   │   │       │      │            │   │Not technically part of the C0 │││
+│   │   │   │       │      │            │   │control character range, this  │││
+│   │   │   │       │      │            │   │was originally used to mark    │││
+│   │   │   │       │      │            │   │deleted characters on paper    │││
+│   │   │   │       │      │            │   │tape, since any character could│││
+│   │   │   │       │      │            │   │be changed to all ones by      │││
+│^? │127│7F │DEL    │␡     │Delete      │   │punching holes everywhere. On  │││
+│   │   │   │       │      │            │   │VT100 compatible terminals,    │││
+│   │   │   │       │      │            │   │this is the character generated│││
+│   │   │   │       │      │            │   │by the key labelled ⌫, usually │││
+│   │   │   │       │      │            │   │called backspace on modern     │││
+│   │   │   │       │      │            │   │machines, and does not         │││
+│   │   │   │       │      │            │   │correspond to the PC delete key│││
+│   │   │   │       │      │            │   │.                              │││
+└───┴───┴───┴───────┴──────┴────────────┴───┴───────────────────────────────┴┴┘
+
+C1 set
+
+These are the most common extended control codes. If using the ISO/IEC 2022
+extension mechanism, they are designated as the active C1 control character set
+with the sequence 0x1B 0x22 0x43 (ESC " C). Individual control functions can be
+accessed with the 7-bit equivalents 0x1B 0x40 through 0x1B 0x5F (ESC @ through
+ESC _).
+
+┌────┬───┬───┬────┬─────────────┬─────────────────────────────────────────────┐
+│Esc+│Dec│Hex│Acro│    Name     │                 Description                 │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│@   │128│80 │PAD │Padding      │Not part of ISO/IEC 6429 (ECMA-48). In early │
+│    │   │   │    │Character    │drafts of ISO 10646, this was used to        │
+├────┼───┼───┼────┼─────────────┤introduce non-ASCII characters; this use was │
+│A   │129│81 │HOP │High Octet   │removed in later drafts.^[2]                 │
+│    │   │   │    │Preset       │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │             │Follows a graphic character where a line     │
+│    │   │   │    │Break        │break is permitted. Roughly equivalent to a  │
+│B   │130│82 │BPH │Permitted    │soft hyphen except that the means for        │
+│    │   │   │    │Here         │indicating a line break is not necessarily a │
+│    │   │   │    │             │hyphen. Not part of the first edition of ISO/│
+│    │   │   │    │             │IEC 6429.^[3]                                │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │             │Follows the graphic character that is not to │
+│C   │131│83 │NBH │No Break Here│be broken. Not part of the first edition of  │
+│    │   │   │    │             │ISO/IEC 6429.^[3]                            │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │             │Move the active position one line down, to   │
+│    │   │   │    │             │eliminate ambiguity about the meaning of LF. │
+│D   │132│84 │IND │Index        │Deprecated in 1988 and withdrawn in 1992 from│
+│    │   │   │    │             │ISO/IEC 6429 (1986 and 1991 respectively for │
+│    │   │   │    │             │ECMA-48).                                    │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│E   │133│85 │NEL │Next Line    │Equivalent to CR+LF. Used to mark end-of-line│
+│    │   │   │    │             │on some IBM mainframes.                      │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│F   │134│86 │SSA │Start of     │                                             │
+│    │   │   │    │Selected Area│                                             │
+├────┼───┼───┼────┼─────────────┤Used by block-oriented terminals.            │
+│G   │135│87 │ESA │End of       │                                             │
+│    │   │   │    │Selected Area│                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Character    │                                             │
+│    │   │   │    │Tabulation   │                                             │
+│H   │136│88 │HTS │Set          │Causes a character tabulation stop to be set │
+│    │   │   │    │Horizontal   │at the active position.                      │
+│    │   │   │    │Tabulation   │                                             │
+│    │   │   │    │Set          │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Character    │Similar to Character Tabulation, except that │
+│    │   │   │    │Tabulation   │instead of spaces or lines being placed after│
+│    │   │   │    │With         │the preceding characters until the next tab  │
+│I   │137│89 │HTJ │Justification│stop is reached, the spaces or lines are     │
+│    │   │   │    │Horizontal   │placed preceding the active field so that    │
+│    │   │   │    │Tabulation   │preceding graphic character is placed just   │
+│    │   │   │    │With         │before the next tab stop.                    │
+│    │   │   │    │Justification│                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Line         │                                             │
+│    │   │   │    │Tabulation   │                                             │
+│J   │138│8A │VTS │Set          │Causes a line tabulation stop to be set at   │
+│    │   │   │    │Vertical     │the active position.                         │
+│    │   │   │    │Tabulation   │                                             │
+│    │   │   │    │Set          │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Partial Line │                                             │
+│K   │139│8B │PLD │Forward      │                                             │
+│    │   │   │    │Partial Line │Used to produce subscripts and superscripts  │
+│    │   │   │    │Down         │in ISO/IEC 6429, e.g., in a printer.         │
+├────┼───┼───┼────┼─────────────┤Subscripts use PLD text PLU while            │
+│    │   │   │    │Partial Line │superscripts use PLU text PLD.               │
+│L   │140│8C │PLU │Backward     │                                             │
+│    │   │   │    │Partial Line │                                             │
+│    │   │   │    │Up           │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Reverse Line │                                             │
+│M   │141│8D │RI  │Feed         │                                             │
+│    │   │   │    │Reverse Index│                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Single-Shift │Next character invokes a graphic character   │
+│N   │142│8E │SS2 │2            │from the G2 or G3 graphic sets respectively. │
+│    │   │   │    │             │In systems that conform to ISO/IEC 4873      │
+├────┼───┼───┼────┼─────────────┤(ECMA-43), even if a C1 set other than the   │
+│    │   │   │    │Single-Shift │default is used, these two octets may only be│
+│O   │143│8F │SS3 │3            │used for this purpose.                       │
+│    │   │   │    │             │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Device       │Followed by a string of printable characters │
+│P   │144│90 │DCS │Control      │(0x20 through 0x7E) and format effectors     │
+│    │   │   │    │String       │(0x08 through 0x0D), terminated by ST (0x9C).│
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│Q   │145│91 │PU1 │Private Use 1│Reserved for a function without standardized │
+│    │   │   │    │             │meaning for private use as required, subject │
+├────┼───┼───┼────┼─────────────┤to the prior agreement of the sender and the │
+│R   │146│92 │PU2 │Private Use 2│recipient of the data.                       │
+│    │   │   │    │             │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│S   │147│93 │STS │Set Transmit │                                             │
+│    │   │   │    │State        │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│T   │148│94 │CCH │Cancel       │Destructive backspace, intended to eliminate │
+│    │   │   │    │character    │ambiguity about meaning of BS.               │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│U   │149│95 │MW  │Message      │                                             │
+│    │   │   │    │Waiting      │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Start of     │                                             │
+│V   │150│96 │SPA │Protected    │                                             │
+│    │   │   │    │Area         │                                             │
+├────┼───┼───┼────┼─────────────┤Used by block-oriented terminals.            │
+│    │   │   │    │End of       │                                             │
+│W   │151│97 │EPA │Protected    │                                             │
+│    │   │   │    │Area         │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │             │Followed by a control string terminated by ST│
+│X   │152│98 │SOS │Start of     │(0x9C) that may contain any character except │
+│    │   │   │    │String       │SOS or ST. Not part of the first edition of  │
+│    │   │   │    │             │ISO/IEC 6429.^[3]                            │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Single       │Not part of ISO/IEC 6429. In early drafts of │
+│Y   │153│99 │SGCI│Graphic      │ISO 10646, was used to encode a single       │
+│    │   │   │    │Character    │non-ASCII character. In later drafts, this   │
+│    │   │   │    │Introducer   │facility was removed.^[2]                    │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │             │To be followed by a single printable         │
+│    │   │   │    │             │character (0x20 through 0x7E) or format      │
+│    │   │   │    │             │effector (0x08 through 0x0D). The intent was │
+│    │   │   │    │             │to provide a means by which a control        │
+│    │   │   │    │Single       │function or a graphic character that would be│
+│Z   │154│9A │SCI │Character    │available regardless of which graphic or     │
+│    │   │   │    │Introducer   │control sets were in use could be defined.   │
+│    │   │   │    │             │Definitions of what the following byte would │
+│    │   │   │    │             │invoke was never implemented in an           │
+│    │   │   │    │             │international standard. Not part of the first│
+│    │   │   │    │             │edition of ISO/IEC 6429.^[3]                 │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Control      │Used to introduce control sequences that take│
+│[   │155│9B │CSI │Sequence     │parameters.                                  │
+│    │   │   │    │Introducer   │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│\   │156│9C │ST  │String       │                                             │
+│    │   │   │    │Terminator   │                                             │
+├────┼───┼───┼────┼─────────────┼─────────────────────────────────────────────┤
+│    │   │   │    │Operating    │                                             │
+│]   │157│9D │OSC │System       │Followed by a string of printable characters │
+│    │   │   │    │Command      │(0x20 through 0x7E) and format effectors     │
+├────┼───┼───┼────┼─────────────┤(0x08 through 0x0D), terminated by ST (0x9C).│
+│^   │158│9E │PM  │Privacy      │These three control codes were intended for  │
+│    │   │   │    │Message      │use to allow in-band signaling of protocol   │
+├────┼───┼───┼────┼─────────────┤information, but are rarely used for that    │
+│    │   │   │    │Application  │purpose.                                     │
+│_   │159│9F │APC │Program      │                                             │
+│    │   │   │    │Command      │                                             │
+└────┴───┴───┴────┴─────────────┴─────────────────────────────────────────────┘
+
