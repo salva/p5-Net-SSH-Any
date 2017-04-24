@@ -14,6 +14,8 @@ our @ISA = qw(Net::SSH::Any::DPipe
 sub _any { ${*{shift()}}{_ssha_os_any} }
 sub _proc { ${*{shift()}}{_ssha_os_proc} }
 
+sub _hash { *{shift()}{HASH} }
+
 sub _upgrade_fh_to_dpipe {
     my ($class, $dpipe, $any, $proc) = @_;
     bless $dpipe, $class;
@@ -34,7 +36,5 @@ sub close {
     $any->_check_child_error or undef $ok;
     return $ok;
 }
-
-sub ssh_error { shift->_any->error }
 
 1;

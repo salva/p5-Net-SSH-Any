@@ -45,7 +45,6 @@ sub TIEHANDLE {
     my $dpipe = { any => $any,
                   channel => $channel,
                   blocking => 1,
-                  ssh_error => 0,
                   error => 0 };
     bless $dpipe, $class;
 }
@@ -53,8 +52,7 @@ sub TIEHANDLE {
 sub EOF {
     my $dpipe = shift;
     my $any = $dpipe->{any};
-    my $channel = $dpipe->{channel};
-    $channel->eof or ($dpipe->error and $dpipe->error != SSHA_EAGAIN);
+    $any->_channel_eof($dpipe->{channel}) // 1;
 }
 
 sub READ {
@@ -95,7 +93,7 @@ sub READ {
         $bytes = $any->_channel_read($channel, $blocking, $_[1], $len, $ext);
         $_[1] //= '';
     }
-    $bytes || $dpipe->_check_error($bytes);
+    $bytes || $dpipe->_check_bytes_error($bytes);
 }
 
 sub WRITE {
@@ -120,13 +118,13 @@ sub WRITE {
         }
 
         $len = length $_[1] - $off unless defined $len;
-        return $dpipe->_check_error unless $len > 0;
+        return $dpipe->_check_bytes_error unless $len > 0;
         $bytes = $any->_channel_do($channel, $blocking, 'write', substr($_[1], $off, $len));
     }
     else {
         $bytes = $any->_channel_do($channel, $blocking, 'write', $_[1]);
     }
-    $bytes || $dpipe->_check_error($bytes);
+    $bytes || $dpipe->_check_bytes_error($bytes);
 }
 
 sub PRINT {
@@ -147,7 +145,7 @@ sub PRINT {
         return $total unless length $buf;
 
         my $bytes = $any->_channel_do($channel, 1, 'write', $buf)
-            or return $dpipe->_check_error;
+            or return $dpipe->_check_bytes_error;
         $total += $bytes;
         substr($buf, 0, $bytes, '');
     }
@@ -155,8 +153,7 @@ sub PRINT {
 
 sub SAY {
     my $dpipe = shift;
-    $dpipe->PRINT(@_);
-    $dpipe->PRINT("\n");
+    $dpipe->PRINT(@_) and $dpipe->PRINT("\n");
 }
 
 sub PRINTF {
@@ -182,7 +179,7 @@ sub READLINE {
     my $off = (defined $/ ? -length $/ : undef);
     while (1) {
         unless ($any->_channel_read($channel, 1, my ($char), 1)) {
-            $dpipe->_check_error;
+            $dpipe->_check_bytes_error;
             return (length($line) ? $line : undef);
         }
         if ( defined $off) {
@@ -196,7 +193,7 @@ sub CLOSE {
     my $any = $dpipe->{any};
     my $channel = $dpipe->{channel};
     $any->_channel_close($dpipe->{channel});
-    $any->_check_child_error or $dpipe->_check_error;
+    $any->_check_child_error or $dpipe->_check_bytes_error;
 }
 
 sub FILENO { shift->{any}{be_fileno} }
@@ -210,14 +207,14 @@ sub blocking {
 # Net_SSH2 backend uses 0 to indicate that everything went well but
 # that nothing was actually done. Perl uses 0 to indicate EOF. The
 # following subroutine converts between both.
-sub _check_error {
+sub _check_bytes_error {
     my ($dpipe, $bytes) = @_;
     if (defined $bytes) {
         return $bytes if $bytes;
         $! = Errno::EAGAIN();
     }
     else {
-        $dpipe->{ssh_error} = $dpipe->{any}->error or return 0; # EOF!
+        $dpipe->{any}->error or return 0; # EOF!
         $! = Errno::EIO();
     }
     $dpipe->{error} = $!;
@@ -247,7 +244,6 @@ sub input_file_number { croak "input_file_number is not supported by ".ref(shift
 
 sub error { shift->{error} }
 sub clearerr { shift->{error} = 0 }
-sub ssh_error { shift->{ssh_error} }
 
 sub getlines {
     my $dpipe = shift;
@@ -258,5 +254,7 @@ sub getlines {
     }
     @lines;
 }
+
+sub _hash { shift }
 
 1;

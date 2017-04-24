@@ -662,6 +662,12 @@ sub _channel_read {
     }
 }
 
+sub _channel_eof {
+    my $any = shift;
+    my $channel = shift;
+    $channel->_channel_do($channel, 0, 'eof');
+}
+
 sub _dpipe {
     my ($any, $opts, $cmd) = @_;
     my ($channel) = __open_channel_and_exec($any, $opts, $cmd) or return;
